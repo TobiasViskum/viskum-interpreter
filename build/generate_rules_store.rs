@@ -1,24 +1,23 @@
 use std::{ fs::File, io::{ self, Write } };
 
-use crate::build_info::PARSE_RULES;
+use crate::build_info::TOKEN_TYPES_AND_PARSE_RULES;
 
 pub fn generate_rules_store() -> io::Result<()> {
     let out_file = "src/parser/parse_rule/rules_store.rs";
+    let out_token_file = "src/parser/token/token_type.rs";
 
     let mut file = File::create(out_file)?;
+    let mut token_file = File::create(out_token_file)?;
+    writeln!(token_file, "#[derive(Debug, PartialEq, Eq, Clone, Copy)]")?;
 
     writeln!(file, "extern crate lazy_static;")?;
-    writeln!(file, "use std::collections::HashMap;")?;
     writeln!(file, "use lazy_static::lazy_static;")?;
-    writeln!(
-        file,
-        "use crate::{{ parser::precedence::Precedence, token::token_type::TokenType::{{ self, * }} }};"
-    )?;
+    writeln!(file, "use crate::parser::precedence::Precedence;")?;
     writeln!(file, "use super::ParseRule;")?;
     writeln!(file, "lazy_static! {{")?;
-    writeln!(file, "    pub static ref PARSE_RULES: HashMap<TokenType,  ParseRule> = {{")?;
-    writeln!(file, "        let mut map = HashMap::new();")?;
-    for parse_rule in PARSE_RULES {
+    writeln!(file, "    pub static ref PARSE_RULES: Vec<ParseRule> = {{")?;
+    writeln!(file, "        let mut parse_rules_vec = Vec::new();")?;
+    for parse_rule in TOKEN_TYPES_AND_PARSE_RULES {
         let split = parse_rule.split("=").collect::<Vec<&str>>();
 
         let token_name = format!("Token{}", split[0].trim());
@@ -42,16 +41,36 @@ pub fn generate_rules_store() -> io::Result<()> {
 
         let precedence = format!("Precedence::{}", args[2].trim());
 
-        writeln!(file, "        map.insert({}, ParseRule {{", token_name)?;
-
+        writeln!(file, "        parse_rules_vec.push(ParseRule {{")?;
         writeln!(file, "            prefix: {},", prefix)?;
         writeln!(file, "            infix: {},", infix)?;
         writeln!(file, "            precedence: {},", precedence)?;
         writeln!(file, "        }});")?;
     }
-    writeln!(file, "        map")?;
+    writeln!(file, "        parse_rules_vec")?;
     writeln!(file, "    }};")?;
     writeln!(file, "}}")?;
+
+    writeln!(token_file, "pub enum TokenType {{")?;
+    for parse_rule in TOKEN_TYPES_AND_PARSE_RULES {
+        let split = parse_rule.split("=").collect::<Vec<&str>>();
+        let token_name = format!("Token{}", split[0].trim());
+        writeln!(token_file, "    {},", token_name)?;
+    }
+    writeln!(token_file, "}}")?;
+
+    writeln!(token_file, "impl From<TokenType> for usize {{")?;
+    writeln!(token_file, "    fn from(value: TokenType) -> Self {{")?;
+    writeln!(token_file, "        match value {{")?;
+    for i in 0..TOKEN_TYPES_AND_PARSE_RULES.len() {
+        let token_and_parse_rule = TOKEN_TYPES_AND_PARSE_RULES[i];
+        let split = token_and_parse_rule.split("=").collect::<Vec<&str>>();
+        let token_name = format!("Token{}", split[0].trim());
+        writeln!(token_file, "            TokenType::{} => {},", token_name, i)?;
+    }
+    writeln!(token_file, "        }}")?;
+    writeln!(token_file, "    }}")?;
+    writeln!(token_file, "}}")?;
 
     Ok(())
 }

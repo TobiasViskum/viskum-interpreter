@@ -1,0 +1,7 @@
+/target
+
+
+# Automatically generated files
+# src/parser/precedence.rs
+# src/parser/parse_rule/rules_store.rs
+# src/parser/token/token_type.rs

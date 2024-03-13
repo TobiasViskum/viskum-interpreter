@@ -1,6 +1,4 @@
-// pub const OPCODES: [&str; 1] = ["OpReturn               = 0  | simple_instruction"];
-
-pub const PARSE_RULES: [&str; 6] = [
+pub const TOKEN_TYPES_AND_PARSE_RULES: [&str; 16] = [
     // Single-character tokens
     "LeftParen              = { grouping,      None,   PrecNone       }",
     "RightParen             = { None,          None,   PrecNone       }",
@@ -11,6 +9,25 @@ pub const PARSE_RULES: [&str; 6] = [
     "Slash                  = { None,          binary, PrecFactor     }",
     "Star                   = { None,          binary, PrecFactor     }",
     // "Power                  = { None,          binary, PrecFactor     }",
+
+    // Literals
+    "Number                 = { number,        None,   PrecNone       }",
+    "Identifier             = { variable,      None,   PrecNone       }",
+
+    // Types
+    "True                   = { literal,       None,   PrecNone       }",
+    "False                  = { literal,       None,   PrecNone       }",
+
+    // Single-character tokens
+    "Semicolon              = { None,          None,   PrecNone       }",
+    "Bang                   = { unary,         None,   PrecNone       }",
+    "Assign                 = { None,          None,   PrecNone       }",
+
+    // Double-character tokens
+    "Define                 = { None,          None,   PrecNone       }",
+
+    "Error                  = { error,         None,   PrecNone       }",
+    "EOF                    = { None,          None,   PrecNone       }",
 ];
 
 pub const PRECEDENCE: [&str; 11] = [

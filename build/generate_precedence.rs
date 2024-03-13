@@ -7,7 +7,7 @@ pub fn generate_precedence() -> io::Result<()> {
     let out_file = "src/parser/precedence.rs";
     let mut file = File::create(out_file)?;
 
-    writeln!(file, "#[derive(Debug, PartialEq, PartialOrd)]")?;
+    writeln!(file, "#[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]")?;
     writeln!(file, "pub enum Precedence {{")?;
     for i in 0..PRECEDENCE.len() {
         let precedence = PRECEDENCE[i];

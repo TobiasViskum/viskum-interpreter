@@ -1,0 +1,7 @@
+{
+  "rust-analyzer.linkedProjects": [
+    "./profiler/Cargo.toml",
+    "./profiler/profiler_macros/Cargo.toml",
+    "./Cargo.toml"
+  ]
+}
