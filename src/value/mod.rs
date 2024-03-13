@@ -1,5 +1,3 @@
-use std::ops::{ Add, Div, Mul, Neg, Sub };
-
 #[derive(Debug)]
 pub enum ValueType {
     Int32,
@@ -14,7 +12,7 @@ impl ValueType {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Value {
     Int32(i32),
     Bool(bool),
