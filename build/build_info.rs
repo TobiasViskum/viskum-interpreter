@@ -1,4 +1,4 @@
-pub const TOKEN_TYPES_AND_PARSE_RULES: [&str; 16] = [
+pub const TOKEN_TYPES_AND_PARSE_RULES: [&str; 19] = [
     // Single-character tokens
     "LeftParen              = { grouping,      None,   PrecNone       }",
     "RightParen             = { None,          None,   PrecNone       }",
@@ -17,6 +17,7 @@ pub const TOKEN_TYPES_AND_PARSE_RULES: [&str; 16] = [
     // Types
     "True                   = { literal,       None,   PrecNone       }",
     "False                  = { literal,       None,   PrecNone       }",
+    "Int32                  = { skip,       None,   PrecNone       }",
 
     // Single-character tokens
     "Semicolon              = { None,          None,   PrecNone       }",
@@ -25,6 +26,10 @@ pub const TOKEN_TYPES_AND_PARSE_RULES: [&str; 16] = [
 
     // Double-character tokens
     "Define                 = { None,          None,   PrecNone       }",
+
+    // Keywords
+    "Mutable                = { skip,          None,   PrecNone       }",
+    "Function               = { skip,          None,   PrecNone       }",
 
     "Error                  = { error,         None,   PrecNone       }",
     "EOF                    = { None,          None,   PrecNone       }",

@@ -1,11 +1,10 @@
-use std::fmt::format;
-
-use crate::{ compiler::ir_graph::{ IROperation, IRValue }, value::Value };
+use crate::{ compiler::ir_graph::IRValue, operations::{ BinaryOp, UnaryOp }, value::Value };
 
 #[derive(Debug, Clone)]
 pub enum InstructionSrc {
     Register(usize),
     Constant(Value),
+    VariableRegister(usize),
 }
 
 impl InstructionSrc {
@@ -13,6 +12,7 @@ impl InstructionSrc {
         match self {
             InstructionSrc::Register(register) => { format!("R{}", register) }
             InstructionSrc::Constant(value) => { format!("{}", value.to_string()) }
+            InstructionSrc::VariableRegister(register) => { format!("R{}", register) }
         }
     }
 }
@@ -45,6 +45,11 @@ pub enum Instruction {
         dest: usize,
         src1: InstructionSrc,
         src2: InstructionSrc,
+    },
+
+    Define {
+        dest: usize,
+        src: InstructionSrc,
     },
 
     // Unary
@@ -84,6 +89,17 @@ impl Instruction {
         }
     }
 
+    pub fn modify_definement_instruction(&mut self, dest: usize, src: InstructionSrc) {
+        match self {
+            Instruction::Define { dest: _, src: _ } => {
+                *self = Instruction::Define { dest: dest, src };
+            }
+            _ => {
+                panic!("Operation not supported in instruction");
+            }
+        }
+    }
+
     pub fn modify_unary_instruction(&mut self, dest: usize, src: InstructionSrc) {
         match self {
             Instruction::Neg { dest: _, src: _ } => {
@@ -109,36 +125,31 @@ impl Instruction {
         }
     }
 
-    pub fn new_binary(operation: IROperation, dest: usize, src1: IRValue, src2: IRValue) -> Self {
-        let src1 = match src1 {
-            IRValue::Register(register) => InstructionSrc::Register(register),
-            IRValue::Constant(value) => InstructionSrc::Constant(value),
-        };
+    pub fn new_binary(operation: &BinaryOp, dest: usize, src1: IRValue, src2: IRValue) -> Self {
+        let src1 = src1.to_instruction_src();
 
-        let src2 = match src2 {
-            IRValue::Register(register) => InstructionSrc::Register(register),
-            IRValue::Constant(value) => InstructionSrc::Constant(value),
-        };
+        let src2 = src2.to_instruction_src();
 
         match operation {
-            IROperation::Add => Instruction::Add { dest, src1, src2 },
-            IROperation::Sub => Instruction::Sub { dest, src1, src2 },
-            IROperation::Mul => Instruction::Mul { dest, src1, src2 },
-            IROperation::Div => Instruction::Div { dest, src1, src2 },
-            _ => panic!("Operation not supported in instruction"),
+            BinaryOp::Add => Instruction::Add { dest, src1, src2 },
+            BinaryOp::Sub => Instruction::Sub { dest, src1, src2 },
+            BinaryOp::Mul => Instruction::Mul { dest, src1, src2 },
+            BinaryOp::Div => Instruction::Div { dest, src1, src2 },
         }
     }
 
-    pub fn new_unary(operation: IROperation, dest: usize, src: IRValue) -> Self {
-        let src = match src {
-            IRValue::Register(register) => InstructionSrc::Register(register),
-            IRValue::Constant(value) => InstructionSrc::Constant(value),
-        };
+    pub fn new_define(dest: usize, src: IRValue) -> Self {
+        let src = src.to_instruction_src();
+
+        Instruction::Define { dest, src }
+    }
+
+    pub fn new_unary(operation: &UnaryOp, dest: usize, src: IRValue) -> Self {
+        let src = src.to_instruction_src();
 
         match operation {
-            IROperation::Neg => Instruction::Neg { dest, src },
-            IROperation::Truthy => Instruction::Truthy { dest, src },
-            _ => panic!("Operation not supported in instruction"),
+            UnaryOp::Neg => Instruction::Neg { dest, src },
+            UnaryOp::Truthy => Instruction::Truthy { dest, src },
         }
     }
 
@@ -170,6 +181,9 @@ impl Instruction {
             Instruction::Neg { dest, src } => { format!("NEG R{} {}", dest, src.dissassemble()) }
             Instruction::Truthy { dest, src } => {
                 format!("TRUTHY R{} {}", dest, src.dissassemble())
+            }
+            Instruction::Define { dest, src } => {
+                format!("DEFINE R{} {}", dest, src.dissassemble())
             }
         }
     }

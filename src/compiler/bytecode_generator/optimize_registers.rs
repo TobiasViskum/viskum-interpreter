@@ -17,17 +17,27 @@ impl<'a> BytecodeGenerator<'a> {
 
                     let src1 = match src1 {
                         InstructionSrc::Register(register) => {
-                            let new_register = self.get_physical_register(*register);
+                            let new_register = self.get_and_release_physical_register(*register);
                             InstructionSrc::Register(new_register)
                         }
+                        InstructionSrc::VariableRegister(register) => {
+                            let new_register = self.get_physcal_register(*register);
+                            InstructionSrc::Register(new_register)
+                        }
+
                         _ => src1.clone(),
                     };
 
                     let src2 = match src2 {
                         InstructionSrc::Register(register) => {
-                            let new_register = self.get_physical_register(*register);
+                            let new_register = self.get_and_release_physical_register(*register);
                             InstructionSrc::Register(new_register)
                         }
+                        InstructionSrc::VariableRegister(register) => {
+                            let new_register = self.get_physcal_register(*register);
+                            InstructionSrc::Register(new_register)
+                        }
+
                         _ => src2.clone(),
                     };
 
@@ -41,7 +51,11 @@ impl<'a> BytecodeGenerator<'a> {
 
                     let src = match src {
                         InstructionSrc::Register(register) => {
-                            let new_register = self.get_physical_register(*register);
+                            let new_register = self.get_and_release_physical_register(*register);
+                            InstructionSrc::Register(new_register)
+                        }
+                        InstructionSrc::VariableRegister(register) => {
+                            let new_register = self.get_physcal_register(*register);
                             InstructionSrc::Register(new_register)
                         }
                         _ => src.clone(),
@@ -51,6 +65,23 @@ impl<'a> BytecodeGenerator<'a> {
                         .get_mut(i)
                         .unwrap()
                         .modify_unary_instruction(physical_register, src);
+                }
+                Instruction::Define { dest, src } => {
+                    let dest = self.map_virtual_reg_to_physical_reg(*dest);
+
+                    let src = match src {
+                        InstructionSrc::Register(register) => {
+                            let new_register = self.get_and_release_physical_register(*register);
+                            InstructionSrc::Register(new_register)
+                        }
+                        InstructionSrc::VariableRegister(register) => {
+                            let new_register = self.get_physcal_register(*register);
+                            InstructionSrc::Register(new_register)
+                        }
+                        _ => src.clone(),
+                    };
+
+                    self.instructions.get_mut(i).unwrap().modify_definement_instruction(dest, src);
                 }
                 Instruction::Load { reg, value } => {
                     let physical_register = self.map_virtual_reg_to_physical_reg(*reg);
@@ -65,9 +96,6 @@ impl<'a> BytecodeGenerator<'a> {
 
                 Instruction::Halt => {
                     break;
-                }
-                _ => {
-                    panic!("Unsupported instruction for register optimization: {:?}", instruction);
                 }
             }
         }
@@ -86,11 +114,15 @@ impl<'a> BytecodeGenerator<'a> {
         physical_register
     }
 
-    fn get_physical_register(&self, virtual_register: usize) -> usize {
+    fn get_and_release_physical_register(&self, virtual_register: usize) -> usize {
         let physical_register = *self.virtual_registers.borrow().get(&virtual_register).unwrap();
         self.remove_virtual_register(virtual_register);
         self.release_physical_register(physical_register);
         physical_register
+    }
+
+    fn get_physcal_register(&self, virtual_register: usize) -> usize {
+        *self.virtual_registers.borrow().get(&virtual_register).unwrap()
     }
 
     fn remove_virtual_register(&self, virtual_register: usize) {

@@ -9,8 +9,11 @@ impl<'a> Lexer<'a> {
 
     pub(super) fn make_identifier_token(&mut self) -> Token {
         let ttype = match self.get_character(self.start) {
-            't' => self.check_keyword(1, 3, "rue", TokenType::TokenTrue),
             'f' => self.check_keyword(1, 4, "alse", TokenType::TokenFalse),
+            'i' => self.check_keyword(1, 2, "32", TokenType::TokenInt32),
+            'm' => self.check_keyword(1, 2, "ut", TokenType::TokenMutable),
+            't' => self.check_keyword(1, 3, "rue", TokenType::TokenTrue),
+
             _ => TokenType::TokenIdentifier,
         };
 

@@ -104,7 +104,10 @@ impl<'a> Lexer<'a> {
 
                     self.make_token(TokenType::TokenNumber)
                 } else if is_alphabetic(Some(c)) {
-                    while !self.is_at_end() && is_alphabetic(self.peek(0)) {
+                    while
+                        !self.is_at_end() &&
+                        (is_alphabetic(self.peek(0)) || is_digit(self.peek(0)))
+                    {
                         self.advance();
                     }
 

@@ -1,6 +1,6 @@
-use crate::parser::token::{ token_type::TokenType, Token };
+use crate::{ operations::Op, parser::token::{ token_type::TokenType, Token } };
 
-use super::{ parse_rule::{ ParseRule, PARSE_RULES }, Parser };
+use super::{ parse_rule::{ ParseRule, PARSE_RULES }, token::TokenMetadata, Parser };
 
 impl<'a> Parser<'a> {
     pub(super) fn advance(&mut self) {
@@ -15,7 +15,7 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn get_previous(&self) -> &Token {
-        self.peek(-1)
+        self.peek(-1).unwrap()
     }
 
     pub(super) fn consume(&mut self, ttype: TokenType) {
@@ -25,14 +25,21 @@ impl<'a> Parser<'a> {
             if self.panic_mode {
                 return;
             }
-            self.report_compile_error(
-                format!(
-                    "Expected token of type {:?}, found {:?}",
-                    ttype,
-                    self.get_current().get_ttype()
-                ),
-                self.get_current().clone()
-            );
+
+            if self.get_current().get_ttype() == &TokenType::TokenError {
+                let msg = self.get_current().get_message().unwrap().to_string();
+                self.report_compile_error(msg, vec![self.get_current().get_metadata()]);
+                self.advance();
+            } else {
+                self.report_compile_error(
+                    format!(
+                        "Expected token of type {:?}, found {:?}",
+                        ttype,
+                        self.get_current().get_ttype()
+                    ),
+                    vec![self.get_current().get_metadata()]
+                );
+            }
         }
     }
 
@@ -49,25 +56,16 @@ impl<'a> Parser<'a> {
                     }
 
                     if self.get_current().get_ttype() == &TokenType::TokenError {
-                        let msg = self.get_current().get_message();
-                        if let Some(msg) = msg {
-                            self.report_compile_error(msg.clone(), self.get_current().clone());
-                        } else {
-                            self.report_compile_error(
-                                format!(
-                                    "Unexpected token {}",
-                                    self.get_current().get_lexeme(self.source)
-                                ),
-                                self.get_current().clone()
-                            );
-                        }
+                        let msg = self.get_current().get_message().unwrap().to_string();
+                        self.report_compile_error(msg, vec![self.get_current().get_metadata()]);
+                        self.advance();
                     } else {
                         self.report_compile_error(
                             format!(
                                 "Unexpected end of expression. Expected new line or ';' but got {}",
                                 self.get_current().get_lexeme(self.source)
                             ),
-                            self.get_current().clone()
+                            vec![self.get_current().get_metadata()]
                         );
                     }
                 }
@@ -75,13 +73,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub(super) fn peek(&self, offset: isize) -> &Token {
+    pub(super) fn peek(&self, offset: isize) -> Option<&Token> {
         if offset == 0 {
-            self.get_current()
+            Some(self.get_current())
         } else {
-            self.previous_tokens
-                .get(((self.previous_tokens.len() as isize) + offset) as usize)
-                .unwrap()
+            self.previous_tokens.get(((self.previous_tokens.len() as isize) + offset) as usize)
         }
     }
 
@@ -103,8 +99,7 @@ impl<'a> Parser<'a> {
         self.ast_generator.exit_panic_mode()
     }
 
-    pub(super) fn report_compile_error(&mut self, message: String, token: Token) {
-        println!("error reported");
+    pub(super) fn report_compile_error(&mut self, message: String, token: Vec<TokenMetadata>) {
         self.error_handler.report_compile_error(message, token);
         self.enter_panic_mode();
     }

@@ -1,6 +1,7 @@
-use crate::ast::{ AstValue, ExprOp };
+use crate::ast::{ AstIdentifier, AstValue };
+use crate::operations::{ BinaryOp, UnaryOp };
 use crate::{ parser::token::token_type::TokenType::*, value::Value };
-use super::precedence::Precedence::*;
+use super::precedence::Precedence::{ self, * };
 
 use super::Parser;
 
@@ -10,7 +11,9 @@ impl<'a> Parser<'a> {
         let lexeme = token.get_lexeme(self.source);
 
         if let Ok(int_value) = lexeme.parse::<i32>() {
-            self.ast_generator.emit_constant(AstValue::new(Value::Int32(int_value), token.clone()))
+            self.ast_generator.emit_constant_literal(
+                AstValue::new(Value::Int32(int_value), token.get_metadata())
+            )
         }
     }
 
@@ -18,7 +21,7 @@ impl<'a> Parser<'a> {
         let token = self.get_previous();
         let lexeme = token.get_lexeme(self.source);
 
-        unimplemented!("Variable parsing not implemented yet")
+        self.ast_generator.emit_variable_lookup(AstIdentifier::new(lexeme, token.get_metadata()))
     }
 
     pub fn literal(&mut self) {
@@ -26,9 +29,13 @@ impl<'a> Parser<'a> {
 
         match token.get_ttype() {
             TokenFalse =>
-                self.ast_generator.emit_constant(AstValue::new(Value::Bool(false), token.clone())),
+                self.ast_generator.emit_constant_literal(
+                    AstValue::new(Value::Bool(false), token.get_metadata())
+                ),
             TokenTrue =>
-                self.ast_generator.emit_constant(AstValue::new(Value::Bool(true), token.clone())),
+                self.ast_generator.emit_constant_literal(
+                    AstValue::new(Value::Bool(true), token.get_metadata())
+                ),
             _ => {}
         }
     }
@@ -45,8 +52,8 @@ impl<'a> Parser<'a> {
         self.parse_precedence(PrecUnary);
 
         let result = match operator_type {
-            TokenMinus => self.ast_generator.emit_unary_op(ExprOp::Neg),
-            TokenBang => self.ast_generator.emit_unary_op(ExprOp::Truthy),
+            TokenMinus => self.ast_generator.emit_unary_op(UnaryOp::Neg),
+            TokenBang => self.ast_generator.emit_unary_op(UnaryOp::Truthy),
             _ => Ok(()),
         };
 
@@ -63,10 +70,10 @@ impl<'a> Parser<'a> {
         self.parse_precedence(parse_rule.get_precedence().get_next());
 
         let result = match operator_type {
-            TokenPlus => self.ast_generator.emit_binary_op(ExprOp::Add),
-            TokenMinus => self.ast_generator.emit_binary_op(ExprOp::Sub),
-            TokenStar => self.ast_generator.emit_binary_op(ExprOp::Mul),
-            TokenSlash => self.ast_generator.emit_binary_op(ExprOp::Div),
+            TokenPlus => self.ast_generator.emit_binary_op(BinaryOp::Add),
+            TokenMinus => self.ast_generator.emit_binary_op(BinaryOp::Sub),
+            TokenStar => self.ast_generator.emit_binary_op(BinaryOp::Mul),
+            TokenSlash => self.ast_generator.emit_binary_op(BinaryOp::Div),
             _ => Ok(()),
         };
 
@@ -79,13 +86,16 @@ impl<'a> Parser<'a> {
         let error_token = self.get_previous();
         let msg = error_token.get_message();
         if let Some(msg) = msg {
-            self.report_compile_error(msg.to_string(), error_token.clone());
+            self.report_compile_error(msg.to_string(), vec![error_token.get_metadata()]);
         } else {
             self.report_compile_error(
                 format!("Unexpected token: {}", error_token.get_lexeme(self.source)),
-                error_token.clone()
+                vec![error_token.get_metadata()]
             );
         }
-        // self.synchronize()
+    }
+
+    pub(super) fn skip(&mut self) {
+        self.parse_precedence(PrecAssignment)
     }
 }

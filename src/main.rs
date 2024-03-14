@@ -13,6 +13,7 @@ mod compiler;
 mod ast;
 mod value;
 mod constants;
+mod operations;
 
 /*
 MUL R0 2 3
@@ -42,10 +43,28 @@ ADD R0 R3 R1
 
 #[profiler::start(true)]
 fn main() {
-    let src2 = "(-2 * ((1 + -(2 * 3) + 4 * (3 + 1 + 1)) * -8 + 2 + 6) + 1 + 1 - 1) / 2 - 4";
-    let src1 = "a := 2";
+    let args: Vec<String> = std::env::args().collect();
 
-    let src = src2;
+    if args.len() < 2 {
+        println!("Usage: {} <source file>", args[0]);
+        std::process::exit(1);
+    }
+
+    let file_content = match std::fs::read_to_string(&args[1]) {
+        Ok(file) => file,
+        Err(e) => {
+            println!("Error reading file: {}", e);
+            std::process::exit(1);
+        }
+    };
+    let file_str = file_content.as_str();
+
+    let src1 = "(-2 * ((1 + -(2 * 3) + 4 * (3 + 1 + 1)) * -8 + 2 + 6) + 1 + 1 - 1) / 2 - 4";
+    let src2 = "2 + true";
+    let src3 =
+        "mut i32 a := 2 + 8; 2 + a; 3 * a + a; 1 + a; i32 b := a * 8; a = 3; i32 c := a + b; i32 d := 2 * a * b * c + 4 * 8";
+
+    let src = file_str;
 
     let error_handler = &mut ErrorHandler::new();
 
