@@ -3,6 +3,11 @@ use crate::parser::token::{ Token, token_type::TokenType };
 use super::Lexer;
 
 impl<'a> Lexer<'a> {
+    pub(super) fn make_eof_token(&mut self) -> Option<Token> {
+        self.start = self.current;
+        self.make_token(TokenType::TokenEOF)
+    }
+
     pub(super) fn make_token(&mut self, ttype: TokenType) -> Option<Token> {
         Some(Token::new(ttype, self.start, self.current - self.start, self.line))
     }

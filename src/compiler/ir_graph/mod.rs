@@ -140,11 +140,8 @@ impl IRGraph {
             .collect::<Vec<IREdge>>()
     }
 
-    pub fn get_edge_to_node(&self, node_id: usize) -> &IREdge {
-        self.edges
-            .iter()
-            .find(|&edge| edge.dest == node_id)
-            .unwrap()
+    pub fn get_edge_to_node(&self, node_id: usize) -> Option<&IREdge> {
+        self.edges.iter().find(|&edge| edge.dest == node_id)
     }
 
     pub fn get_control_flow_edge_to_node(&self, node_id: usize) -> Option<&IRControlFlowEdge> {

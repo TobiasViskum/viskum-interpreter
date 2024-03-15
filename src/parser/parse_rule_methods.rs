@@ -43,13 +43,13 @@ impl<'a> Parser<'a> {
     pub fn grouping(&mut self) {
         self.expression();
 
-        self.consume(TokenRightParen)
+        self.consume(TokenRightParen, "Expect ')' after expression");
     }
 
     pub fn unary(&mut self) {
         let operator_type = { self.get_previous().get_ttype().clone() };
 
-        self.parse_precedence(PrecUnary);
+        self.parse_precedence(PrecUnary, None);
 
         let result = match operator_type {
             TokenMinus => self.ast_generator.emit_unary_op(UnaryOp::Neg),
@@ -67,7 +67,7 @@ impl<'a> Parser<'a> {
 
         let parse_rule = self.get_parse_rule(&operator_type);
 
-        self.parse_precedence(parse_rule.get_precedence().get_next());
+        self.parse_precedence(parse_rule.get_precedence().get_next(), None);
 
         let result = match operator_type {
             TokenPlus => self.ast_generator.emit_binary_op(BinaryOp::Add),
@@ -96,6 +96,6 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn skip(&mut self) {
-        self.parse_precedence(PrecAssignment)
+        self.parse_precedence(PrecAssignment, None)
     }
 }

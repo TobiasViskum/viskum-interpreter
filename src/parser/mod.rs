@@ -5,7 +5,7 @@ mod core_methods;
 mod precedence;
 mod parse_rule;
 mod parse_rule_methods;
-mod ast_generator;
+pub mod ast_generator;
 mod lexer;
 
 use crate::{ ast::Ast, error_handler::ErrorHandler, parser::{ lexer::Lexer, token::Token } };

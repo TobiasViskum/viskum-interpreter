@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use crate::{
     operations::{ BinaryOp, UnaryOp },
-    parser::token::TokenMetadata,
-    value::{ Value, ValueType },
+    parser::{ ast_generator::AstVariables, token::TokenMetadata },
+    value::{ self, Value, ValueType },
 };
 
 #[derive(Debug, Clone)]
@@ -85,6 +85,150 @@ pub enum Stmt {
     VariableAssignment(VariableAssignment),
 }
 
+impl Stmt {
+    pub fn type_check(
+        &mut self,
+        variables: &mut AstVariables,
+        token_vec: &mut Vec<TokenMetadata>
+    ) -> Result<(), String> {
+        match self {
+            Stmt::ExprStmt(expr) => {
+                expr.type_check(variables, token_vec)?;
+                Ok(())
+            }
+            Stmt::VariableDefinition(variable_definition) => {
+                let resulted_value_type = match &variable_definition.value {
+                    Some(value) => {
+                        match value.type_check(variables, token_vec) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                variables.insert(
+                                    variable_definition.name.to_string(),
+                                    ValueType::Unkown,
+                                    variable_definition.is_mutable,
+                                    true
+                                );
+
+                                return Err(e);
+                            }
+                        }
+                    }
+                    None => ValueType::Empty,
+                };
+
+                let value_type = match &variable_definition.value_type {
+                    Some(value_type) => {
+                        if
+                            &resulted_value_type != value_type &&
+                            &resulted_value_type != &ValueType::Empty
+                        {
+                            if let Some(value) = &variable_definition.value {
+                                value.push_to_token_vec(token_vec);
+                            }
+                            token_vec.push(variable_definition.token_metadata.clone());
+
+                            variables.insert(
+                                variable_definition.name.to_string(),
+                                value_type.clone(),
+                                variable_definition.is_mutable,
+                                true
+                            );
+
+                            return Err(
+                                format!(
+                                    "Variable '{}' is of type {} but the provided value is of type {}",
+                                    variable_definition.name,
+                                    value_type.to_type_string(),
+                                    resulted_value_type.to_type_string()
+                                )
+                            );
+                        } else {
+                            value_type
+                        }
+                    }
+                    None => &resulted_value_type,
+                };
+
+                variables.insert(
+                    variable_definition.name.to_string(),
+                    value_type.clone(),
+                    variable_definition.is_mutable,
+                    resulted_value_type != ValueType::Empty // Compare type to if is empty
+                );
+
+                variable_definition.value_type = Some(value_type.clone());
+
+                Ok(())
+            }
+            Stmt::VariableAssignment(variable_assignment) => {
+                let resulted_value_type = match
+                    variable_assignment.value.type_check(variables, token_vec)
+                {
+                    Ok(v) => v,
+                    Err(e) => {
+                        return Err(e);
+                    }
+                };
+
+                let variable = variables.get(&variable_assignment.field.get_lexeme());
+
+                if let Some((value_type, is_mutable, is_initialized)) = variable {
+                    if !is_initialized {
+                        println!(
+                            "Found non-initialized variable: '{}'.\nTODO: Implement checks when blocks are implemented.",
+                            variable_assignment.field.get_lexeme()
+                        );
+                    }
+                    if !is_mutable && is_initialized {
+                        variable_assignment.value.push_to_token_vec(token_vec);
+                        variable_assignment.field.push_to_token_vec(token_vec);
+
+                        return Err(
+                            format!(
+                                "Cannot mutate immutable variable '{}'",
+                                variable_assignment.field.lexeme
+                            )
+                        );
+                    } else {
+                        if &resulted_value_type != &value_type {
+                            variable_assignment.value.push_to_token_vec(token_vec);
+                            variable_assignment.field.push_to_token_vec(token_vec);
+
+                            let error_message = if &value_type == &ValueType::Unkown {
+                                format!(
+                                    "The tye of variable '{}' is unknown and cannot be assigned to",
+                                    variable_assignment.field.lexeme
+                                )
+                            } else {
+                                format!(
+                                    "Variable '{}' is of type {} but the assignment value is of type {}",
+                                    variable_assignment.field.lexeme,
+                                    value_type.to_type_string(),
+                                    resulted_value_type.to_type_string()
+                                )
+                            };
+
+                            return Err(error_message);
+                        }
+                    }
+                } else {
+                    variable_assignment.value.push_to_token_vec(token_vec);
+                    variable_assignment.field.push_to_token_vec(token_vec);
+
+                    return Err(
+                        format!(
+                            "Cannot assign to undefined variable: '{}'",
+                            variable_assignment.field.lexeme
+                        )
+                    );
+                }
+
+                Ok(())
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct VariableAssignment {
     pub target_expr: Option<Expr>,
@@ -105,18 +249,26 @@ impl VariableAssignment {
 #[derive(Debug)]
 pub struct VariableDefinition {
     pub name: String,
-    pub value_type: ValueType,
+    pub value_type: Option<ValueType>,
     pub is_mutable: bool,
-    pub value: Expr,
+    pub value: Option<Expr>,
+    pub token_metadata: TokenMetadata,
 }
 
 impl VariableDefinition {
-    pub fn new(name: String, value_type: ValueType, is_mutable: bool, value: Expr) -> Self {
+    pub fn new(
+        name: String,
+        value_type: Option<ValueType>,
+        is_mutable: bool,
+        value: Option<Expr>,
+        token_metadata: TokenMetadata
+    ) -> Self {
         Self {
             name,
             value_type,
             is_mutable,
             value,
+            token_metadata,
         }
     }
 }
@@ -132,7 +284,7 @@ pub enum Expr {
 impl Expr {
     pub fn type_check(
         &self,
-        variables: &HashMap<String, (ValueType, bool)>,
+        variables: &AstVariables,
         token_vec: &mut Vec<TokenMetadata>
     ) -> Result<ValueType, String> {
         match self {
@@ -140,16 +292,7 @@ impl Expr {
             Expr::UnaryExpr(expr) => expr.type_check(variables, token_vec),
             Expr::Literal(ast_value) => Ok(ast_value.value.to_value_type()),
             Expr::IdentifierLookup(ast_identifier) => {
-                if let Some((value_type, is_mutable)) = variables.get(&ast_identifier.lexeme) {
-                    if !is_mutable {
-                        token_vec.push(ast_identifier.token_metadata.clone());
-                        return Err(
-                            format!(
-                                "Cannot assign to immutable variable: '{}'",
-                                ast_identifier.lexeme
-                            )
-                        );
-                    }
+                if let Some((value_type, _, _)) = variables.get(&ast_identifier.lexeme) {
                     Ok(value_type.clone())
                 } else {
                     token_vec.push(ast_identifier.token_metadata.clone());
@@ -194,7 +337,7 @@ impl BinaryExpr {
 
     pub fn type_check(
         &self,
-        variables: &HashMap<String, (ValueType, bool)>,
+        variables: &AstVariables,
         token_vec: &mut Vec<TokenMetadata>
     ) -> Result<ValueType, String> {
         let left_type = self.left.type_check(variables, token_vec)?;
@@ -277,7 +420,7 @@ impl UnaryExpr {
 
     pub fn type_check(
         &self,
-        variables: &HashMap<String, (ValueType, bool)>,
+        variables: &AstVariables,
         token_vec: &mut Vec<TokenMetadata>
     ) -> Result<ValueType, String> {
         let right_type = self.right.type_check(variables, token_vec)?;

@@ -52,7 +52,7 @@ impl<'a> Lexer<'a> {
         self.skip_whitespace();
 
         if self.current == self.source.chars().count() {
-            return self.make_token(TokenType::TokenEOF);
+            return self.make_eof_token();
         } else if self.current > self.source.chars().count() {
             return None;
         }

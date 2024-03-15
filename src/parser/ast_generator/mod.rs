@@ -15,14 +15,61 @@ use crate::{
     operations::{ BinaryOp, UnaryOp },
     value::ValueType,
 };
-use super::token::TokenMetadata;
+use super::token::{ token_type::TokenType, Token, TokenMetadata };
+
+#[derive(Debug)]
+struct AstVariableValue {
+    value_type: ValueType,
+    is_mutable: bool,
+    is_initialized: bool,
+}
+
+impl AstVariableValue {
+    pub fn to_tuple(&self) -> (ValueType, bool, bool) {
+        (self.value_type.clone(), self.is_mutable, self.is_initialized)
+    }
+}
+
+#[derive(Debug)]
+pub struct AstVariables {
+    variables: HashMap<String, AstVariableValue>,
+}
+
+impl AstVariables {
+    pub fn new() -> Self {
+        Self {
+            variables: HashMap::new(),
+        }
+    }
+
+    pub fn insert(
+        &mut self,
+        lexeme: String,
+        value_type: ValueType,
+        is_mutable: bool,
+        is_initialized: bool
+    ) {
+        self.variables.insert(lexeme, AstVariableValue {
+            value_type,
+            is_mutable,
+            is_initialized,
+        });
+    }
+
+    pub fn get(&self, lexeme: &String) -> Option<(ValueType, bool, bool)> {
+        match self.variables.get(lexeme) {
+            Some(v) => Some(v.to_tuple()),
+            None => None,
+        }
+    }
+}
 
 pub struct AstGenerator {
     ast: Option<Ast>,
     statements: Vec<Stmt>,
     expressions: Vec<Expr>,
     panic_mode: bool,
-    variables: HashMap<String, (ValueType, bool)>,
+    variables: AstVariables,
 }
 
 impl AstGenerator {
@@ -32,7 +79,7 @@ impl AstGenerator {
             statements: Vec::new(),
             expressions: Vec::new(),
             panic_mode: false,
-            variables: HashMap::new(),
+            variables: AstVariables::new(),
         }
     }
 
@@ -60,6 +107,9 @@ impl AstGenerator {
         &mut self,
         token_metadata: TokenMetadata
     ) -> Result<(), (String, Vec<TokenMetadata>)> {
+        if self.panic_mode {
+            return Ok(());
+        }
         let value = self.expressions.pop().unwrap();
         let identifier = match self.expressions.pop().unwrap() {
             Expr::IdentifierLookup(v) => v,
@@ -67,40 +117,10 @@ impl AstGenerator {
                 return Err(("Expected identifier in assignment".to_string(), vec![token_metadata]));
             }
         };
-        // let target_expr = if self.expressions.len() > 0 {
-        //     // This can only be expr::function_call(s)
-        //     Some(self.expressions.pop().unwrap())
-        // } else {
-        //     None
-        // };
-
-        let mut token_vec: Vec<TokenMetadata> = Vec::new();
-        let type_checked_value_type = match value.type_check(&self.variables, &mut token_vec) {
-            Ok(vt) => vt,
-            Err(e) => {
-                return Err((e, token_vec));
-            }
-        };
-
-        if type_checked_value_type != self.variables.get(&identifier.get_lexeme()).unwrap().0 {
-            value.push_to_token_vec(&mut token_vec);
-            token_vec.push(token_metadata);
-            return Err((
-                format!(
-                    "Variable '{}' is of type {}, but was assigned to type {}",
-                    &identifier.get_lexeme(),
-                    self.variables.get(&identifier.get_lexeme()).unwrap().0.to_type_string(),
-                    type_checked_value_type.to_type_string()
-                ),
-                token_vec,
-            ));
-        }
 
         let variable_assignment = Stmt::VariableAssignment(
             VariableAssignment::new(None, identifier, value)
         );
-
-        println!("variable_assignment: {:#?}", variable_assignment);
 
         self.statements.push(variable_assignment);
 
@@ -110,36 +130,33 @@ impl AstGenerator {
     pub fn emit_variable_definition(
         &mut self,
         lexeme: String,
+        identifier_token: Token,
         value_type: Option<ValueType>,
-        is_mutable: bool
+        is_mutable: bool,
+        last_token_in_definition: Token
     ) -> Result<(), (String, Vec<TokenMetadata>)> {
-        let value = self.expressions.pop().unwrap();
+        let value = self.expressions.pop();
 
-        let mut token_vec: Vec<TokenMetadata> = Vec::new();
-        let type_checked_value_type = match value.type_check(&self.variables, &mut token_vec) {
-            Ok(vt) => vt,
-            Err(e) => {
-                return Err((e, token_vec));
-            }
-        };
-
-        if value_type.is_some() && value_type.clone().unwrap() != type_checked_value_type {
-            let value_type = value_type.unwrap();
-            value.push_to_token_vec(&mut token_vec);
+        if
+            !matches!(
+                identifier_token.get_ttype(),
+                TokenType::TokenIdentifier | TokenType::TokenInt32
+            )
+        {
             return Err((
-                format!(
-                    "Type mismatch: expected {}, found {:?}",
-                    value_type.to_type_string(),
-                    type_checked_value_type
-                ),
-                token_vec,
+                format!("Invalid variable definition target: '{}'", lexeme),
+                vec![identifier_token.get_metadata()],
             ));
         }
 
-        self.variables.insert(lexeme.clone(), (type_checked_value_type.clone(), is_mutable));
-
         let variable_definition = Stmt::VariableDefinition(
-            VariableDefinition::new(lexeme, type_checked_value_type, is_mutable, value)
+            VariableDefinition::new(
+                lexeme,
+                value_type,
+                is_mutable,
+                value,
+                last_token_in_definition.get_metadata()
+            )
         );
 
         self.statements.push(variable_definition);
@@ -239,18 +256,28 @@ impl AstGenerator {
                         Err(e) => { Err((e, token_vec)) }
                     }
                 }
-                None => Ok(()),
+                None => Ok(()), // Change this to an error
             }
         }
     }
 
-    pub fn push_stmt(&mut self) {
+    pub fn push_stmt(&mut self) -> Result<(), (String, Vec<TokenMetadata>)> {
         if self.panic_mode {
             self.exit_panic_mode();
+            Ok(())
         } else {
             match self.statements.pop() {
-                Some(stmt) => self.ast.as_mut().unwrap().push_stmt(stmt),
-                None => {}
+                Some(mut stmt) => {
+                    let mut token_vec: Vec<TokenMetadata> = Vec::new();
+                    match stmt.type_check(&mut self.variables, &mut token_vec) {
+                        Ok(_) => {
+                            self.ast.as_mut().unwrap().push_stmt(stmt);
+                            Ok(())
+                        }
+                        Err(e) => { Err((e, token_vec)) }
+                    }
+                }
+                None => Ok(()), // Change this to an error
             }
         }
     }

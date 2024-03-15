@@ -51,7 +51,7 @@ impl<'a> IRGenerator<'a> {
                         variable_definition.name,
                         Variable::new(
                             next_register,
-                            variable_definition.value_type,
+                            variable_definition.value_type.unwrap(),
                             variable_definition.is_mutable
                         ),
                         subscript
@@ -61,8 +61,10 @@ impl<'a> IRGenerator<'a> {
                         operation: Op::Define,
                         result: IRValue::VariableRegister(next_register),
                     });
-                    let value_id = self.compile_expr(variable_definition.value);
-                    self.add_edge(value_id, definition_id);
+                    if let Some(value) = variable_definition.value {
+                        let value_id = self.compile_expr(value);
+                        self.add_edge(value_id, definition_id);
+                    }
                     linked_ids.push(definition_id);
                 }
                 Stmt::VariableAssignment(variable_assignment) => {
@@ -73,33 +75,21 @@ impl<'a> IRGenerator<'a> {
                     let subscript = subscript + 1;
 
                     if let Some(value_type) = value_type {
-                        if !is_mutable {
-                            self.report_error(
-                                format!("Cannot mutate immutable variable: {}", &variable_name),
-                                vec![variable_assignment.field.get_token_metadata()]
-                            );
-                        } else {
-                            self.environment.insert(
-                                variable_name,
-                                Variable::new(next_register, value_type, is_mutable),
-                                subscript
-                            );
-
-                            let assign_id = self.add_node(IRNode {
-                                operation: Op::Assign,
-                                result: IRValue::VariableRegister(next_register),
-                            });
-
-                            let value_id = self.compile_expr(variable_assignment.value);
-
-                            self.add_edge(value_id, assign_id);
-                            linked_ids.push(assign_id);
-                        }
-                    } else {
-                        self.report_error(
-                            format!("Cannot assign undefined variable: {}", &variable_name),
-                            vec![variable_assignment.field.get_token_metadata()]
+                        self.environment.insert(
+                            variable_name,
+                            Variable::new(next_register, value_type, is_mutable),
+                            subscript
                         );
+
+                        let assign_id = self.add_node(IRNode {
+                            operation: Op::Assign,
+                            result: IRValue::VariableRegister(next_register),
+                        });
+
+                        let value_id = self.compile_expr(variable_assignment.value);
+
+                        self.add_edge(value_id, assign_id);
+                        linked_ids.push(assign_id);
                     }
                 }
             }

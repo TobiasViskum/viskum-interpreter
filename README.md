@@ -4,6 +4,7 @@
 
 - SSA: https://en.wikipedia.org/wiki/Static_single-assignment_form
 - CFG: https://en.wikipedia.org/wiki/Control-flow_graph
+  - Graph: https://en.wikipedia.org/wiki/Graph_(abstract_data_type)
 - Constant folding: https://en.wikipedia.org/wiki/Constant_folding
 - SCCP: https://en.wikipedia.org/wiki/Sparse_conditional_constant_propagation (Constant folding w/ SSA)
 - DCE: https://en.wikipedia.org/wiki/Dead-code_elimination

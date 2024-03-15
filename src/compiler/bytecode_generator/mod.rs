@@ -5,6 +5,7 @@ use std::{ cell::RefCell, collections::HashMap };
 use crate::{
     constants::REGISTERS,
     operations::{ BinaryOp, Op, UnaryOp },
+    value::Value,
     vm::instructions::IRInstruction,
 };
 
@@ -94,7 +95,7 @@ impl<'a> BytecodeGenerator<'a> {
             }
         };
 
-        let edge_to_this_node = self.get_edge_to_node(node_id);
+        let edge_to_this_node = self.get_edge_to_node(node_id).unwrap();
         let edge_src = edge_to_this_node.src;
 
         let adj_node = self.get_node(edge_src).unwrap();
@@ -125,24 +126,30 @@ impl<'a> BytecodeGenerator<'a> {
         };
 
         let edge_to_this_node = self.get_edge_to_node(node_id);
-        let edge_src = edge_to_this_node.src;
 
-        let adj_node = self.get_node(edge_src).unwrap();
+        if let Some(edge_to_this_node) = edge_to_this_node {
+            let edge_src = edge_to_this_node.src;
 
-        match adj_node.result {
-            IRValue::Constant(value) => {
-                let instruction = IRInstruction::new_define(dest, IRValue::Constant(value));
-                self.instructions.push(instruction);
+            let adj_node = self.get_node(edge_src).unwrap();
+
+            match adj_node.result {
+                IRValue::Constant(value) => {
+                    let instruction = IRInstruction::new_define(dest, IRValue::Constant(value));
+                    self.instructions.push(instruction);
+                }
+                IRValue::Register(register) => {
+                    self.generate_instruction_from_node(edge_src);
+                    let instruction = IRInstruction::new_define(dest, IRValue::Register(register));
+                    self.instructions.push(instruction);
+                }
+                IRValue::VariableRegister(register) => {
+                    let instruction = IRInstruction::new_define(dest, IRValue::Register(register));
+                    self.instructions.push(instruction);
+                }
             }
-            IRValue::Register(register) => {
-                self.generate_instruction_from_node(edge_src);
-                let instruction = IRInstruction::new_define(dest, IRValue::Register(register));
-                self.instructions.push(instruction);
-            }
-            IRValue::VariableRegister(register) => {
-                let instruction = IRInstruction::new_define(dest, IRValue::Register(register));
-                self.instructions.push(instruction);
-            }
+        } else {
+            let instruction = IRInstruction::new_define(dest, IRValue::Constant(Value::Empty));
+            self.instructions.push(instruction);
         }
     }
 
@@ -156,7 +163,7 @@ impl<'a> BytecodeGenerator<'a> {
 
         let src: IRValue;
 
-        let edge_to_this_node = self.get_edge_to_node(node_id);
+        let edge_to_this_node = self.get_edge_to_node(node_id).unwrap();
         let edge_src = edge_to_this_node.src;
 
         let adj_node = self.get_node(edge_src).unwrap();
@@ -237,7 +244,7 @@ impl<'a> BytecodeGenerator<'a> {
         self.ir_graph.get_edges_to_node(node_id)
     }
 
-    fn get_edge_to_node(&self, node_id: usize) -> &IREdge {
+    fn get_edge_to_node(&self, node_id: usize) -> Option<&IREdge> {
         self.ir_graph.get_edge_to_node(node_id)
     }
 

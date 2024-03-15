@@ -4,12 +4,16 @@ use crate::{ operations::{ BinaryOp, Op, UnaryOp }, util::make_first_char_upperc
 pub enum ValueType {
     Int32,
     Bool,
+    Unkown,
+    Empty,
 }
 impl ValueType {
     pub fn to_type_string(&self) -> String {
         match self {
             ValueType::Int32 => "i32".to_string(),
             ValueType::Bool => "bool".to_string(),
+            ValueType::Unkown => "unknown".to_string(),
+            ValueType::Empty => "empty".to_string(),
         }
     }
 
@@ -55,6 +59,7 @@ impl ValueType {
 pub enum Value {
     Int32(i32),
     Bool(bool),
+    Empty,
 }
 
 impl Value {
@@ -62,6 +67,7 @@ impl Value {
         match self {
             Value::Int32(int32) => int32.to_string(),
             Value::Bool(bool) => bool.to_string(),
+            Value::Empty => "empty".to_string(),
         }
     }
 
@@ -69,6 +75,7 @@ impl Value {
         match self {
             Value::Int32(_) => ValueType::Int32,
             Value::Bool(_) => ValueType::Bool,
+            Value::Empty => ValueType::Empty,
         }
     }
 
@@ -139,6 +146,7 @@ impl Value {
         match self {
             Value::Bool(bool) => Value::Bool(!*bool),
             Value::Int32(int32) => Value::Bool(!*int32 != 0),
+            Value::Empty => Value::Empty,
         }
     }
 }

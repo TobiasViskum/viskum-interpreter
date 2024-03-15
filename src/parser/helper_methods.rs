@@ -25,29 +25,52 @@ impl<'a> Parser<'a> {
         self.peek(-1).unwrap()
     }
 
-    pub(super) fn consume(&mut self, ttype: TokenType) {
+    pub(super) fn consume(&mut self, ttype: TokenType, message: &str) -> bool {
         if self.get_current().get_ttype() == &ttype {
             self.advance();
+            true
         } else {
             if self.panic_mode {
-                return;
-            }
-
-            if self.get_current().get_ttype() == &TokenType::TokenError {
+                false
+            } else if self.get_current().get_ttype() == &TokenType::TokenError {
                 let msg = self.get_current().get_message().unwrap().to_string();
                 self.report_compile_error(msg, vec![self.get_current().get_metadata()]);
                 self.advance();
+                false
             } else {
                 self.report_compile_error(
-                    format!(
-                        "Expected token of type {:?}, found {:?}",
-                        ttype,
-                        self.get_current().get_ttype()
-                    ),
+                    message.to_string(),
                     vec![self.get_current().get_metadata()]
                 );
+                false
             }
         }
+    }
+
+    pub(super) fn is_at_expr_end(&mut self) -> bool {
+        let result = match self.get_current().get_ttype() {
+            TokenType::TokenSemicolon | TokenType::TokenEOF => true,
+            _ => {
+                let prev_line = match self.peek(-1) {
+                    Some(line) => line.get_line(),
+                    None => {
+                        return false;
+                    }
+                };
+
+                if self.get_current().get_line() <= prev_line {
+                    if self.get_current().get_ttype() == &TokenType::TokenError {
+                        let msg = self.get_current().get_message().unwrap().to_string();
+                        self.report_compile_error(msg, vec![self.get_current().get_metadata()]);
+                    }
+                    false
+                } else {
+                    true
+                }
+            }
+        };
+
+        result
     }
 
     pub(super) fn consume_expr_end(&mut self) {
@@ -84,13 +107,13 @@ impl<'a> Parser<'a> {
                                             ];
 
                                     self.report_compile_error(
-                                        format!("Invalid assignment target: '{}'", lexeme),
+                                        format!("Invalid1 assignment target: '{}'", lexeme),
                                         token_vec
                                     );
                                 } else {
                                     self.report_compile_error(
                                         format!(
-                                            "Invalid assignment target: '{}'",
+                                            "Invalid2 assignment target: '{}'",
                                             self.get_previous().get_lexeme(self.source)
                                         ),
                                         vec![

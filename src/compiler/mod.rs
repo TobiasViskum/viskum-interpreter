@@ -108,13 +108,13 @@ impl<'a> Compiler<'a> {
 
         bytecode_generator.generate_bytecode();
 
-        #[cfg(debug_assertions)]
-        {
-            if !self.error_handler.has_error() {
-                println!("Unoptimized instructions:");
-                bytecode_generator.dissassemble();
-            }
-        }
+        // #[cfg(debug_assertions)]
+        // {
+        //     if !self.error_handler.has_error() {
+        //         println!("Unoptimized instructions:");
+        //         bytecode_generator.dissassemble();
+        //     }
+        // }
 
         let optimized_registers = bytecode_generator.get_optimized_registers();
 
