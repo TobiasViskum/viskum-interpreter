@@ -14,6 +14,7 @@ mod ast;
 mod value;
 mod constants;
 mod operations;
+mod util;
 
 /*
 MUL R0 2 3
@@ -59,10 +60,10 @@ fn main() {
     };
     let file_str = file_content.as_str();
 
-    let src1 = "(-2 * ((1 + -(2 * 3) + 4 * (3 + 1 + 1)) * -8 + 2 + 6) + 1 + 1 - 1) / 2 - 4";
-    let src2 = "2 + true";
-    let src3 =
-        "mut i32 a := 2 + 8; 2 + a; 3 * a + a; 1 + a; i32 b := a * 8; a = 3; i32 c := a + b; i32 d := 2 * a * b * c + 4 * 8";
+    // let src1 = "(-2 * ((1 + -(2 * 3) + 4 * (3 + 1 + 1)) * -8 + 2 + 6) + 1 + 1 - 1) / 2 - 4";
+    // let src2 = "2 + true";
+    // let src3 =
+    //     "mut i32 a := 2 + 8; 2 + a; 3 * a + a; 1 + a; i32 b := a * 8; a = 3; i32 c := a + b; i32 d := 2 * a * b * c + 4 * 8";
 
     let src = file_str;
 
@@ -76,11 +77,11 @@ fn main() {
 
     let instructions = compiler.compile(ast);
 
-    if error_handler.has_error() {
-        error_handler.print_errors(src);
-    } else {
+    if let Some(instructions) = instructions {
         let mut vm = VM::new(instructions);
 
         vm.run();
+    } else {
+        error_handler.print_errors(src);
     }
 }

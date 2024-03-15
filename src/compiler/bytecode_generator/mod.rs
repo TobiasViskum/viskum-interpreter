@@ -5,20 +5,20 @@ use std::{ cell::RefCell, collections::HashMap };
 use crate::{
     constants::REGISTERS,
     operations::{ BinaryOp, Op, UnaryOp },
-    vm::instructions::Instruction,
+    vm::instructions::IRInstruction,
 };
 
 use super::ir_graph::{ IRControlFlowEdge, IREdge, IRGraph, IRNode, IRValue };
 
 pub struct BytecodeGenerator<'a> {
-    ir_graph: IRGraph<'a>,
-    instructions: Vec<Instruction>,
+    ir_graph: &'a IRGraph,
+    instructions: Vec<IRInstruction>,
     virtual_registers: RefCell<HashMap<usize, usize>>,
     available_registers: RefCell<Vec<usize>>,
 }
 
 impl<'a> BytecodeGenerator<'a> {
-    pub fn new(ir_graph: IRGraph<'a>) -> Self {
+    pub fn new(ir_graph: &'a IRGraph) -> Self {
         let mut available_registers = Vec::new();
         for i in (1..REGISTERS).rev() {
             available_registers.push(i - 1);
@@ -48,17 +48,13 @@ impl<'a> BytecodeGenerator<'a> {
             }
         }
 
-        self.instructions.push(Instruction::Halt);
+        self.instructions.push(IRInstruction::Halt);
     }
 
     pub fn dissassemble(&self) {
         for instruction in &self.instructions {
             println!("{}", instruction.dissassemble());
         }
-    }
-
-    pub fn get_instructions(&mut self) -> Vec<Instruction> {
-        self.instructions.clone()
     }
 
     #[profiler::function_tracker]
@@ -68,23 +64,17 @@ impl<'a> BytecodeGenerator<'a> {
         if let Some(node) = node {
             match &node.operation {
                 Op::BinaryOp(binary_op) =>
-                    match binary_op {
-                        BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div => {
-                            self.generate_binary_instruction(&node, node_id, binary_op);
-                        }
-                    }
-                Op::UnaryOp(unary_op) =>
-                    match unary_op {
-                        UnaryOp::Neg | UnaryOp::Truthy => {
-                            self.generate_unary_instruction(&node, node_id, unary_op);
-                        }
-                    }
-                Op::Assign => todo!(),
+                    self.generate_binary_instruction(&node, node_id, binary_op),
+                Op::UnaryOp(unary_op) => self.generate_unary_instruction(&node, node_id, unary_op),
+                Op::Assign => self.generate_assignment_instruction(&node, node_id),
                 Op::Define => self.generate_definement_instruction(&node, node_id),
                 Op::NoOp => {
                     match node.result {
                         IRValue::Constant(value) => {
-                            let instruction = Instruction::new_load(IRValue::Register(0), value);
+                            let instruction = IRInstruction::new_load(
+                                IRValue::Register(0),
+                                IRValue::Constant(value)
+                            );
                             self.instructions.push(instruction);
                         }
                         _ => {
@@ -92,6 +82,36 @@ impl<'a> BytecodeGenerator<'a> {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    fn generate_assignment_instruction(&mut self, node: &IRNode, node_id: usize) {
+        let dest = match node.result {
+            IRValue::VariableRegister(register) => register,
+            IRValue::Register(_) | IRValue::Constant(_) => {
+                panic!("Unsupported operation.");
+            }
+        };
+
+        let edge_to_this_node = self.get_edge_to_node(node_id);
+        let edge_src = edge_to_this_node.src;
+
+        let adj_node = self.get_node(edge_src).unwrap();
+
+        match adj_node.result {
+            IRValue::Constant(value) => {
+                let instruction = IRInstruction::new_assign(dest, IRValue::Constant(value));
+                self.instructions.push(instruction);
+            }
+            IRValue::Register(register) => {
+                self.generate_instruction_from_node(edge_src);
+                let instruction = IRInstruction::new_assign(dest, IRValue::Register(register));
+                self.instructions.push(instruction);
+            }
+            IRValue::VariableRegister(register) => {
+                let instruction = IRInstruction::new_assign(dest, IRValue::Register(register));
+                self.instructions.push(instruction);
             }
         }
     }
@@ -111,17 +131,16 @@ impl<'a> BytecodeGenerator<'a> {
 
         match adj_node.result {
             IRValue::Constant(value) => {
-                let instruction = Instruction::new_define(dest, IRValue::Constant(value));
+                let instruction = IRInstruction::new_define(dest, IRValue::Constant(value));
                 self.instructions.push(instruction);
             }
             IRValue::Register(register) => {
                 self.generate_instruction_from_node(edge_src);
-                let instruction = Instruction::new_define(dest, IRValue::Register(register));
+                let instruction = IRInstruction::new_define(dest, IRValue::Register(register));
                 self.instructions.push(instruction);
             }
             IRValue::VariableRegister(register) => {
-                self.generate_instruction_from_node(edge_src);
-                let instruction = Instruction::new_define(dest, IRValue::Register(register));
+                let instruction = IRInstruction::new_define(dest, IRValue::Register(register));
                 self.instructions.push(instruction);
             }
         }
@@ -156,7 +175,7 @@ impl<'a> BytecodeGenerator<'a> {
             }
         }
 
-        let instruction = Instruction::new_unary(unary_op, dest, src);
+        let instruction = IRInstruction::new_unary(unary_op, dest, src);
         self.instructions.push(instruction);
     }
 
@@ -170,7 +189,7 @@ impl<'a> BytecodeGenerator<'a> {
             }
         };
 
-        let instruction = Instruction::new_binary(binary_op, dest, src1, src2);
+        let instruction = IRInstruction::new_binary(binary_op, dest, src1, src2);
         self.instructions.push(instruction);
     }
 

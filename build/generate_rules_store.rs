@@ -70,14 +70,12 @@ pub fn generate_rules_store() -> io::Result<()> {
     for parse_rule in TOKEN_TYPES_AND_PARSE_RULES {
         let split = parse_rule.split("=").collect::<Vec<&str>>();
 
-        let token_name = format!("Token{}", split[0].trim());
-
         let second = split[1].replace("{", "").replace("}", "").trim().to_string();
         let args = second.split(",").collect::<Vec<&str>>();
 
         let arg1 = args[0].trim();
 
-        let (prefix, prefix_enum_name) = if arg1 == "None" {
+        let (prefix, _prefix_enum_name) = if arg1 == "None" {
             ("None".to_string(), None)
         } else {
             (
@@ -87,7 +85,7 @@ pub fn generate_rules_store() -> io::Result<()> {
         };
 
         let arg2 = args[1].trim();
-        let (infix, infix_enum_name) = if arg2 == "None" {
+        let (infix, _infix_enum_name) = if arg2 == "None" {
             ("None".to_string(), None)
         } else {
             (

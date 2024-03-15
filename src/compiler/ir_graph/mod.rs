@@ -2,13 +2,7 @@ use std::collections::HashMap;
 
 use indexmap::IndexSet;
 
-use crate::{
-    constants::REGISTERS,
-    error_handler::ErrorHandler,
-    operations::Op,
-    value::{ Value, ValueType },
-    vm::instructions::InstructionSrc,
-};
+use crate::{ operations::Op, value::Value, vm::instructions::IRInstructionSrc };
 
 #[derive(Debug, Clone)]
 pub enum IRValue {
@@ -18,11 +12,11 @@ pub enum IRValue {
 }
 
 impl IRValue {
-    pub fn to_instruction_src(&self) -> InstructionSrc {
+    pub fn to_ir_instruction_src(&self) -> IRInstructionSrc {
         match self {
-            IRValue::Register(register) => InstructionSrc::Register(*register),
-            IRValue::Constant(value) => InstructionSrc::Constant(*value),
-            IRValue::VariableRegister(register) => InstructionSrc::VariableRegister(*register),
+            IRValue::Register(register) => IRInstructionSrc::Register(*register),
+            IRValue::Constant(value) => IRInstructionSrc::Constant(*value),
+            IRValue::VariableRegister(register) => IRInstructionSrc::VariableRegister(*register),
         }
     }
 }
@@ -36,10 +30,6 @@ pub struct IRNode {
 impl IRNode {
     pub fn new(operation: Op, result: IRValue) -> Self {
         Self { operation, result }
-    }
-
-    pub fn get_result(&self) -> &IRValue {
-        &self.result
     }
 }
 
@@ -67,35 +57,26 @@ impl IRControlFlowEdge {
 }
 
 #[derive(Debug)]
-pub struct IRGraph<'a> {
+pub struct IRGraph {
     nodes: HashMap<usize, IRNode>,
     edges: IndexSet<IREdge>,
     control_flow_edges: IndexSet<IRControlFlowEdge>,
-    available_registers: Vec<usize>,
-    error_handler: &'a ErrorHandler,
 }
 
-impl<'a> IRGraph<'a> {
-    pub fn new(error_handler: &'a ErrorHandler) -> Self {
-        let mut available_registers = Vec::new();
-        for i in (1..REGISTERS).rev() {
-            available_registers.push(i - 1);
-        }
-
+impl IRGraph {
+    pub fn new() -> Self {
         Self {
             nodes: HashMap::new(),
             edges: IndexSet::new(),
             control_flow_edges: IndexSet::new(),
-            available_registers,
-            error_handler,
         }
     }
 
-    pub fn get_nodes(&self) -> &HashMap<usize, IRNode> {
+    pub fn _get_nodes(&self) -> &HashMap<usize, IRNode> {
         &self.nodes
     }
 
-    pub fn get_edges(&self) -> &IndexSet<IREdge> {
+    pub fn _get_edges(&self) -> &IndexSet<IREdge> {
         &self.edges
     }
 
@@ -107,7 +88,7 @@ impl<'a> IRGraph<'a> {
         self.nodes.insert(id, node);
     }
 
-    pub fn remove_node(&mut self, id: usize) {
+    pub fn _remove_node(&mut self, id: usize) {
         self.nodes.remove(&id);
         self.edges.retain(|edge| edge.src != id && edge.dest != id);
     }
@@ -122,17 +103,17 @@ impl<'a> IRGraph<'a> {
         self.control_flow_edges.insert(edge);
     }
 
-    pub fn remove_control_flow_edge(&mut self, src: usize, dest: usize) {
+    pub fn _remove_control_flow_edge(&mut self, src: usize, dest: usize) {
         let edge = IRControlFlowEdge::new(src, dest);
         self.control_flow_edges.swap_remove(&edge);
     }
 
-    pub fn remove_edge(&mut self, src: usize, dest: usize) {
+    pub fn _remove_edge(&mut self, src: usize, dest: usize) {
         let edge = IREdge::new(src, dest);
         self.edges.swap_remove(&edge);
     }
 
-    pub fn update_node(&mut self, id: usize, node: IRNode) {
+    pub fn _update_node(&mut self, id: usize, node: IRNode) {
         if self.nodes.contains_key(&id) {
             self.nodes.insert(id, node);
         } else {
@@ -140,7 +121,7 @@ impl<'a> IRGraph<'a> {
         }
     }
 
-    pub fn update_edge(&mut self, src: usize, dest: usize, new_dest: usize) {
+    pub fn _update_edge(&mut self, src: usize, dest: usize, new_dest: usize) {
         let old_edge = IREdge::new(src, dest);
         let new_edge = IREdge::new(src, new_dest);
         if self.edges.contains(&old_edge) {

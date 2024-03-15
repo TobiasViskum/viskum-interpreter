@@ -10,18 +10,6 @@ pub struct ParseRule {
 }
 
 impl ParseRule {
-    pub fn new(
-        prefix: Option<fn(&mut Parser)>,
-        infix: Option<fn(&mut Parser)>,
-        precedence: Precedence
-    ) -> Self {
-        Self {
-            prefix,
-            infix,
-            precedence,
-        }
-    }
-
     pub fn get_prefix(&self) -> Option<fn(&mut Parser)> {
         self.prefix
     }

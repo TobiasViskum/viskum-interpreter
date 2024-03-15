@@ -44,10 +44,18 @@ impl<'a> Lexer<'a> {
         rest: &str,
         ttype: TokenType
     ) -> TokenType {
-        if
-            self.current - self.start == start + length &&
-            self.source.get(self.start + start..self.start + start + length) == Some(rest)
-        {
+        let mut search_lexeme = String::new();
+
+        for i in 0..length {
+            search_lexeme.push(
+                self.source
+                    .chars()
+                    .nth(self.start + start + i)
+                    .unwrap()
+            );
+        }
+
+        if self.current - self.start == start + length && search_lexeme == rest {
             ttype
         } else {
             TokenType::TokenIdentifier

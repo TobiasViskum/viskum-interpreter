@@ -1,10 +1,25 @@
-use crate::value::ValueType;
+use crate::{ ast::AstIdentifier, value::ValueType };
 
 use super::{ precedence::Precedence, token::token_type::TokenType, Parser };
 
 impl<'a> Parser<'a> {
     pub(super) fn statement(&mut self) {
         match self.get_current().get_ttype() {
+            TokenType::TokenIdentifier => {
+                let next = self.get_next();
+                if next.is_some() && matches!(next.unwrap().get_ttype(), &TokenType::TokenDefine) {
+                    self.advance();
+                    self.variable_definition();
+                } else if
+                    next.is_some() &&
+                    matches!(next.unwrap().get_ttype(), &TokenType::TokenAssign)
+                {
+                    self.advance();
+                    self.variable_assignment()
+                } else {
+                    self.expression_statement();
+                }
+            }
             TokenType::TokenInt32 => {
                 while
                     !self.is_at_end() &&
@@ -22,6 +37,18 @@ impl<'a> Parser<'a> {
                 if self.get_current().get_ttype() == &TokenType::TokenFunction {
                     // Function tokens isn't supported in lexer yet
                     // self.function_definition();
+                } else if self.get_current().get_ttype() == &TokenType::TokenIdentifier {
+                    let next = self.get_next();
+
+                    if
+                        next.is_some() &&
+                        matches!(next.unwrap().get_ttype(), &TokenType::TokenDefine)
+                    {
+                        self.advance();
+                        self.variable_definition();
+                    } else {
+                        self.expression_statement();
+                    }
                 } else {
                     while
                         !self.is_at_end() &&
@@ -39,17 +66,46 @@ impl<'a> Parser<'a> {
         }
     }
 
+    pub(super) fn variable_assignment(&mut self) {
+        let (lexeme, token_metadata) = {
+            let token = self.get_previous();
+            (token.get_lexeme(self.source), token.get_metadata())
+        };
+
+        self.ast_generator.emit_identifier_lookup(
+            AstIdentifier::new(lexeme, token_metadata.clone())
+        );
+
+        self.advance();
+
+        self.parse_precedence(Precedence::PrecAssignment.get_next());
+        self.consume_expr_end();
+
+        let result = self.ast_generator.emit_variable_assignment(token_metadata);
+
+        if let Err((message, token)) = result {
+            self.report_compile_error(message, token);
+        }
+
+        self.ast_generator.push_stmt();
+    }
+
     pub(super) fn variable_definition(&mut self) {
         let token = self.get_previous();
         let lexeme = token.get_lexeme(self.source);
 
         let (found_type, search_index) = self.resolve_type();
 
-        let (is_mutable, _) = self.resolve_mutabiliy(search_index - 1);
+        let (is_mutable, _) = if found_type.is_some() {
+            self.resolve_mutabiliy(search_index - 1)
+        } else {
+            self.resolve_mutabiliy(-2)
+        };
 
         self.advance();
-        self.expression();
+        self.parse_precedence(Precedence::PrecAssignment.get_next());
         self.consume_expr_end();
+
         let result = self.ast_generator.emit_variable_definition(lexeme, found_type, is_mutable);
 
         if let Err((message, token)) = result {
@@ -63,7 +119,13 @@ impl<'a> Parser<'a> {
         self.expression();
         self.consume_expr_end();
 
-        self.ast_generator.push_expr()
+        match self.ast_generator.push_expr() {
+            Ok(_) => {}
+            Err((message, token)) => {
+                self.report_compile_error(message, token);
+                self.synchronize()
+            }
+        }
     }
 
     pub(super) fn expression(&mut self) {
@@ -87,6 +149,11 @@ impl<'a> Parser<'a> {
                 if (*current_precedence as usize) < (precedence as usize) {
                     break;
                 }
+
+                if self.get_previous().get_line() < self.get_current().get_line() {
+                    break;
+                }
+
                 self.advance();
 
                 let infix_rule = self.get_parse_rule(self.get_previous().get_ttype()).get_infix();
@@ -114,16 +181,19 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn resolve_type(&mut self) -> (Option<ValueType>, isize) {
-        let /*mut*/ serch_index: isize = -2;
+        let mut search_index: isize = -2;
+
         loop {
-            match self.peek(serch_index) {
+            match self.peek(search_index) {
                 Some(token) => {
                     if token.get_ttype() == &TokenType::TokenInt32 {
-                        return (Some(ValueType::Int32), serch_index);
+                        return (Some(ValueType::Int32), search_index);
+                    } else {
+                        search_index -= 1;
                     }
                 }
                 None => {
-                    return (None, serch_index);
+                    return (None, search_index);
                 }
             }
         }
@@ -141,6 +211,10 @@ impl<'a> Parser<'a> {
 
         while !self.is_at_end() {
             if self.get_previous().get_ttype() == &TokenType::TokenSemicolon {
+                return;
+            }
+            if self.get_previous().get_line() < self.get_current().get_line() {
+                // This might need to change, as soon as blocks are implemented
                 return;
             }
 

@@ -85,20 +85,17 @@ impl Token {
         &self.token_type
     }
 
+    #[profiler::function_tracker]
     pub fn get_lexeme(&self, source: &str) -> String {
-        source[self.start..self.start + self.length].to_string()
+        let mut lexeme = String::new();
+        for i in self.start..self.start + self.length {
+            lexeme.push(source.chars().nth(i).unwrap());
+        }
+        lexeme
     }
 
     pub fn get_line(&self) -> usize {
         self.line
-    }
-
-    pub fn get_start(&self) -> usize {
-        self.start
-    }
-
-    pub fn get_len(&self) -> usize {
-        self.length
     }
 
     pub fn get_message(&self) -> Option<&String> {

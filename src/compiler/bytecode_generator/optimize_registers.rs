@@ -1,41 +1,43 @@
-use crate::vm::instructions::{ Instruction, InstructionSrc };
+use crate::vm::instructions::{ IRInstruction, IRInstructionSrc, VMInstruction };
 
 use super::BytecodeGenerator;
 
 impl<'a> BytecodeGenerator<'a> {
     #[profiler::function_tracker]
-    pub fn optimize_registers(&mut self) {
+    pub fn get_optimized_registers(&mut self) -> Vec<VMInstruction> {
+        let mut instructions: Vec<VMInstruction> = Vec::new();
+
         for i in 0..self.instructions.len() {
             let instruction = self.instructions.get(i).unwrap();
 
             match instruction {
-                | Instruction::Add { dest, src1, src2 }
-                | Instruction::Mul { dest, src1, src2 }
-                | Instruction::Sub { dest, src1, src2 }
-                | Instruction::Div { dest, src1, src2 } => {
+                | IRInstruction::Add { dest, src1, src2 }
+                | IRInstruction::Mul { dest, src1, src2 }
+                | IRInstruction::Sub { dest, src1, src2 }
+                | IRInstruction::Div { dest, src1, src2 } => {
                     let physical_register = self.map_virtual_reg_to_physical_reg(*dest);
 
                     let src1 = match src1 {
-                        InstructionSrc::Register(register) => {
+                        IRInstructionSrc::Register(register) => {
                             let new_register = self.get_and_release_physical_register(*register);
-                            InstructionSrc::Register(new_register)
+                            IRInstructionSrc::Register(new_register)
                         }
-                        InstructionSrc::VariableRegister(register) => {
+                        IRInstructionSrc::VariableRegister(register) => {
                             let new_register = self.get_physcal_register(*register);
-                            InstructionSrc::Register(new_register)
+                            IRInstructionSrc::VariableRegister(new_register)
                         }
 
                         _ => src1.clone(),
                     };
 
                     let src2 = match src2 {
-                        InstructionSrc::Register(register) => {
+                        IRInstructionSrc::Register(register) => {
                             let new_register = self.get_and_release_physical_register(*register);
-                            InstructionSrc::Register(new_register)
+                            IRInstructionSrc::Register(new_register)
                         }
-                        InstructionSrc::VariableRegister(register) => {
+                        IRInstructionSrc::VariableRegister(register) => {
                             let new_register = self.get_physcal_register(*register);
-                            InstructionSrc::Register(new_register)
+                            IRInstructionSrc::VariableRegister(new_register)
                         }
 
                         _ => src2.clone(),
@@ -45,18 +47,21 @@ impl<'a> BytecodeGenerator<'a> {
                         .get_mut(i)
                         .unwrap()
                         .modify_binary_instruction(physical_register, src1, src2);
+
+                    let instruction = self.instructions.get(i).unwrap().to_vm_instruction();
+                    instructions.push(instruction);
                 }
-                Instruction::Neg { dest, src } | Instruction::Truthy { dest, src } => {
+                IRInstruction::Neg { dest, src } | IRInstruction::Truthy { dest, src } => {
                     let physical_register = self.map_virtual_reg_to_physical_reg(*dest);
 
                     let src = match src {
-                        InstructionSrc::Register(register) => {
+                        IRInstructionSrc::Register(register) => {
                             let new_register = self.get_and_release_physical_register(*register);
-                            InstructionSrc::Register(new_register)
+                            IRInstructionSrc::Register(new_register)
                         }
-                        InstructionSrc::VariableRegister(register) => {
+                        IRInstructionSrc::VariableRegister(register) => {
                             let new_register = self.get_physcal_register(*register);
-                            InstructionSrc::Register(new_register)
+                            IRInstructionSrc::VariableRegister(new_register)
                         }
                         _ => src.clone(),
                     };
@@ -65,40 +70,82 @@ impl<'a> BytecodeGenerator<'a> {
                         .get_mut(i)
                         .unwrap()
                         .modify_unary_instruction(physical_register, src);
+
+                    let instruction = self.instructions.get(i).unwrap().to_vm_instruction();
+                    instructions.push(instruction);
                 }
-                Instruction::Define { dest, src } => {
+                IRInstruction::Define { dest, src } => {
                     let dest = self.map_virtual_reg_to_physical_reg(*dest);
 
                     let src = match src {
-                        InstructionSrc::Register(register) => {
+                        IRInstructionSrc::Register(register) => {
                             let new_register = self.get_and_release_physical_register(*register);
-                            InstructionSrc::Register(new_register)
+                            IRInstructionSrc::Register(new_register)
                         }
-                        InstructionSrc::VariableRegister(register) => {
+                        IRInstructionSrc::VariableRegister(register) => {
                             let new_register = self.get_physcal_register(*register);
-                            InstructionSrc::Register(new_register)
+                            IRInstructionSrc::VariableRegister(new_register)
                         }
                         _ => src.clone(),
                     };
 
                     self.instructions.get_mut(i).unwrap().modify_definement_instruction(dest, src);
+
+                    let instruction = self.instructions.get(i).unwrap().to_vm_instruction();
+                    instructions.push(instruction);
                 }
-                Instruction::Load { reg, value } => {
+                IRInstruction::Assign { dest, src } => {
+                    let dest = self.map_virtual_reg_to_physical_reg(*dest);
+
+                    let src = match src {
+                        IRInstructionSrc::Register(register) => {
+                            let new_register = self.get_and_release_physical_register(*register);
+                            IRInstructionSrc::Register(new_register)
+                        }
+                        IRInstructionSrc::VariableRegister(register) => {
+                            let new_register = self.get_physcal_register(*register);
+                            IRInstructionSrc::VariableRegister(new_register)
+                        }
+                        _ => src.clone(),
+                    };
+
+                    self.instructions.get_mut(i).unwrap().modify_assignment_instruction(dest, src);
+
+                    let instruction = self.instructions.get(i).unwrap().to_vm_instruction();
+                    instructions.push(instruction);
+                }
+                IRInstruction::Load { reg, src } => {
                     let physical_register = self.map_virtual_reg_to_physical_reg(*reg);
 
-                    let value = value.clone();
+                    let value = match src {
+                        IRInstructionSrc::Register(register) => {
+                            let new_register = self.get_and_release_physical_register(*register);
+                            IRInstructionSrc::Register(new_register)
+                        }
+                        IRInstructionSrc::VariableRegister(register) => {
+                            let new_register = self.get_physcal_register(*register);
+                            IRInstructionSrc::VariableRegister(new_register)
+                        }
+                        _ => src.clone(),
+                    };
 
                     self.instructions
                         .get_mut(i)
                         .unwrap()
                         .modify_load_instruction(physical_register, value);
+
+                    let instruction = self.instructions.get(i).unwrap().to_vm_instruction();
+                    instructions.push(instruction);
                 }
 
-                Instruction::Halt => {
+                IRInstruction::Halt => {
+                    instructions.push(VMInstruction::Halt);
                     break;
                 }
             }
         }
+
+        instructions
     }
 
     fn get_next_register(&self) -> usize {

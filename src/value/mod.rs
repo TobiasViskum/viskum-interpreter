@@ -1,4 +1,6 @@
-#[derive(Debug, Clone)]
+use crate::{ operations::{ BinaryOp, Op, UnaryOp }, util::make_first_char_uppercase };
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum ValueType {
     Int32,
     Bool,
@@ -8,6 +10,43 @@ impl ValueType {
         match self {
             ValueType::Int32 => "i32".to_string(),
             ValueType::Bool => "bool".to_string(),
+        }
+    }
+
+    pub fn type_check_binary(&self, other: &ValueType, op: BinaryOp) -> Result<ValueType, String> {
+        match op {
+            BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div => {
+                if self == other {
+                    Ok(self.clone())
+                } else {
+                    Err(
+                        format!(
+                            "{} is not defined for {} and {}",
+                            make_first_char_uppercase(Op::BinaryOp(op).to_op_string()),
+                            self.to_type_string(),
+                            other.to_type_string()
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    pub fn type_check_unary(&self, op: UnaryOp) -> Result<ValueType, String> {
+        match op {
+            UnaryOp::Neg | UnaryOp::Truthy => {
+                if self == &ValueType::Int32 {
+                    Ok(self.clone())
+                } else {
+                    Err(
+                        format!(
+                            "{} is not defined for {}",
+                            make_first_char_uppercase(Op::UnaryOp(op).to_op_string()),
+                            self.to_type_string()
+                        )
+                    )
+                }
+            }
         }
     }
 }
@@ -96,32 +135,10 @@ impl Value {
         }
     }
 
-    pub fn is_truthy(&self) -> Self {
-        match self {
-            Value::Int32(int32) => Value::Bool(*int32 != 0),
-            Value::Bool(bool) => Value::Bool(*bool),
-        }
-    }
-
     pub fn not(&self) -> Self {
         match self {
             Value::Bool(bool) => Value::Bool(!*bool),
             Value::Int32(int32) => Value::Bool(!*int32 != 0),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct ValueContainer {
-    value_type: ValueType,
-    value: Value,
-}
-
-impl ValueContainer {
-    pub fn new(value: Value) -> Self {
-        Self {
-            value_type: value.to_value_type(),
-            value,
         }
     }
 }

@@ -15,6 +15,7 @@ use self::ast_generator::AstGenerator;
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
     source: &'a str,
+    next: Option<Token>,
     current: Option<Token>,
     previous_tokens: Vec<Token>,
     had_error: bool,
@@ -28,8 +29,9 @@ impl<'a> Parser<'a> {
         Self {
             lexer: Lexer::new(source),
             source,
+            next: None,
             current: None,
-            previous_tokens: Vec::with_capacity(256), // Initial capacity of 256 tokens to avoid reallocations
+            previous_tokens: Vec::with_capacity(256),
             had_error: false,
             panic_mode: false,
             ast_generator: AstGenerator::new(),
@@ -40,7 +42,6 @@ impl<'a> Parser<'a> {
     pub fn free(&mut self) {
         self.previous_tokens = Vec::new();
         self.current = None;
-        self.source = "";
         self.had_error = false;
         self.panic_mode = false;
         self.ast_generator.free();
@@ -49,6 +50,7 @@ impl<'a> Parser<'a> {
 
     #[profiler::function_tracker]
     pub fn parse_to_ast(&mut self) -> Ast {
+        self.advance();
         self.advance();
 
         while !self.is_at_end() {

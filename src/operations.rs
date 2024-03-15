@@ -15,10 +15,30 @@ pub enum BinaryOp {
     Div,
 }
 
+impl BinaryOp {
+    pub fn _get_op_len(&self) -> usize {
+        match self {
+            BinaryOp::Add => 1,
+            BinaryOp::Sub => 1,
+            BinaryOp::Mul => 1,
+            BinaryOp::Div => 1,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum UnaryOp {
     Neg,
     Truthy,
+}
+
+impl UnaryOp {
+    pub fn get_op_len(&self) -> usize {
+        match self {
+            UnaryOp::Neg => 1,
+            UnaryOp::Truthy => 1,
+        }
+    }
 }
 
 impl Op {

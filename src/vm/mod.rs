@@ -1,17 +1,17 @@
 use crate::{ constants::REGISTERS, value::Value };
 
-use self::{ instructions::InstructionSrc, instructions::Instruction };
+use self::instructions::{ VMInstruction, VMInstructionSrc };
 
 pub mod instructions;
 mod helper_methods;
 pub struct VM {
     registers: [Value; REGISTERS],
-    program: Vec<Instruction>,
+    program: Vec<VMInstruction>,
     pc: usize,
 }
 
 impl VM {
-    pub fn new(program: Vec<Instruction>) -> VM {
+    pub fn new(program: Vec<VMInstruction>) -> VM {
         VM {
             registers: [Value::Int32(0); REGISTERS],
             program,
@@ -24,106 +24,108 @@ impl VM {
         while self.pc < self.program.len() {
             let instruction = self.get_instruction();
             match instruction {
-                Instruction::Halt => {
+                VMInstruction::Halt => {
                     #[cfg(debug_assertions)]
-                    for i in 0..REGISTERS {
-                        let register = self.registers[i];
-                        if let Value::Int32(value) = register {
-                            if value != 0 {
-                                println!("R{}: {}", i, value);
+                    {
+                        for i in 0..REGISTERS {
+                            let register = self.registers[i];
+                            if let Value::Int32(value) = register {
+                                if value != 0 {
+                                    println!("R{}: {}", i, value);
+                                }
+                            } else {
+                                println!("R{}: {}", i, register.to_string());
                             }
-                        } else {
-                            println!("R{}: {}", i, register.to_string());
                         }
                     }
-                    println!("Result: {}", self.registers[1].to_string());
                     break;
                 }
-                Instruction::Load { reg, value } => {
-                    self.registers[*reg] = *value;
+                VMInstruction::Load { reg, src } => {
+                    let src = match src {
+                        VMInstructionSrc::Register(register) => self.registers[*register],
+                        VMInstructionSrc::Constant(value) => *value,
+                    };
+
+                    self.registers[*reg] = src;
                 }
-                Instruction::Add { dest, src1, src2 } => {
+                VMInstruction::Add { dest, src1, src2 } => {
                     let src1 = match src1 {
-                        | InstructionSrc::Register(register)
-                        | InstructionSrc::VariableRegister(register) => self.registers[*register],
-                        InstructionSrc::Constant(value) => *value,
+                        VMInstructionSrc::Register(register) => self.registers[*register],
+                        VMInstructionSrc::Constant(value) => *value,
                     };
 
                     let src2 = match src2 {
-                        | InstructionSrc::Register(register)
-                        | InstructionSrc::VariableRegister(register) => self.registers[*register],
-                        InstructionSrc::Constant(value) => *value,
+                        VMInstructionSrc::Register(register) => self.registers[*register],
+                        VMInstructionSrc::Constant(value) => *value,
                     };
 
                     self.registers[*dest] = src1.add(&src2).unwrap();
                 }
-                Instruction::Define { dest, src } => {
+                VMInstruction::Define { dest, src } => {
                     let src = match src {
-                        | InstructionSrc::Register(register)
-                        | InstructionSrc::VariableRegister(register) => self.registers[*register],
-                        InstructionSrc::Constant(value) => *value,
+                        VMInstructionSrc::Register(register) => self.registers[*register],
+                        VMInstructionSrc::Constant(value) => *value,
                     };
                     self.registers[*dest] = src;
                 }
-                Instruction::Sub { dest, src1, src2 } => {
+                VMInstruction::Assign { dest, src } => {
+                    let src = match src {
+                        VMInstructionSrc::Register(register) => self.registers[*register],
+                        VMInstructionSrc::Constant(value) => *value,
+                    };
+                    self.registers[*dest] = src;
+                }
+                VMInstruction::Sub { dest, src1, src2 } => {
                     let src1 = match src1 {
-                        | InstructionSrc::Register(register)
-                        | InstructionSrc::VariableRegister(register) => self.registers[*register],
-                        InstructionSrc::Constant(value) => *value,
+                        VMInstructionSrc::Register(register) => self.registers[*register],
+                        VMInstructionSrc::Constant(value) => *value,
                     };
 
                     let src2 = match src2 {
-                        | InstructionSrc::Register(register)
-                        | InstructionSrc::VariableRegister(register) => self.registers[*register],
-                        InstructionSrc::Constant(value) => *value,
+                        VMInstructionSrc::Register(register) => self.registers[*register],
+                        VMInstructionSrc::Constant(value) => *value,
                     };
 
                     self.registers[*dest] = src1.sub(&src2).unwrap();
                 }
-                Instruction::Mul { dest, src1, src2 } => {
+                VMInstruction::Mul { dest, src1, src2 } => {
                     let src1 = match src1 {
-                        | InstructionSrc::Register(register)
-                        | InstructionSrc::VariableRegister(register) => self.registers[*register],
-                        InstructionSrc::Constant(value) => *value,
+                        VMInstructionSrc::Register(register) => self.registers[*register],
+                        VMInstructionSrc::Constant(value) => *value,
                     };
 
                     let src2 = match src2 {
-                        | InstructionSrc::Register(register)
-                        | InstructionSrc::VariableRegister(register) => self.registers[*register],
-                        InstructionSrc::Constant(value) => *value,
+                        VMInstructionSrc::Register(register) => self.registers[*register],
+                        VMInstructionSrc::Constant(value) => *value,
                     };
 
                     self.registers[*dest] = src1.mul(&src2).unwrap();
                 }
-                Instruction::Div { dest, src1, src2 } => {
+                VMInstruction::Div { dest, src1, src2 } => {
                     let src1 = match src1 {
-                        | InstructionSrc::Register(register)
-                        | InstructionSrc::VariableRegister(register) => self.registers[*register],
-                        InstructionSrc::Constant(value) => *value,
+                        VMInstructionSrc::Register(register) => self.registers[*register],
+                        VMInstructionSrc::Constant(value) => *value,
                     };
 
                     let src2 = match src2 {
-                        | InstructionSrc::Register(register)
-                        | InstructionSrc::VariableRegister(register) => self.registers[*register],
-                        InstructionSrc::Constant(value) => *value,
+                        VMInstructionSrc::Register(register) => self.registers[*register],
+                        VMInstructionSrc::Constant(value) => *value,
                     };
 
                     self.registers[*dest] = src1.div(&src2).unwrap();
                 }
-                Instruction::Neg { dest, src } => {
+                VMInstruction::Neg { dest, src } => {
                     let src = match src {
-                        | InstructionSrc::Register(register)
-                        | InstructionSrc::VariableRegister(register) => self.registers[*register],
-                        InstructionSrc::Constant(value) => *value,
+                        VMInstructionSrc::Register(register) => self.registers[*register],
+                        VMInstructionSrc::Constant(value) => *value,
                     };
 
                     self.registers[*dest] = src.neg().unwrap();
                 }
-                Instruction::Truthy { dest, src } => {
+                VMInstruction::Truthy { dest, src } => {
                     let src = match src {
-                        | InstructionSrc::Register(register)
-                        | InstructionSrc::VariableRegister(register) => self.registers[*register],
-                        InstructionSrc::Constant(value) => *value,
+                        VMInstructionSrc::Register(register) => self.registers[*register],
+                        VMInstructionSrc::Constant(value) => *value,
                     };
 
                     self.registers[*dest] = src.not();

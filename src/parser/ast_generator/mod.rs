@@ -1,15 +1,28 @@
+use std::collections::HashMap;
+
 use crate::{
-    ast::{ Ast, AstIdentifier, AstValue, BinaryExpr, Expr, Stmt, UnaryExpr, VariableDefinition },
+    ast::{
+        Ast,
+        AstIdentifier,
+        AstValue,
+        BinaryExpr,
+        Expr,
+        Stmt,
+        UnaryExpr,
+        VariableAssignment,
+        VariableDefinition,
+    },
     operations::{ BinaryOp, UnaryOp },
     value::ValueType,
 };
-use super::token::{ Token, TokenMetadata };
+use super::token::TokenMetadata;
 
 pub struct AstGenerator {
     ast: Option<Ast>,
     statements: Vec<Stmt>,
     expressions: Vec<Expr>,
     panic_mode: bool,
+    variables: HashMap<String, (ValueType, bool)>,
 }
 
 impl AstGenerator {
@@ -19,6 +32,7 @@ impl AstGenerator {
             statements: Vec::new(),
             expressions: Vec::new(),
             panic_mode: false,
+            variables: HashMap::new(),
         }
     }
 
@@ -38,8 +52,59 @@ impl AstGenerator {
         self.expressions.push(Expr::Literal(value));
     }
 
-    pub fn emit_variable_lookup(&mut self, variable: AstIdentifier) {
-        self.expressions.push(Expr::VariableLookup(variable));
+    pub fn emit_identifier_lookup(&mut self, variable: AstIdentifier) {
+        self.expressions.push(Expr::IdentifierLookup(variable));
+    }
+
+    pub fn emit_variable_assignment(
+        &mut self,
+        token_metadata: TokenMetadata
+    ) -> Result<(), (String, Vec<TokenMetadata>)> {
+        let value = self.expressions.pop().unwrap();
+        let identifier = match self.expressions.pop().unwrap() {
+            Expr::IdentifierLookup(v) => v,
+            _ => {
+                return Err(("Expected identifier in assignment".to_string(), vec![token_metadata]));
+            }
+        };
+        // let target_expr = if self.expressions.len() > 0 {
+        //     // This can only be expr::function_call(s)
+        //     Some(self.expressions.pop().unwrap())
+        // } else {
+        //     None
+        // };
+
+        let mut token_vec: Vec<TokenMetadata> = Vec::new();
+        let type_checked_value_type = match value.type_check(&self.variables, &mut token_vec) {
+            Ok(vt) => vt,
+            Err(e) => {
+                return Err((e, token_vec));
+            }
+        };
+
+        if type_checked_value_type != self.variables.get(&identifier.get_lexeme()).unwrap().0 {
+            value.push_to_token_vec(&mut token_vec);
+            token_vec.push(token_metadata);
+            return Err((
+                format!(
+                    "Variable '{}' is of type {}, but was assigned to type {}",
+                    &identifier.get_lexeme(),
+                    self.variables.get(&identifier.get_lexeme()).unwrap().0.to_type_string(),
+                    type_checked_value_type.to_type_string()
+                ),
+                token_vec,
+            ));
+        }
+
+        let variable_assignment = Stmt::VariableAssignment(
+            VariableAssignment::new(None, identifier, value)
+        );
+
+        println!("variable_assignment: {:#?}", variable_assignment);
+
+        self.statements.push(variable_assignment);
+
+        Ok(())
     }
 
     pub fn emit_variable_definition(
@@ -50,8 +115,31 @@ impl AstGenerator {
     ) -> Result<(), (String, Vec<TokenMetadata>)> {
         let value = self.expressions.pop().unwrap();
 
+        let mut token_vec: Vec<TokenMetadata> = Vec::new();
+        let type_checked_value_type = match value.type_check(&self.variables, &mut token_vec) {
+            Ok(vt) => vt,
+            Err(e) => {
+                return Err((e, token_vec));
+            }
+        };
+
+        if value_type.is_some() && value_type.clone().unwrap() != type_checked_value_type {
+            let value_type = value_type.unwrap();
+            value.push_to_token_vec(&mut token_vec);
+            return Err((
+                format!(
+                    "Type mismatch: expected {}, found {:?}",
+                    value_type.to_type_string(),
+                    type_checked_value_type
+                ),
+                token_vec,
+            ));
+        }
+
+        self.variables.insert(lexeme.clone(), (type_checked_value_type.clone(), is_mutable));
+
         let variable_definition = Stmt::VariableDefinition(
-            VariableDefinition::new(lexeme, value_type.unwrap(), is_mutable, value)
+            VariableDefinition::new(lexeme, type_checked_value_type, is_mutable, value)
         );
 
         self.statements.push(variable_definition);
@@ -81,56 +169,11 @@ impl AstGenerator {
                     vec![metadata],
                 ));
             }
-            _ => panic!("This is also weird..."),
-        };
-
-        match (&left, &right) {
-            (Expr::Literal(v1), Expr::Literal(v2)) => {
-                match expr_op {
-                    BinaryOp::Add =>
-                        match v1.get_value().add(&v2.get_value()) {
-                            Ok(_) => {}
-                            Err(msg) => {
-                                return Err((
-                                    msg,
-                                    vec![v1.get_token_metadata(), v2.get_token_metadata()],
-                                ));
-                            }
-                        }
-                    BinaryOp::Div =>
-                        match v1.get_value().div(&v2.get_value()) {
-                            Ok(_) => {}
-                            Err(msg) => {
-                                return Err((
-                                    msg,
-                                    vec![v1.get_token_metadata(), v2.get_token_metadata()],
-                                ));
-                            }
-                        }
-                    BinaryOp::Mul =>
-                        match v1.get_value().mul(&v2.get_value()) {
-                            Ok(_) => {}
-                            Err(msg) => {
-                                return Err((
-                                    msg,
-                                    vec![v1.get_token_metadata(), v2.get_token_metadata()],
-                                ));
-                            }
-                        }
-                    BinaryOp::Sub =>
-                        match v1.get_value().sub(&v2.get_value()) {
-                            Ok(_) => {}
-                            Err(msg) => {
-                                return Err((
-                                    msg,
-                                    vec![v1.get_token_metadata(), v2.get_token_metadata()],
-                                ));
-                            }
-                        }
-                }
+            (x, y) => {
+                println!("{:?} {:?}", x, y);
+                panic!("This is also weird...")
             }
-            _ => {}
-        }
+        };
 
         let binary_expr = BinaryExpr {
             left: Box::new(left),
@@ -180,13 +223,23 @@ impl AstGenerator {
         Ok(())
     }
 
-    pub fn push_expr(&mut self) {
+    pub fn push_expr(&mut self) -> Result<(), (String, Vec<TokenMetadata>)> {
         if self.panic_mode {
             self.exit_panic_mode();
+            Ok(())
         } else {
             match self.expressions.pop() {
-                Some(expr) => self.ast.as_mut().unwrap().push_stmt(Stmt::ExprStmt(expr)),
-                None => {}
+                Some(expr) => {
+                    let mut token_vec: Vec<TokenMetadata> = Vec::new();
+                    match expr.type_check(&self.variables, &mut token_vec) {
+                        Ok(_) => {
+                            self.ast.as_mut().unwrap().push_stmt(Stmt::ExprStmt(expr));
+                            Ok(())
+                        }
+                        Err(e) => { Err((e, token_vec)) }
+                    }
+                }
+                None => Ok(()),
             }
         }
     }
@@ -200,6 +253,10 @@ impl AstGenerator {
                 None => {}
             }
         }
+    }
+
+    pub fn pop_expr(&mut self) -> Option<Expr> {
+        self.expressions.pop()
     }
 
     pub fn get_ast(&mut self) -> Ast {

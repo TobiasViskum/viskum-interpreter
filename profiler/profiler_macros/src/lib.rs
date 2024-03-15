@@ -9,14 +9,14 @@ pub fn function_tracker(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let attr_name = attr.to_string();
 
-    // #[cfg(debug_assertions)]
-    // {
-    let fn_name = function.sig.ident.to_string();
+    #[cfg(debug_assertions)]
+    {
+        let fn_name = function.sig.ident.to_string();
 
-    let fn_name_literal = proc_macro2::Literal::string(&fn_name);
-    let stmts = &function.block.stmts;
-    let timing_code =
-        quote! {{
+        let fn_name_literal = proc_macro2::Literal::string(&fn_name);
+        let stmts = &function.block.stmts;
+        let timing_code =
+            quote! {{
                 use std::cell::Cell;
             thread_local! {
                 static RECURSION_DEPTH: Cell<u32> = Cell::new(0);
@@ -57,21 +57,21 @@ pub fn function_tracker(attr: TokenStream, item: TokenStream) -> TokenStream {
             })
         }};
 
-    let timed_block: syn::Block = match syn::parse2(timing_code) {
-        Ok(block) => block,
-        Err(err) => {
-            return TokenStream::from(err.to_compile_error());
-        }
-    };
-    function.block = Box::new(timed_block);
+        let timed_block: syn::Block = match syn::parse2(timing_code) {
+            Ok(block) => block,
+            Err(err) => {
+                return TokenStream::from(err.to_compile_error());
+            }
+        };
+        function.block = Box::new(timed_block);
 
-    TokenStream::from(quote! { #function })
-    // }
+        TokenStream::from(quote! { #function })
+    }
 
-    // #[cfg(not(debug_assertions))]
-    // TokenStream::from(quote! {
-    //     #function
-    // })
+    #[cfg(not(debug_assertions))]
+    TokenStream::from(quote! {
+        #function
+    })
 }
 
 #[proc_macro_attribute]
@@ -80,11 +80,11 @@ pub fn start(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let attr: String = attr.to_string();
 
-    // #[cfg(debug_assertions)]
-    // {
-    let stmts = &function.block.stmts;
-    let timing_code =
-        quote! {{
+    #[cfg(debug_assertions)]
+    {
+        let stmts = &function.block.stmts;
+        let timing_code =
+            quote! {{
                
             let start = std::time::Instant::now();
 
@@ -103,20 +103,20 @@ pub fn start(attr: TokenStream, item: TokenStream) -> TokenStream {
             result
         }};
 
-    let timed_block: syn::Block = match syn::parse2(timing_code) {
-        Ok(block) => block,
-        Err(err) => {
-            return TokenStream::from(err.to_compile_error());
-        }
-    };
+        let timed_block: syn::Block = match syn::parse2(timing_code) {
+            Ok(block) => block,
+            Err(err) => {
+                return TokenStream::from(err.to_compile_error());
+            }
+        };
 
-    function.block = Box::new(timed_block);
+        function.block = Box::new(timed_block);
 
-    TokenStream::from(quote! { #function })
-    // }
+        TokenStream::from(quote! { #function })
+    }
 
-    // #[cfg(not(debug_assertions))]
-    // TokenStream::from(quote! {
-    //     #function
-    // })
+    #[cfg(not(debug_assertions))]
+    TokenStream::from(quote! {
+        #function
+    })
 }

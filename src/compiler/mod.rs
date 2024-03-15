@@ -4,8 +4,8 @@ use crate::{
     ast::Ast,
     compiler::bytecode_generator::BytecodeGenerator,
     error_handler::ErrorHandler,
-    value::{ Value, ValueType },
-    vm::instructions::Instruction,
+    value::ValueType,
+    vm::instructions::VMInstruction,
 };
 
 use self::ir_generator::IRGenerator;
@@ -34,7 +34,7 @@ impl Variable {
 
 #[derive(Debug)]
 pub struct Environment {
-    variables: HashMap<String, (Variable, usize)>,
+    variables: HashMap<(String, usize), Variable>,
 }
 
 impl Environment {
@@ -44,53 +44,90 @@ impl Environment {
         }
     }
 
-    pub fn insert(&mut self, variable_name: String, value: Variable) {
-        let new_subscript = self.count_variables_of_name(&variable_name) + 1;
-        self.variables.insert(variable_name, (value, new_subscript));
+    pub fn insert(&mut self, variable_name: String, value: Variable, subscript: usize) {
+        self.variables.insert((variable_name, subscript), value);
     }
 
-    pub fn get(&self, variable_name: &String) -> Option<&(Variable, usize)> {
-        self.variables.get(variable_name)
+    pub fn _get(&self, variable_name: String, subscript: usize) -> Option<&Variable> {
+        self.variables.get(&(variable_name, subscript))
     }
 
-    pub fn count_variables_of_name(&self, name: &String) -> usize {
-        self.variables
-            .keys()
-            .filter(|variable| variable == &name)
-            .count()
+    fn get_variable_with_highest_subscript(&self, name: &String) -> Option<&Variable> {
+        let mut highest_subscript = 0;
+        let mut variable = None;
+        for ((lexeme, subscript), var) in self.variables.iter() {
+            if lexeme == name && *subscript > highest_subscript {
+                highest_subscript = *subscript;
+                variable = Some(var);
+            }
+        }
+
+        variable
+    }
+
+    fn count_variables_of_name(&self, name: &String) -> (usize, Option<ValueType>, bool) {
+        let mut count = 0;
+        let mut value_type: Option<ValueType> = None;
+        let mut is_mutable = false;
+        for ((lexeme, _), variable) in self.variables.iter() {
+            if lexeme == name {
+                if count == 0 {
+                    value_type = Some(variable.value_type.clone());
+                    is_mutable = variable.is_mutable;
+                }
+                count += 1;
+            }
+        }
+
+        (count, value_type, is_mutable)
     }
 }
 
 pub struct Compiler<'a> {
-    error_handler: &'a ErrorHandler,
+    error_handler: &'a mut ErrorHandler,
     environment: Environment,
 }
 
 impl<'a> Compiler<'a> {
-    pub fn new(error_handler: &'a ErrorHandler) -> Self {
+    pub fn new(error_handler: &'a mut ErrorHandler) -> Self {
         Self {
             error_handler,
             environment: Environment::new(),
         }
     }
 
-    pub fn compile(&mut self, ast: Ast) -> Vec<Instruction> {
+    pub fn compile(&mut self, ast: Ast) -> Option<Vec<VMInstruction>> {
         let mut ir_generator = IRGenerator::new(self.error_handler, &mut self.environment);
         let ir_graph = ir_generator.generate_ir_from_ast(ast);
 
-        let mut bytecode_generator = BytecodeGenerator::new(ir_graph);
+        let mut bytecode_generator = BytecodeGenerator::new(&ir_graph);
+
+        if self.error_handler.has_error() {
+            return None;
+        }
 
         bytecode_generator.generate_bytecode();
-
-        bytecode_generator.optimize_registers();
 
         #[cfg(debug_assertions)]
         {
             if !self.error_handler.has_error() {
+                println!("Unoptimized instructions:");
                 bytecode_generator.dissassemble();
             }
         }
 
-        bytecode_generator.get_instructions()
+        let optimized_registers = bytecode_generator.get_optimized_registers();
+
+        #[cfg(debug_assertions)]
+        {
+            if !self.error_handler.has_error() {
+                println!("Optimized instructions:");
+                for instruction in &optimized_registers {
+                    println!("{}", instruction.dissassemble());
+                }
+            }
+        }
+
+        Some(optimized_registers)
     }
 }

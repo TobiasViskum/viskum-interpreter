@@ -11,7 +11,6 @@ pub struct Lexer<'a> {
     start: usize,
     current: usize,
     line: usize,
-    panic_mode: bool,
 }
 
 impl<'a> Lexer<'a> {
@@ -21,12 +20,10 @@ impl<'a> Lexer<'a> {
             start: 0,
             current: 0,
             line: 1,
-            panic_mode: false,
         }
     }
 
     pub fn free(&mut self) {
-        self.source = "";
         self.start = 0;
         self.current = 0;
         self.line = 1;
@@ -51,11 +48,13 @@ impl<'a> Lexer<'a> {
     }
 
     #[profiler::function_tracker]
-    pub fn scan_token(&mut self) -> Token {
+    pub fn scan_token(&mut self) -> Option<Token> {
         self.skip_whitespace();
 
-        if self.is_at_end() {
+        if self.current == self.source.chars().count() {
             return self.make_token(TokenType::TokenEOF);
+        } else if self.current > self.source.chars().count() {
+            return None;
         }
 
         self.start = self.current;

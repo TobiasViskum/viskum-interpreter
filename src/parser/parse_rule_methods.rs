@@ -1,7 +1,7 @@
 use crate::ast::{ AstIdentifier, AstValue };
 use crate::operations::{ BinaryOp, UnaryOp };
 use crate::{ parser::token::token_type::TokenType::*, value::Value };
-use super::precedence::Precedence::{ self, * };
+use super::precedence::Precedence::*;
 
 use super::Parser;
 
@@ -17,11 +17,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn variable(&mut self) {
+    pub fn identifier(&mut self) {
         let token = self.get_previous();
         let lexeme = token.get_lexeme(self.source);
 
-        self.ast_generator.emit_variable_lookup(AstIdentifier::new(lexeme, token.get_metadata()))
+        self.ast_generator.emit_identifier_lookup(AstIdentifier::new(lexeme, token.get_metadata()));
     }
 
     pub fn literal(&mut self) {

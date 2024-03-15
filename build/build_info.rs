@@ -12,12 +12,12 @@ pub const TOKEN_TYPES_AND_PARSE_RULES: [&str; 19] = [
 
     // Literals
     "Number                 = { number,        None,   PrecNone       }",
-    "Identifier             = { variable,      None,   PrecNone       }",
+    "Identifier             = { identifier,    None,   PrecNone       }",
 
     // Types
     "True                   = { literal,       None,   PrecNone       }",
     "False                  = { literal,       None,   PrecNone       }",
-    "Int32                  = { skip,       None,   PrecNone       }",
+    "Int32                  = { skip,          None,   PrecNone       }",
 
     // Single-character tokens
     "Semicolon              = { None,          None,   PrecNone       }",
@@ -47,4 +47,28 @@ pub const PRECEDENCE: [&str; 11] = [
     "PrecUnary",
     "PrecCall",
     "PrecPrimary",
+];
+
+pub const INSTRUCTION_SRC: [&str; 3] = [
+    "BOTH   Register(usize)",
+    "BOTH   Constant(Value)",
+
+    "IR     VariableRegister(usize)",
+];
+
+pub const BYTECODE_INSTRUCTIONS: [&str; 10] = [
+    "Halt",
+
+    "Load   {   reg: usize,       src: T      }",
+
+    "BINARY     Add    {   dest: usize,      src1: T,        src2: T     }",
+    "BINARY     Sub    {   dest: usize,      src1: T,        src2: T     }",
+    "BINARY     Mul    {   dest: usize,      src1: T,        src2: T     }",
+    "BINARY     Div    {   dest: usize,      src1: T,        src2: T     }",
+
+    "UNARY      Neg    {   dest: usize,      src: T      }",
+    "UNARY      Truthy {   dest: usize,      src: T      }",
+
+    "DEFINEMENT Define {   dest: usize,      src: T      }",
+    "ASSIGNMENT Assign {   dest: usize,      src: T      }",
 ];

@@ -1,10 +1,10 @@
-use crate::parser::token::{ Token, TokenMetadata };
+use crate::parser::token::TokenMetadata;
 use colored::Colorize;
 
 // const AT_STR: &str = "at: ";
 const CONTEXT_RANGE: isize = 5;
 
-enum ErrorType {
+enum _ErrorType {
     Error,
     Warning,
 }
@@ -17,13 +17,13 @@ pub struct CompileError {
 
 #[derive(Debug)]
 pub struct ErrorHandler {
-    compile_warnings: Vec<CompileError>,
+    _compile_warnings: Vec<CompileError>,
     compile_errors: Vec<CompileError>,
 }
 
 impl ErrorHandler {
     pub fn new() -> Self {
-        Self { compile_warnings: Vec::new(), compile_errors: Vec::new() }
+        Self { _compile_warnings: Vec::new(), compile_errors: Vec::new() }
     }
 
     pub fn report_compile_error(&mut self, message: String, error_metadata: Vec<TokenMetadata>) {
@@ -41,8 +41,8 @@ impl ErrorHandler {
             if error.error_metadata.len() == 1 {
                 let metadata = &error.error_metadata[0];
                 eprintln!("[line {}] {}", metadata.get_line(), error.message);
-                eprintln!("{}", self.get_five_char_context(src, metadata));
-                eprintln!("{}", self.get_arrows_up_to_error_token(metadata, ErrorType::Error));
+                eprintln!("-------> {}", self.get_five_char_context(src, metadata));
+                // eprintln!("{}", self.get_arrows_up_to_error_token(metadata, ErrorType::Error));
             } else {
                 let first = error_metadata.last().unwrap();
                 let last = error_metadata.first().unwrap();
@@ -54,11 +54,11 @@ impl ErrorHandler {
                 );
 
                 eprintln!("[line {}] {}", combined_metadata.get_line(), error.message);
-                eprintln!("{}", self.get_five_char_context(src, &combined_metadata));
-                eprintln!(
-                    "{}",
-                    self.get_arrows_up_to_error_token(&combined_metadata, ErrorType::Error)
-                );
+                eprintln!("-------> {}", self.get_five_char_context(src, &combined_metadata));
+                // eprintln!(
+                //     "{}",
+                //     self.get_arrows_up_to_error_token(&combined_metadata, ErrorType::Error)
+                // );
             }
         }
     }
@@ -66,10 +66,11 @@ impl ErrorHandler {
     fn get_five_char_context(&self, src: &str, token: &TokenMetadata) -> String {
         let start = token.get_start() as isize;
         let length = token.get_len() as isize;
-        let src_len = src.len() as isize;
 
         let context_start = (start - CONTEXT_RANGE).max(0) as usize;
-        let context_end = (start + length + CONTEXT_RANGE).min(src_len) as usize;
+        let context_end = (start + length + CONTEXT_RANGE).min(
+            src.chars().count() as isize
+        ) as usize;
 
         let src_chars = src.chars().collect::<Vec<_>>();
 
@@ -87,10 +88,14 @@ impl ErrorHandler {
             last_five.push(*char);
         }
 
-        format!("{}{}{}", first_five, token_string, last_five)
+        format!("{}", token_string.on_red())
     }
 
-    fn get_arrows_up_to_error_token(&self, token: &TokenMetadata, error_type: ErrorType) -> String {
+    fn _get_arrows_up_to_error_token(
+        &self,
+        token: &TokenMetadata,
+        _error_type: _ErrorType
+    ) -> String {
         let start = token.get_start() as isize;
 
         let context_start = (start - CONTEXT_RANGE).max(0);

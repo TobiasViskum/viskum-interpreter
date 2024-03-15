@@ -1,13 +1,13 @@
 use crate::value::Value;
 
-use super::{ instructions::Instruction, VM };
+use super::{ instructions::VMInstruction, VM };
 
 impl VM {
-    pub fn get_register(&self, register: usize) -> &Value {
+    pub fn _get_register(&self, register: usize) -> &Value {
         &self.registers[register]
     }
 
-    pub(super) fn get_instruction(&self) -> &Instruction {
+    pub(super) fn get_instruction(&self) -> &VMInstruction {
         &self.program[self.pc]
     }
 }

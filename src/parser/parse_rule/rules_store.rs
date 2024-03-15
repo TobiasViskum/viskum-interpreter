@@ -41,7 +41,7 @@ lazy_static! {
             precedence: Precedence::PrecNone,
         });
         parse_rules_vec.push(ParseRule {
-            prefix: (Some(|c| c.variable())),
+            prefix: (Some(|c| c.identifier())),
             infix: (None),
             precedence: Precedence::PrecNone,
         });

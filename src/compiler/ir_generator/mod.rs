@@ -2,24 +2,29 @@ use crate::{
     ast::{ Ast, Expr, Stmt },
     error_handler::ErrorHandler,
     operations::{ BinaryOp, Op, UnaryOp },
+    parser::token::TokenMetadata,
 };
 
 use super::{ ir_graph::{ IRGraph, IRNode, IRValue }, Environment, Variable };
 
 pub struct IRGenerator<'a> {
-    ir_graph: Option<IRGraph<'a>>,
+    ir_graph: Option<IRGraph>,
     next_register: usize,
     next_node_id: usize,
     environment: &'a mut Environment,
+    error_handler: &'a mut ErrorHandler,
+    panic_mode: bool,
 }
 
 impl<'a> IRGenerator<'a> {
-    pub fn new(error_handler: &'a ErrorHandler, environment: &'a mut Environment) -> Self {
+    pub fn new(error_handler: &'a mut ErrorHandler, environment: &'a mut Environment) -> Self {
         Self {
-            ir_graph: Some(IRGraph::new(error_handler)),
+            ir_graph: Some(IRGraph::new()),
             next_register: 0,
             next_node_id: 1,
             environment,
+            error_handler,
+            panic_mode: false,
         }
     }
 
@@ -36,13 +41,20 @@ impl<'a> IRGenerator<'a> {
                 Stmt::VariableDefinition(variable_definition) => {
                     let next_register = self.get_next_register();
 
+                    let (subscript, _, _) = self.environment.count_variables_of_name(
+                        &variable_definition.name
+                    );
+
+                    let subscript = subscript + 1;
+
                     self.environment.insert(
                         variable_definition.name,
                         Variable::new(
                             next_register,
                             variable_definition.value_type,
                             variable_definition.is_mutable
-                        )
+                        ),
+                        subscript
                     );
 
                     let definition_id = self.add_node(IRNode {
@@ -53,13 +65,52 @@ impl<'a> IRGenerator<'a> {
                     self.add_edge(value_id, definition_id);
                     linked_ids.push(definition_id);
                 }
+                Stmt::VariableAssignment(variable_assignment) => {
+                    let next_register = self.get_next_register();
+                    let variable_name = variable_assignment.field.get_lexeme();
+                    let (subscript, value_type, is_mutable) =
+                        self.environment.count_variables_of_name(&variable_name);
+                    let subscript = subscript + 1;
+
+                    if let Some(value_type) = value_type {
+                        if !is_mutable {
+                            self.report_error(
+                                format!("Cannot mutate immutable variable: {}", &variable_name),
+                                vec![variable_assignment.field.get_token_metadata()]
+                            );
+                        } else {
+                            self.environment.insert(
+                                variable_name,
+                                Variable::new(next_register, value_type, is_mutable),
+                                subscript
+                            );
+
+                            let assign_id = self.add_node(IRNode {
+                                operation: Op::Assign,
+                                result: IRValue::VariableRegister(next_register),
+                            });
+
+                            let value_id = self.compile_expr(variable_assignment.value);
+
+                            self.add_edge(value_id, assign_id);
+                            linked_ids.push(assign_id);
+                        }
+                    } else {
+                        self.report_error(
+                            format!("Cannot assign undefined variable: {}", &variable_name),
+                            vec![variable_assignment.field.get_token_metadata()]
+                        );
+                    }
+                }
             }
         }
 
-        for i in 0..linked_ids.len() - 1 {
-            let this_id = linked_ids.get(i).unwrap();
-            if let Some(next_id) = linked_ids.get(i + 1) {
-                self.add_control_flow_edge(*next_id, *this_id);
+        if linked_ids.len() > 0 {
+            for i in 0..linked_ids.len() - 1 {
+                let this_id = linked_ids.get(i).unwrap();
+                if let Some(next_id) = linked_ids.get(i + 1) {
+                    self.add_control_flow_edge(*next_id, *this_id);
+                }
             }
         }
 
@@ -171,9 +222,6 @@ impl<'a> IRGenerator<'a> {
                         op_id = self.add_node(truthy_node);
                         node_id = op_id;
                     }
-                    _ => {
-                        panic!("Operator not supported in compiler yet");
-                    }
                 }
 
                 let expr_id = self.get_expr_node_id(*unary_expr.right) as usize;
@@ -184,14 +232,30 @@ impl<'a> IRGenerator<'a> {
                 let node = IRNode::new(Op::NoOp, IRValue::Constant(value.get_value()));
                 node_id = self.add_node(node);
             }
-            Expr::VariableLookup(variable) => {
-                let variable = self.environment.get(&variable.get_lexeme()).unwrap();
-                let node = IRNode::new(Op::NoOp, IRValue::VariableRegister(variable.0.location));
-                node_id = self.add_node(node);
+            Expr::IdentifierLookup(ast_identifier) => {
+                let variable = self.environment.get_variable_with_highest_subscript(
+                    &ast_identifier.get_lexeme()
+                );
+
+                if let Some(variable) = variable {
+                    let node = IRNode::new(Op::NoOp, IRValue::VariableRegister(variable.location));
+                    node_id = self.add_node(node);
+                } else {
+                    node_id = 0;
+                    self.report_error(
+                        format!("Undefined variable: {}", ast_identifier.get_lexeme()),
+                        vec![ast_identifier.get_token_metadata()]
+                    );
+                }
             }
         }
 
         node_id
+    }
+
+    fn report_error(&mut self, message: String, error_metadata: Vec<TokenMetadata>) {
+        self.error_handler.report_compile_error(message, error_metadata);
+        self.panic_mode = true;
     }
 
     fn get_next_register(&mut self) -> usize {
@@ -207,9 +271,9 @@ impl<'a> IRGenerator<'a> {
         node_id
     }
 
-    fn remove_node(&mut self, node_id: usize) {
+    fn _remove_node(&mut self, node_id: usize) {
         self.next_node_id -= 1;
-        self.ir_graph.as_mut().unwrap().remove_node(node_id);
+        self.ir_graph.as_mut().unwrap()._remove_node(node_id);
     }
 
     fn add_edge(&mut self, src: usize, dest: usize) {
