@@ -47,7 +47,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn unary(&mut self) {
-        let operator_type = { self.get_previous().get_ttype().clone() };
+        let operator_type = { *self.get_previous().get_ttype() };
 
         self.parse_precedence(PrecUnary, None);
 
@@ -63,7 +63,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn binary(&mut self) {
-        let operator_type = { self.get_previous().get_ttype().clone() };
+        let operator_type = { *self.get_previous().get_ttype() };
 
         let parse_rule = self.get_parse_rule(&operator_type);
 

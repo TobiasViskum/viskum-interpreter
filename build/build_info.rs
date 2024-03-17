@@ -1,4 +1,4 @@
-pub const TOKEN_TYPES_AND_PARSE_RULES: [&str; 19] = [
+pub const TOKEN_TYPES_AND_PARSE_RULES: [&str; 23] = [
     // Single-character tokens
     "LeftParen              = { grouping,      None,   PrecNone       }",
     "RightParen             = { None,          None,   PrecNone       }",
@@ -18,11 +18,14 @@ pub const TOKEN_TYPES_AND_PARSE_RULES: [&str; 19] = [
     "True                   = { literal,       None,   PrecNone       }",
     "False                  = { literal,       None,   PrecNone       }",
     "Int32                  = { skip,          None,   PrecNone       }",
+    "Bool                   = { skip,          None,   PrecNone       }",
 
     // Single-character tokens
     "Semicolon              = { None,          None,   PrecNone       }",
     "Bang                   = { unary,         None,   PrecNone       }",
     "Assign                 = { None,          None,   PrecNone       }",
+    "LeftCurlyBrace         = { None,          None,   PrecNone       }",
+    "RightCurlyBrace        = { None,          None,   PrecNone       }",
 
     // Double-character tokens
     "Define                 = { None,          None,   PrecNone       }",
@@ -30,6 +33,7 @@ pub const TOKEN_TYPES_AND_PARSE_RULES: [&str; 19] = [
     // Keywords
     "Mutable                = { skip,          None,   PrecNone       }",
     "Function               = { skip,          None,   PrecNone       }",
+    "Print                  = { None,          None,   PrecNone       }",
 
     "Error                  = { error,         None,   PrecNone       }",
     "EOF                    = { None,          None,   PrecNone       }",
@@ -50,25 +54,30 @@ pub const PRECEDENCE: [&str; 11] = [
 ];
 
 pub const INSTRUCTION_SRC: [&str; 3] = [
-    "BOTH   Register(usize)",
+    "BOTH   Register(InstructionRegister)",
     "BOTH   Constant(Value)",
 
-    "IR     VariableRegister(usize)",
+    "IR     VariableRegister(InstructionRegister)",
 ];
 
-pub const BYTECODE_INSTRUCTIONS: [&str; 10] = [
+pub const BYTECODE_INSTRUCTIONS: [&str; 12] = [
     "Halt",
 
-    "Load   {   reg: usize,       src: T      }",
+    "StartScope",
+    "EndScope",
 
-    "BINARY     Add    {   dest: usize,      src1: T,        src2: T     }",
-    "BINARY     Sub    {   dest: usize,      src1: T,        src2: T     }",
-    "BINARY     Mul    {   dest: usize,      src1: T,        src2: T     }",
-    "BINARY     Div    {   dest: usize,      src1: T,        src2: T     }",
+    // "Print  {   reg: usize      }",
 
-    "UNARY      Neg    {   dest: usize,      src: T      }",
-    "UNARY      Truthy {   dest: usize,      src: T      }",
+    "Load               {   reg: InstructionRegister,       src: T      }",
 
-    "DEFINEMENT Define {   dest: usize,      src: T      }",
-    "ASSIGNMENT Assign {   dest: usize,      src: T      }",
+    "BINARY     Add    {   dest: InstructionRegister,      src1: T,        src2: T     }",
+    "BINARY     Sub    {   dest: InstructionRegister,      src1: T,        src2: T     }",
+    "BINARY     Mul    {   dest: InstructionRegister,      src1: T,        src2: T     }",
+    "BINARY     Div    {   dest: InstructionRegister,      src1: T,        src2: T     }",
+
+    "UNARY      Neg    {   dest: InstructionRegister,      src: T      }",
+    "UNARY      Truthy {   dest: InstructionRegister,      src: T      }",
+
+    "DEFINEMENT Define {   dest: InstructionRegister,      src: T      }",
+    "ASSIGNMENT Assign {   dest: InstructionRegister,      src: T      }",
 ];

@@ -27,7 +27,7 @@ pub fn format_enum_name(s: &str) -> String {
 
 pub fn generate_rules_store() -> io::Result<()> {
     let out_file = "src/parser/parse_rule/rules_store.rs";
-    let out_token_file = "src/parser/token/token_type.rs";
+    let out_token_file = "src/parser/token/token_type/mod.rs";
 
     let mut file = File::create(out_file)?;
 
@@ -35,34 +35,6 @@ pub fn generate_rules_store() -> io::Result<()> {
     writeln!(file, "use lazy_static::lazy_static;")?;
     writeln!(file, "use crate::parser::precedence::Precedence;")?;
     writeln!(file, "use super::ParseRule;")?;
-
-    // writeln!(file, "#[derive(Debug)]")?;
-    // writeln!(file, "pub enum ParsingRuleMethod {{")?;
-    // let mut enum_names: Vec<String> = Vec::new();
-    // for parse_rule in TOKEN_TYPES_AND_PARSE_RULES {
-    //     let split = parse_rule.split("=").collect::<Vec<&str>>();
-
-    //     let second = split[1].replace("{", "").replace("}", "").trim().to_string();
-    //     let args = second.split(",").collect::<Vec<&str>>();
-
-    //     let arg1 = args[0].trim();
-
-    //     let arg2 = args[1].trim();
-
-    //     let prefix_enum_name = if arg1 == "None" { None } else { Some(format_enum_name(arg1)) };
-
-    //     let infix_enum_name = if arg2 == "None" { None } else { Some(format_enum_name(arg2)) };
-
-    //     if prefix_enum_name.is_some() && !enum_names.contains(&prefix_enum_name.as_ref().unwrap()) {
-    //         enum_names.push(prefix_enum_name.as_ref().unwrap().clone());
-    //         writeln!(file, "    {},", prefix_enum_name.unwrap())?;
-    //     }
-    //     if infix_enum_name.is_some() && !enum_names.contains(&infix_enum_name.as_ref().unwrap()) {
-    //         enum_names.push(infix_enum_name.as_ref().unwrap().clone());
-    //         writeln!(file, "    {},", infix_enum_name.unwrap())?;
-    //     }
-    // }
-    // writeln!(file, "}}")?;
 
     writeln!(file, "lazy_static! {{")?;
     writeln!(file, "    pub static ref PARSE_RULES: Vec<ParseRule> = {{")?;
@@ -99,18 +71,7 @@ pub fn generate_rules_store() -> io::Result<()> {
         writeln!(file, "        parse_rules_vec.push(ParseRule {{")?;
         writeln!(file, "            prefix: ({}),", prefix)?;
         writeln!(file, "            infix: ({}),", infix)?;
-        // writeln!(
-        //     file,
-        //     "            prefix: ({}, {}),",
-        //     prefix,
-        //     prefix_enum_name.or(Some("None".to_string())).unwrap()
-        // )?;
-        // writeln!(
-        //     file,
-        //     "            infix: ({}, {}),",
-        //     infix,
-        //     infix_enum_name.or(Some("None".to_string())).unwrap()
-        // )?;
+
         writeln!(file, "            precedence: {},", precedence)?;
         writeln!(file, "        }});")?;
     }
@@ -120,6 +81,8 @@ pub fn generate_rules_store() -> io::Result<()> {
 
     // Token file
     let mut token_file = File::create(out_token_file)?;
+
+    writeln!(token_file, "mod helper_methods;")?;
 
     writeln!(token_file, "#[derive(Debug, PartialEq, Eq, Clone, Copy)]")?;
     writeln!(token_file, "pub enum TokenType {{")?;

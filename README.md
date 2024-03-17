@@ -11,6 +11,7 @@
 
 ## TODO
 
-Fix "unnused" expressions like: 1 + 2 will permanently take up a register. That should be detected in the control-flow graph and therefore the register should be released or "unnused" expression should be ignored.
+- Fix "unnused" expressions like: 1 + 2 will permanently take up a register. That should be detected in the control-flow graph and therefore the register should be released or "unnused" expression should be ignored.
 
-Make assignment possible by doing: "mut i32 d" or "i32 d". ValueType is know Empty
+- Fix that this: "bool i32 c := 2" is actually valid syntax. It should "emit" the types as soon as it sees one (right now it's skipping them, and then when the identifier comes it resolves the types)
+  - Fix that this "i32 := 2" produces the correct error (i32 is a keyword and cannot be used as a definition target)

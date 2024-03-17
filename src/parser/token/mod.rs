@@ -2,7 +2,7 @@ use self::token_type::TokenType;
 
 pub mod token_type;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct TokenMetadata {
     start: usize,
     length: usize,
@@ -86,10 +86,10 @@ impl Token {
     }
 
     #[profiler::function_tracker]
-    pub fn get_lexeme(&self, source: &str) -> String {
+    pub fn get_lexeme(&self, source: &Vec<char>) -> String {
         let mut lexeme = String::new();
         for i in self.start..self.start + self.length {
-            lexeme.push(source.chars().nth(i).unwrap());
+            lexeme.push(*source.get(i).unwrap());
         }
         lexeme
     }

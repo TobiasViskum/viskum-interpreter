@@ -31,14 +31,11 @@ fn write_instruction_enums(file: &mut File, prefix: &str) -> Result<()> {
             let (enum_child_name, enum_child_arg) = rhs.split_once("(").unwrap();
             let enum_child_arg = enum_child_arg.replace(")", "");
 
-            let dissassemble_prefix = if enum_child_arg == "usize" { "R" } else { "" };
-
-            if enum_child_arg == "usize" {
+            if enum_child_arg == "InstructionRegister" {
                 writeln!(
                     file,
-                    "            Self::{}(value) => {{ format!(\"{}{{}}\", value) }},",
-                    enum_child_name.trim(),
-                    dissassemble_prefix
+                    "            Self::{}(value) => {{ format!(\"{{}}\", value.dissassemble()) }},",
+                    enum_child_name.trim()
                 )?;
             } else {
                 writeln!(
@@ -126,24 +123,15 @@ fn write_instruction_enums(file: &mut File, prefix: &str) -> Result<()> {
         write!(file, " }} => {{")?;
         write!(file, "\n                format!(\"")?;
         write!(file, "{}", instr_name.to_uppercase())?;
-        for i in 0..split_right.len() {
-            let arg = split_right[i].trim();
-            let split_arg = arg.split(":").collect::<Vec<_>>();
-            let arg_prefix = if split_arg[1].trim() == "usize" { "R" } else { "" };
-
-            write!(file, " {}{{}}", arg_prefix)?;
+        for _ in 0..split_right.len() {
+            write!(file, " {{}}")?;
         }
         write!(file, "\"")?;
         for i in 0..split_right.len() {
             let arg = split_right[i].trim();
             let split_arg = arg.split(":").collect::<Vec<_>>();
 
-            let postfix_method = if split_arg[1].trim() == "usize" {
-                ""
-            } else {
-                ".dissassemble()"
-            };
-            write!(file, ", {}{}", split_arg[0].trim(), postfix_method)?;
+            write!(file, ", {}{}", split_arg[0].trim(), ".dissassemble()")?;
         }
         write!(file, ")")?;
         write!(file, "\n            }}")?;
@@ -182,8 +170,10 @@ pub fn generate_bytecode_instructions() -> Result<()> {
     let mut vm_instr_file = File::create(vm_instr_out)?;
 
     writeln!(vm_instr_file, "mod helper_methods;")?;
+    writeln!(vm_instr_file, "pub mod helper_structs;")?;
 
-    writeln!(vm_instr_file, "use crate::value::Value;\n")?;
+    writeln!(vm_instr_file, "use crate::value::Value;")?;
+    writeln!(vm_instr_file, "use self::helper_structs::InstructionRegister;\n")?;
 
     write_instruction_enums(&mut vm_instr_file, "VM")?;
     write_instruction_enums(&mut vm_instr_file, "IR")?;

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{ collections::HashMap, fmt::format };
 
 use crate::{
     ast::Ast,
@@ -33,49 +33,89 @@ impl Variable {
 }
 
 #[derive(Debug)]
+struct EnvironmentScope {
+    definitions: HashMap<(String, usize), Variable>,
+}
+
+impl EnvironmentScope {
+    pub fn new() -> Self {
+        Self {
+            definitions: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Environment {
-    variables: HashMap<(String, usize), Variable>,
+    scopes: Vec<EnvironmentScope>,
+    scope_depth: usize,
 }
 
 impl Environment {
     pub fn new() -> Self {
+        let mut scopes = Vec::new();
+        scopes.push(EnvironmentScope::new());
+
         Self {
-            variables: HashMap::new(),
+            scopes,
+            scope_depth: 0,
         }
+    }
+
+    pub fn start_scope(&mut self) {
+        self.scopes.push(EnvironmentScope::new());
+        self.scope_depth += 1;
+    }
+
+    pub fn end_scope(&mut self) {
+        self.scopes.pop();
+        self.scope_depth -= 1;
     }
 
     pub fn insert(&mut self, variable_name: String, value: Variable, subscript: usize) {
-        self.variables.insert((variable_name, subscript), value);
+        self.scopes[self.scope_depth].definitions.insert((variable_name, subscript), value);
+        // println!("INSERT, scopes: {:#?}", self.scopes);
     }
 
-    pub fn _get(&self, variable_name: String, subscript: usize) -> Option<&Variable> {
-        self.variables.get(&(variable_name, subscript))
+    pub fn get(&self, variable_name: String, subscript: usize) -> Option<&Variable> {
+        // println!("GET, scopes: {:#?}", self.scopes);
+        self.scopes[self.scope_depth].definitions.get(&(variable_name, subscript))
     }
 
-    fn get_variable_with_highest_subscript(&self, name: &String) -> Option<&Variable> {
+    fn get_variable_with_highest_subscript(
+        &self,
+        name: &String
+    ) -> (Option<&Variable>, Option<usize>) {
         let mut highest_subscript = 0;
         let mut variable = None;
-        for ((lexeme, subscript), var) in self.variables.iter() {
-            if lexeme == name && *subscript > highest_subscript {
-                highest_subscript = *subscript;
-                variable = Some(var);
+        let mut scope = None;
+
+        for i in (0..=self.scope_depth).rev() {
+            for ((lexeme, subscript), var) in self.scopes[i].definitions.iter() {
+                if lexeme == name && *subscript > highest_subscript {
+                    scope = Some(i);
+                    highest_subscript = *subscript;
+                    variable = Some(var);
+                }
             }
         }
 
-        variable
+        (variable, scope)
     }
 
     fn count_variables_of_name(&self, name: &String) -> (usize, Option<ValueType>, bool) {
         let mut count = 0;
         let mut value_type: Option<ValueType> = None;
         let mut is_mutable = false;
-        for ((lexeme, _), variable) in self.variables.iter() {
-            if lexeme == name {
-                if count == 0 {
-                    value_type = Some(variable.value_type.clone());
-                    is_mutable = variable.is_mutable;
+        for i in (0..=self.scope_depth).rev() {
+            for ((lexeme, _), variable) in self.scopes[i].definitions.iter() {
+                if lexeme == name {
+                    if count == 0 {
+                        value_type = Some(variable.value_type);
+                        is_mutable = variable.is_mutable;
+                    }
+                    count += 1;
                 }
-                count += 1;
             }
         }
 
@@ -97,7 +137,7 @@ impl<'a> Compiler<'a> {
     }
 
     pub fn compile(&mut self, ast: Ast) -> Option<Vec<VMInstruction>> {
-        let mut ir_generator = IRGenerator::new(self.error_handler, &mut self.environment);
+        let mut ir_generator = IRGenerator::new(&mut self.environment);
         let ir_graph = ir_generator.generate_ir_from_ast(ast);
 
         let mut bytecode_generator = BytecodeGenerator::new(&ir_graph);
@@ -120,14 +160,66 @@ impl<'a> Compiler<'a> {
 
         #[cfg(debug_assertions)]
         {
+            let mut indentation_level = 0;
+            let indentation_size = 4;
+
             if !self.error_handler.has_error() {
                 println!("Optimized instructions:");
+                println!("----------------------\n");
                 for instruction in &optimized_registers {
-                    println!("{}", instruction.dissassemble());
+                    match instruction {
+                        VMInstruction::EndScope => {
+                            indentation_level -= 1;
+                        }
+                        _ => {}
+                    }
+
+                    let print_string = format!(
+                        "{}{}",
+                        " ".repeat(indentation_level * indentation_size),
+                        instruction.dissassemble()
+                    );
+
+                    match instruction {
+                        VMInstruction::StartScope => {
+                            println!("{}\n", print_string);
+                        }
+                        VMInstruction::EndScope => {
+                            println!("\n{}", print_string);
+                        }
+                        _ => println!("{}", print_string),
+                    }
+
+                    match instruction {
+                        VMInstruction::StartScope => {
+                            indentation_level += 1;
+                        }
+                        _ => {}
+                    }
                 }
+                println!("\n----------------------")
             }
         }
 
         Some(optimized_registers)
     }
 }
+
+/*
+DEFINE R0 1
+STARTSCOPE
+
+    DEFINE R0 2
+    ADD R1 R0 1
+    STARTSCOPE
+
+        DEFINE R0 3
+        ADD R1 R0 1
+
+    ENDSCOPE
+    LOAD R2 true
+
+ENDSCOPE
+LOAD R1 false
+HALT
+*/

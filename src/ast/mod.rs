@@ -1,10 +1,13 @@
-use std::collections::HashMap;
-
 use crate::{
     operations::{ BinaryOp, UnaryOp },
-    parser::{ ast_generator::AstVariables, token::TokenMetadata },
-    value::{ self, Value, ValueType },
+    parser::{ ast_generator::AstEnvironment, token::TokenMetadata },
+    value::{ Value, ValueType },
 };
+
+use self::{ expr::Expr, stmt::{ ScopeStmt, Stmt } };
+
+pub mod expr;
+pub mod stmt;
 
 #[derive(Debug, Clone)]
 pub struct AstValue {
@@ -25,11 +28,11 @@ impl AstValue {
     }
 
     pub fn get_token_metadata(&self) -> TokenMetadata {
-        self.token_metadata.clone()
+        self.token_metadata
     }
 
     pub fn push_to_token_vec(&self, token_vec: &mut Vec<TokenMetadata>) {
-        token_vec.push(self.token_metadata.clone());
+        token_vec.push(self.token_metadata);
     }
 }
 
@@ -52,420 +55,75 @@ impl AstIdentifier {
     }
 
     pub fn get_token_metadata(&self) -> TokenMetadata {
-        self.token_metadata.clone()
+        self.token_metadata
     }
 
     pub fn push_to_token_vec(&self, token_vec: &mut Vec<TokenMetadata>) {
-        token_vec.push(self.token_metadata.clone());
+        token_vec.push(self.token_metadata);
     }
 }
 
 #[derive(Debug)]
 pub struct Ast {
-    pub stmts: Vec<Stmt>,
+    pub main_scope: ScopeStmt,
+    path_to_parent_scope: Vec<*mut ScopeStmt>,
+    current_scope_ptr: Option<*mut ScopeStmt>,
 }
 
 impl Ast {
     pub fn push_stmt(&mut self, stmt: Stmt) {
-        self.stmts.push(stmt);
-    }
-}
+        if self.current_scope_ptr.is_none() {
+            self.current_scope_ptr = Some(&mut self.main_scope);
+        }
 
-impl Ast {
+        if let Some(scope) = self.current_scope_ptr {
+            unsafe {
+                let current_scope = &mut *scope;
+                current_scope.push_stmt(stmt);
+            }
+        } else {
+            panic!("No scope to push to");
+        }
+    }
+
+    pub fn start_scope(&mut self) {
+        if self.current_scope_ptr.is_none() {
+            self.current_scope_ptr = Some(&mut self.main_scope);
+        } else {
+            let current_scope = self.current_scope_ptr.unwrap();
+            unsafe {
+                self.path_to_parent_scope.push(current_scope);
+                let new_index = (*current_scope).stmts.len();
+                (*current_scope).stmts.push(Stmt::ScopeStmt(ScopeStmt::new()));
+
+                let new_scope = match (*current_scope).stmts[new_index] {
+                    Stmt::ScopeStmt(ref mut scope) => scope,
+                    _ => panic!("Expected scope stmt: {:?}", (*current_scope).stmts[new_index]),
+                };
+                self.current_scope_ptr = Some(new_scope);
+            }
+        }
+    }
+
+    pub fn end_scope(&mut self) {
+        if self.current_scope_ptr.is_none() {
+            println!("No scope to end, so must be main scope")
+        } else {
+            if let Some(parent_scope) = self.path_to_parent_scope.pop() {
+                self.current_scope_ptr = Some(parent_scope);
+            } else {
+                self.current_scope_ptr = None;
+            }
+        }
+    }
+
     pub fn new() -> Self {
+        let main_scope = ScopeStmt::new();
+
         Self {
-            stmts: Vec::new(),
+            main_scope,
+            current_scope_ptr: None,
+            path_to_parent_scope: Vec::new(),
         }
     }
 }
-#[derive(Debug)]
-pub enum Stmt {
-    ExprStmt(Expr),
-    VariableDefinition(VariableDefinition),
-    VariableAssignment(VariableAssignment),
-}
-
-impl Stmt {
-    pub fn type_check(
-        &mut self,
-        variables: &mut AstVariables,
-        token_vec: &mut Vec<TokenMetadata>
-    ) -> Result<(), String> {
-        match self {
-            Stmt::ExprStmt(expr) => {
-                expr.type_check(variables, token_vec)?;
-                Ok(())
-            }
-            Stmt::VariableDefinition(variable_definition) => {
-                let resulted_value_type = match &variable_definition.value {
-                    Some(value) => {
-                        match value.type_check(variables, token_vec) {
-                            Ok(v) => v,
-                            Err(e) => {
-                                variables.insert(
-                                    variable_definition.name.to_string(),
-                                    ValueType::Unkown,
-                                    variable_definition.is_mutable,
-                                    true
-                                );
-
-                                return Err(e);
-                            }
-                        }
-                    }
-                    None => ValueType::Empty,
-                };
-
-                let value_type = match &variable_definition.value_type {
-                    Some(value_type) => {
-                        if
-                            &resulted_value_type != value_type &&
-                            &resulted_value_type != &ValueType::Empty
-                        {
-                            if let Some(value) = &variable_definition.value {
-                                value.push_to_token_vec(token_vec);
-                            }
-                            token_vec.push(variable_definition.token_metadata.clone());
-
-                            variables.insert(
-                                variable_definition.name.to_string(),
-                                value_type.clone(),
-                                variable_definition.is_mutable,
-                                true
-                            );
-
-                            return Err(
-                                format!(
-                                    "Variable '{}' is of type {} but the provided value is of type {}",
-                                    variable_definition.name,
-                                    value_type.to_type_string(),
-                                    resulted_value_type.to_type_string()
-                                )
-                            );
-                        } else {
-                            value_type
-                        }
-                    }
-                    None => &resulted_value_type,
-                };
-
-                variables.insert(
-                    variable_definition.name.to_string(),
-                    value_type.clone(),
-                    variable_definition.is_mutable,
-                    resulted_value_type != ValueType::Empty // Compare type to if is empty
-                );
-
-                variable_definition.value_type = Some(value_type.clone());
-
-                Ok(())
-            }
-            Stmt::VariableAssignment(variable_assignment) => {
-                let resulted_value_type = match
-                    variable_assignment.value.type_check(variables, token_vec)
-                {
-                    Ok(v) => v,
-                    Err(e) => {
-                        return Err(e);
-                    }
-                };
-
-                let variable = variables.get(&variable_assignment.field.get_lexeme());
-
-                if let Some((value_type, is_mutable, is_initialized)) = variable {
-                    if !is_initialized {
-                        println!(
-                            "Found non-initialized variable: '{}'.\nTODO: Implement checks when blocks are implemented.",
-                            variable_assignment.field.get_lexeme()
-                        );
-                    }
-                    if !is_mutable && is_initialized {
-                        variable_assignment.value.push_to_token_vec(token_vec);
-                        variable_assignment.field.push_to_token_vec(token_vec);
-
-                        return Err(
-                            format!(
-                                "Cannot mutate immutable variable '{}'",
-                                variable_assignment.field.lexeme
-                            )
-                        );
-                    } else {
-                        if &resulted_value_type != &value_type {
-                            variable_assignment.value.push_to_token_vec(token_vec);
-                            variable_assignment.field.push_to_token_vec(token_vec);
-
-                            let error_message = if &value_type == &ValueType::Unkown {
-                                format!(
-                                    "The tye of variable '{}' is unknown and cannot be assigned to",
-                                    variable_assignment.field.lexeme
-                                )
-                            } else {
-                                format!(
-                                    "Variable '{}' is of type {} but the assignment value is of type {}",
-                                    variable_assignment.field.lexeme,
-                                    value_type.to_type_string(),
-                                    resulted_value_type.to_type_string()
-                                )
-                            };
-
-                            return Err(error_message);
-                        }
-                    }
-                } else {
-                    variable_assignment.value.push_to_token_vec(token_vec);
-                    variable_assignment.field.push_to_token_vec(token_vec);
-
-                    return Err(
-                        format!(
-                            "Cannot assign to undefined variable: '{}'",
-                            variable_assignment.field.lexeme
-                        )
-                    );
-                }
-
-                Ok(())
-            }
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct VariableAssignment {
-    pub target_expr: Option<Expr>,
-    pub field: AstIdentifier,
-    pub value: Expr,
-}
-
-impl VariableAssignment {
-    pub fn new(target_expr: Option<Expr>, field: AstIdentifier, value: Expr) -> Self {
-        Self {
-            target_expr,
-            field,
-            value,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct VariableDefinition {
-    pub name: String,
-    pub value_type: Option<ValueType>,
-    pub is_mutable: bool,
-    pub value: Option<Expr>,
-    pub token_metadata: TokenMetadata,
-}
-
-impl VariableDefinition {
-    pub fn new(
-        name: String,
-        value_type: Option<ValueType>,
-        is_mutable: bool,
-        value: Option<Expr>,
-        token_metadata: TokenMetadata
-    ) -> Self {
-        Self {
-            name,
-            value_type,
-            is_mutable,
-            value,
-            token_metadata,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum Expr {
-    BinaryExpr(BinaryExpr),
-    UnaryExpr(UnaryExpr),
-    Literal(AstValue),
-    IdentifierLookup(AstIdentifier),
-}
-
-impl Expr {
-    pub fn type_check(
-        &self,
-        variables: &AstVariables,
-        token_vec: &mut Vec<TokenMetadata>
-    ) -> Result<ValueType, String> {
-        match self {
-            Expr::BinaryExpr(expr) => expr.type_check(variables, token_vec),
-            Expr::UnaryExpr(expr) => expr.type_check(variables, token_vec),
-            Expr::Literal(ast_value) => Ok(ast_value.value.to_value_type()),
-            Expr::IdentifierLookup(ast_identifier) => {
-                if let Some((value_type, _, _)) = variables.get(&ast_identifier.lexeme) {
-                    Ok(value_type.clone())
-                } else {
-                    token_vec.push(ast_identifier.token_metadata.clone());
-                    return Err(format!("Undefined variable: '{}'", ast_identifier.lexeme));
-                }
-            }
-        }
-    }
-
-    pub fn push_to_token_vec(&self, token_vec: &mut Vec<TokenMetadata>) {
-        match self {
-            Expr::BinaryExpr(expr) => expr.push_to_token_vec(token_vec),
-            Expr::UnaryExpr(expr) => expr.push_to_token_vec(token_vec),
-            Expr::Literal(ast_value) => ast_value.push_to_token_vec(token_vec),
-            Expr::IdentifierLookup(ast_identifier) => ast_identifier.push_to_token_vec(token_vec),
-        }
-    }
-}
-
-// impl Expr {
-//     pub fn type_check_and_get_eval(&self) -> Result<Option<Expr>, (String, TokenMetadata)> {
-//         match self {
-//             Expr::BinaryExpr(expr) => expr.type_check_and_get_eval(),
-//             Expr::UnaryExpr(expr) => expr.type_check_and_get_eval(),
-//             Expr::Literal(ast_value) => Ok(Some(Expr::Literal(ast_value.clone()))),
-//         }
-//     }
-// }
-
-#[derive(Debug)]
-pub struct BinaryExpr {
-    pub left: Box<Expr>,
-    pub operator: BinaryOp,
-    pub right: Box<Expr>,
-}
-
-impl BinaryExpr {
-    pub fn push_to_token_vec(&self, token_vec: &mut Vec<TokenMetadata>) {
-        self.left.push_to_token_vec(token_vec);
-        self.right.push_to_token_vec(token_vec);
-    }
-
-    pub fn type_check(
-        &self,
-        variables: &AstVariables,
-        token_vec: &mut Vec<TokenMetadata>
-    ) -> Result<ValueType, String> {
-        let left_type = self.left.type_check(variables, token_vec)?;
-        let right_type = self.right.type_check(variables, token_vec)?;
-
-        match left_type.type_check_binary(&right_type, self.operator.clone()) {
-            Ok(v) => Ok(v),
-            Err(e) => {
-                self.left.push_to_token_vec(token_vec);
-                self.right.push_to_token_vec(token_vec);
-                Err(e)
-            }
-        }
-    }
-}
-
-// impl BinaryExpr {
-//     pub fn type_check_and_get_eval(&self) -> Result<Option<Expr>, (String, TokenMetadata)> {
-//         match (&*self.left, &*self.right) {
-//             (Expr::Literal(left), Expr::Literal(right)) => {
-//                 match &self.operator {
-//                     ExprOp::Add => {
-//                         match left.get_value().add(&right.get_value()) {
-//                             Ok(v) =>
-//                                 Ok(
-//                                     Some(Expr::Literal(AstValue::new(v, left.get_token_metadata())))
-//                                 ),
-//                             Err(e) => Err((e, left.get_token_metadata())),
-//                         }
-//                     }
-//                     ExprOp::Sub => {
-//                         match left.get_value().sub(&right.get_value()) {
-//                             Ok(v) =>
-//                                 Ok(
-//                                     Some(Expr::Literal(AstValue::new(v, left.get_token_metadata())))
-//                                 ),
-//                             Err(e) => Err((e, left.get_token_metadata())),
-//                         }
-//                     }
-//                     ExprOp::Mul => {
-//                         match left.get_value().mul(&right.get_value()) {
-//                             Ok(v) =>
-//                                 Ok(
-//                                     Some(Expr::Literal(AstValue::new(v, left.get_token_metadata())))
-//                                 ),
-//                             Err(e) => Err((e, left.get_token_metadata())),
-//                         }
-//                     }
-//                     ExprOp::Div => {
-//                         match left.get_value().div(&right.get_value()) {
-//                             Ok(v) =>
-//                                 Ok(
-//                                     Some(Expr::Literal(AstValue::new(v, left.get_token_metadata())))
-//                                 ),
-//                             Err(e) => Err((e, left.get_token_metadata())),
-//                         }
-//                     }
-//                     op =>
-//                         Err((
-//                             format!("Invalid binary operator: {}", op.to_op_string()),
-//                             left.get_token_metadata(),
-//                         )),
-//                 }
-//             }
-//             _ => Ok(None),
-//         }
-//     }
-// }
-
-#[derive(Debug)]
-pub struct UnaryExpr {
-    pub operator: UnaryOp,
-    pub right: Box<Expr>,
-}
-
-impl UnaryExpr {
-    pub fn push_to_token_vec(&self, token_vec: &mut Vec<TokenMetadata>) {
-        self.right.push_to_token_vec(token_vec);
-    }
-
-    pub fn type_check(
-        &self,
-        variables: &AstVariables,
-        token_vec: &mut Vec<TokenMetadata>
-    ) -> Result<ValueType, String> {
-        let right_type = self.right.type_check(variables, token_vec)?;
-
-        match right_type.type_check_unary(self.operator.clone()) {
-            Ok(v) => Ok(v),
-            Err(e) => {
-                self.right.push_to_token_vec(token_vec);
-                if token_vec.len() > 0 {
-                    let mutable_right = token_vec.get_mut(0).unwrap();
-                    for _ in 0..self.operator.get_op_len() {
-                        mutable_right.decrement_start();
-                        mutable_right.increment_length();
-                    }
-                }
-                Err(e)
-            }
-        }
-    }
-}
-
-// impl UnaryExpr {
-//     pub fn type_check_and_get_eval(&self) -> Result<Option<Expr>, (String, TokenMetadata)> {
-//         match &*self.right {
-//             Expr::Literal(value) => {
-//                 match &self.operator {
-//                     ExprOp::Neg => {
-//                         match value.get_value().neg() {
-//                             Ok(v) =>
-//                                 Ok(
-//                                     Some(
-//                                         Expr::Literal(AstValue::new(v, value.get_token_metadata()))
-//                                     )
-//                                 ),
-//                             Err(e) => Err((e, value.get_token_metadata())),
-//                         }
-//                     }
-//                     op =>
-//                         Err((
-//                             format!("Invalid unary operator: {}", op.to_op_string()),
-//                             value.get_token_metadata(),
-//                         )),
-//                 }
-//             }
-//             _ => Ok(None),
-//         }
-//     }
-// }

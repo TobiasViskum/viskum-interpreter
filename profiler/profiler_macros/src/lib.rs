@@ -26,34 +26,34 @@ pub fn function_tracker(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let current_depth = depth.get();
                 depth.set(current_depth + 1);
 
-                let start = if current_depth == 0 {
+                let _____start_____ = if current_depth == 0 {
                     Some(std::time::Instant::now())
                 } else {
                     None
                 };
 
-                let result = {
+                let _____result_____ = {
                     #(#stmts)*
                 };
 
-                let literal = if #attr_name.len() == 0 {
+                let _____literal_____ = if #attr_name.len() == 0 {
                         #fn_name_literal
                     } else {
                         &(#attr_name[1..#attr_name.len()-1])
                     };
 
 
-                if let Some(start_time) = start {
+                if let Some(start_time) = _____start_____ {
                     let elapsed = start_time.elapsed();
 
-                    profiler::insert_time(literal, elapsed);
+                    profiler::insert_time(_____literal_____, elapsed);
                 } else {
-                    profiler::increment_recursive_calls(literal)
+                    profiler::increment_recursive_calls(_____literal_____)
                 }
 
                 depth.set(current_depth);
 
-                result
+                _____result_____
             })
         }};
 

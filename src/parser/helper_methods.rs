@@ -47,6 +47,31 @@ impl<'a> Parser<'a> {
         }
     }
 
+    pub(super) fn is_next_at_expr_end(&mut self) -> bool {
+        let result = match self.get_next() {
+            Some(token) =>
+                match token.get_ttype() {
+                    TokenType::TokenSemicolon | TokenType::TokenEOF => true,
+                    _ => {
+                        let prev_line = self.get_current().get_line();
+
+                        if token.get_line() <= prev_line {
+                            if token.get_ttype() == &TokenType::TokenError {
+                                let msg = token.get_message().unwrap().to_string();
+                                self.report_compile_error(msg, vec![token.get_metadata()]);
+                            }
+                            false
+                        } else {
+                            true
+                        }
+                    }
+                }
+            None => false,
+        };
+
+        result
+    }
+
     pub(super) fn is_at_expr_end(&mut self) -> bool {
         let result = match self.get_current().get_ttype() {
             TokenType::TokenSemicolon | TokenType::TokenEOF => true,
@@ -96,24 +121,30 @@ impl<'a> Parser<'a> {
                                     let mut token_vec: Vec<TokenMetadata> = Vec::new();
                                     expr.push_to_token_vec(&mut token_vec);
 
-                                    let lexeme =
-                                        &self.source
-                                            [
-                                                token_vec.last().unwrap().get_start()..token_vec
-                                                    .first()
-                                                    .unwrap()
-                                                    .get_start() +
-                                                    token_vec.first().unwrap().get_len()
-                                            ];
+                                    let lexeme = &self.source[
+                                        token_vec.last().unwrap().get_start()..token_vec
+                                            .first()
+                                            .unwrap()
+                                            .get_start() + token_vec.first().unwrap().get_len()
+                                    ]
+                                        .iter()
+                                        .collect::<String>();
 
                                     self.report_compile_error(
-                                        format!("Invalid1 assignment target: '{}'", lexeme),
+                                        format!("Invalid assignment target: '{}'", lexeme),
                                         token_vec
                                     );
+
+                                    if self.is_next_at_expr_end() {
+                                        self.report_compile_error(
+                                            "Missing right hand side of variable assignment".to_string(),
+                                            vec![self.get_current().get_metadata()]
+                                        );
+                                    }
                                 } else {
                                     self.report_compile_error(
                                         format!(
-                                            "Invalid2 assignment target: '{}'",
+                                            "Invalid assignment target: '{}'",
                                             self.get_previous().get_lexeme(self.source)
                                         ),
                                         vec![
@@ -128,20 +159,26 @@ impl<'a> Parser<'a> {
                                     let mut token_vec: Vec<TokenMetadata> = Vec::new();
                                     expr.push_to_token_vec(&mut token_vec);
 
-                                    let lexeme =
-                                        &self.source
-                                            [
-                                                token_vec.last().unwrap().get_start()..token_vec
-                                                    .first()
-                                                    .unwrap()
-                                                    .get_start() +
-                                                    token_vec.first().unwrap().get_len()
-                                            ];
+                                    let lexeme = &self.source[
+                                        token_vec.last().unwrap().get_start()..token_vec
+                                            .first()
+                                            .unwrap()
+                                            .get_start() + token_vec.first().unwrap().get_len()
+                                    ]
+                                        .iter()
+                                        .collect::<String>();
 
                                     self.report_compile_error(
                                         format!("Invalid definition target: '{}'", lexeme),
                                         token_vec
                                     );
+
+                                    if self.is_next_at_expr_end() {
+                                        self.report_compile_error(
+                                            "Missing right hand side of variable definition".to_string(),
+                                            vec![self.get_current().get_metadata()]
+                                        );
+                                    }
                                 } else {
                                     self.report_compile_error(
                                         format!(
@@ -195,6 +232,14 @@ impl<'a> Parser<'a> {
     pub(super) fn exit_panic_mode(&mut self) {
         self.panic_mode = false;
         self.ast_generator.exit_panic_mode()
+    }
+
+    pub(super) fn start_scope(&mut self) {
+        self.ast_generator.start_scope();
+    }
+
+    pub(super) fn end_scope(&mut self) {
+        self.ast_generator.end_scope();
     }
 
     pub(super) fn report_compile_error(&mut self, message: String, token: Vec<TokenMetadata>) {

@@ -1,6 +1,12 @@
 use crate::{ compiler::ir_graph::IRValue, operations::{ BinaryOp, UnaryOp } };
 
-use super::{ IRInstruction, IRInstructionSrc, VMInstruction, VMInstructionSrc };
+use super::{
+    helper_structs::InstructionRegister,
+    IRInstruction,
+    IRInstructionSrc,
+    VMInstruction,
+    VMInstructionSrc,
+};
 
 impl IRInstructionSrc {
     pub fn to_instruction_src(&self) -> VMInstructionSrc {
@@ -15,6 +21,8 @@ impl IRInstructionSrc {
 impl IRInstruction {
     pub fn to_vm_instruction(&self) -> VMInstruction {
         match self {
+            Self::StartScope => VMInstruction::StartScope,
+            Self::EndScope => VMInstruction::EndScope,
             Self::Add { dest, src1, src2 } => {
                 let src1 = src1.to_instruction_src();
                 let src2 = src2.to_instruction_src();
@@ -70,7 +78,7 @@ impl IRInstruction {
 
     pub fn modify_binary_instruction(
         &mut self,
-        dest: usize,
+        dest: InstructionRegister,
         src1: IRInstructionSrc,
         src2: IRInstructionSrc
     ) {
@@ -93,7 +101,11 @@ impl IRInstruction {
         }
     }
 
-    pub fn modify_definement_instruction(&mut self, dest: usize, src: IRInstructionSrc) {
+    pub fn modify_definement_instruction(
+        &mut self,
+        dest: InstructionRegister,
+        src: IRInstructionSrc
+    ) {
         match self {
             Self::Define { dest: _, src: _ } => {
                 *self = Self::Define { dest, src };
@@ -104,7 +116,11 @@ impl IRInstruction {
         }
     }
 
-    pub fn modify_assignment_instruction(&mut self, dest: usize, src: IRInstructionSrc) {
+    pub fn modify_assignment_instruction(
+        &mut self,
+        dest: InstructionRegister,
+        src: IRInstructionSrc
+    ) {
         match self {
             Self::Assign { dest: _, src: _ } => {
                 *self = Self::Assign { dest, src };
@@ -115,7 +131,7 @@ impl IRInstruction {
         }
     }
 
-    pub fn modify_unary_instruction(&mut self, dest: usize, src: IRInstructionSrc) {
+    pub fn modify_unary_instruction(&mut self, dest: InstructionRegister, src: IRInstructionSrc) {
         match self {
             Self::Neg { dest: _, src: _ } => {
                 *self = Self::Neg { dest, src };
@@ -129,7 +145,7 @@ impl IRInstruction {
         }
     }
 
-    pub fn modify_load_instruction(&mut self, reg: usize, src: IRInstructionSrc) {
+    pub fn modify_load_instruction(&mut self, reg: InstructionRegister, src: IRInstructionSrc) {
         match self {
             Self::Load { reg: _, src: _ } => {
                 *self = Self::Load { reg, src };
@@ -140,7 +156,12 @@ impl IRInstruction {
         }
     }
 
-    pub fn new_binary(operation: &BinaryOp, dest: usize, src1: IRValue, src2: IRValue) -> Self {
+    pub fn new_binary(
+        operation: &BinaryOp,
+        dest: InstructionRegister,
+        src1: IRValue,
+        src2: IRValue
+    ) -> Self {
         let src1 = src1.to_ir_instruction_src();
 
         let src2 = src2.to_ir_instruction_src();
@@ -153,19 +174,19 @@ impl IRInstruction {
         }
     }
 
-    pub fn new_define(dest: usize, src: IRValue) -> Self {
+    pub fn new_define(dest: InstructionRegister, src: IRValue) -> Self {
         let src = src.to_ir_instruction_src();
 
         Self::Define { dest, src }
     }
 
-    pub fn new_assign(dest: usize, src: IRValue) -> Self {
+    pub fn new_assign(dest: InstructionRegister, src: IRValue) -> Self {
         let src = src.to_ir_instruction_src();
 
         Self::Assign { dest, src }
     }
 
-    pub fn new_unary(operation: &UnaryOp, dest: usize, src: IRValue) -> Self {
+    pub fn new_unary(operation: &UnaryOp, dest: InstructionRegister, src: IRValue) -> Self {
         let src = src.to_ir_instruction_src();
 
         match operation {
@@ -174,12 +195,7 @@ impl IRInstruction {
         }
     }
 
-    pub fn new_load(reg: IRValue, src: IRValue) -> Self {
-        let reg = match reg {
-            IRValue::Register(register) => register,
-            _ => panic!("Destination must be a register"),
-        };
-
+    pub fn new_load(reg: InstructionRegister, src: IRValue) -> Self {
         let src = src.to_ir_instruction_src();
 
         Self::Load { reg, src }

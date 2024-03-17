@@ -7,14 +7,14 @@ mod lexer_util;
 use lexer_util::*;
 
 pub struct Lexer<'a> {
-    source: &'a str,
+    source: &'a Vec<char>,
     start: usize,
     current: usize,
     line: usize,
 }
 
 impl<'a> Lexer<'a> {
-    pub fn new(source: &'a str) -> Self {
+    pub fn new(source: &'a Vec<char>) -> Self {
         Self {
             source,
             start: 0,
@@ -51,9 +51,9 @@ impl<'a> Lexer<'a> {
     pub fn scan_token(&mut self) -> Option<Token> {
         self.skip_whitespace();
 
-        if self.current == self.source.chars().count() {
+        if self.current == self.source.len() {
             return self.make_eof_token();
-        } else if self.current > self.source.chars().count() {
+        } else if self.current > self.source.len() {
             return None;
         }
 
@@ -66,6 +66,8 @@ impl<'a> Lexer<'a> {
         match c {
             '(' => self.make_token(TokenType::TokenLeftParen),
             ')' => self.make_token(TokenType::TokenRightParen),
+            '{' => self.make_token(TokenType::TokenLeftCurlyBrace),
+            '}' => self.make_token(TokenType::TokenRightCurlyBrace),
             '+' => self.make_token(TokenType::TokenPlus),
             '-' => self.make_token(TokenType::TokenMinus),
             '*' => self.make_token(TokenType::TokenStar),

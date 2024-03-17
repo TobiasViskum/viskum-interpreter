@@ -1,3 +1,4 @@
+mod helper_methods;
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum TokenType {
     TokenLeftParen,
@@ -11,12 +12,16 @@ pub enum TokenType {
     TokenTrue,
     TokenFalse,
     TokenInt32,
+    TokenBool,
     TokenSemicolon,
     TokenBang,
     TokenAssign,
+    TokenLeftCurlyBrace,
+    TokenRightCurlyBrace,
     TokenDefine,
     TokenMutable,
     TokenFunction,
+    TokenPrint,
     TokenError,
     TokenEOF,
 }
@@ -34,14 +39,18 @@ impl From<TokenType> for usize {
             TokenType::TokenTrue => 8,
             TokenType::TokenFalse => 9,
             TokenType::TokenInt32 => 10,
-            TokenType::TokenSemicolon => 11,
-            TokenType::TokenBang => 12,
-            TokenType::TokenAssign => 13,
-            TokenType::TokenDefine => 14,
-            TokenType::TokenMutable => 15,
-            TokenType::TokenFunction => 16,
-            TokenType::TokenError => 17,
-            TokenType::TokenEOF => 18,
+            TokenType::TokenBool => 11,
+            TokenType::TokenSemicolon => 12,
+            TokenType::TokenBang => 13,
+            TokenType::TokenAssign => 14,
+            TokenType::TokenLeftCurlyBrace => 15,
+            TokenType::TokenRightCurlyBrace => 16,
+            TokenType::TokenDefine => 17,
+            TokenType::TokenMutable => 18,
+            TokenType::TokenFunction => 19,
+            TokenType::TokenPrint => 20,
+            TokenType::TokenError => 21,
+            TokenType::TokenEOF => 22,
         }
     }
 }

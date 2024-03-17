@@ -24,7 +24,7 @@ impl<'a> Parser<'a> {
                     self.expression_statement();
                 }
             }
-            TokenType::TokenInt32 => {
+            TokenType::TokenInt32 | TokenType::TokenBool => {
                 while !self.is_at_end() && !self.is_at_expr_end() {
                     let next = self.get_next();
                     if let Some(next) = next {
@@ -50,7 +50,7 @@ impl<'a> Parser<'a> {
                         // Function tokens isn't supported in lexer yet
                         // self.function_definition();
                     }
-                    TokenType::TokenInt32 => {
+                    TokenType::TokenInt32 | TokenType::TokenBool => {
                         while !self.is_at_end() && !self.is_at_expr_end() {
                             let next = self.get_next();
                             if let Some(next) = next {
@@ -95,7 +95,19 @@ impl<'a> Parser<'a> {
                     }
                 }
             }
-            _ => self.expression_statement(),
+            TokenType::TokenLeftCurlyBrace => {
+                self.start_scope();
+                self.advance();
+                while
+                    !self.is_at_end() &&
+                    !matches!(self.get_current().get_ttype(), &TokenType::TokenRightCurlyBrace)
+                {
+                    self.statement();
+                }
+                self.consume(TokenType::TokenRightCurlyBrace, "Expected '}' at the end of block");
+                self.end_scope()
+            }
+            _ => { self.expression_statement() }
         }
     }
 
@@ -105,9 +117,7 @@ impl<'a> Parser<'a> {
             (token.get_lexeme(self.source), token.get_metadata())
         };
 
-        self.ast_generator.emit_identifier_lookup(
-            AstIdentifier::new(lexeme, token_metadata.clone())
-        );
+        self.ast_generator.emit_identifier_lookup(AstIdentifier::new(lexeme, token_metadata));
 
         if !self.is_at_expr_end() {
             if
@@ -137,12 +147,12 @@ impl<'a> Parser<'a> {
             self.report_compile_error(message, token);
         }
 
-        match self.ast_generator.push_stmt() {
-            Ok(_) => {}
-            Err((message, token)) => {
-                self.report_compile_error(message, token);
-            }
-        }
+        // match self.ast_generator.push_stmt() {
+        //     Ok(_) => {}
+        //     Err((message, token)) => {
+        //         self.report_compile_error(message, token);
+        //     }
+        // }
     }
 
     pub(super) fn variable_definition(&mut self) {
@@ -175,15 +185,7 @@ impl<'a> Parser<'a> {
                 )
             {
                 if !self.is_at_expr_end() {
-                    self.parse_precedence(
-                        Precedence::PrecAssignment.get_next(),
-                        Some(
-                            format!(
-                                "Invalid definition target. Got {}",
-                                self.get_current().get_lexeme(self.source)
-                            ).as_str()
-                        )
-                    );
+                    self.parse_precedence(Precedence::PrecAssignment.get_next(), None);
                     self.consume_expr_end();
                 } else {
                     self.report_compile_error(
@@ -206,12 +208,12 @@ impl<'a> Parser<'a> {
             self.report_compile_error(message, token_vec);
         }
 
-        match self.ast_generator.push_stmt() {
-            Ok(_) => {}
-            Err((message, token)) => {
-                self.report_compile_error(message, token);
-            }
-        }
+        // match self.ast_generator.push_stmt() {
+        //     Ok(_) => {}
+        //     Err((message, token)) => {
+        //         self.report_compile_error(message, token);
+        //     }
+        // }
     }
 
     pub(super) fn expression_statement(&mut self) {
@@ -293,12 +295,22 @@ impl<'a> Parser<'a> {
 
     pub(super) fn resolve_type(&mut self) -> (Option<ValueType>, Option<Token>, isize) {
         let mut search_index: isize = -2;
+        let line = self.get_previous().get_line();
 
         loop {
             match self.peek(search_index) {
                 Some(token) => {
+                    if
+                        token.get_line() < line ||
+                        matches!(token.get_ttype(), TokenType::TokenEOF | TokenType::TokenSemicolon)
+                    {
+                        return (None, None, search_index);
+                    }
+
                     if token.get_ttype() == &TokenType::TokenInt32 {
                         return (Some(ValueType::Int32), Some(token.clone()), search_index);
+                    } else if token.get_ttype() == &TokenType::TokenBool {
+                        return (Some(ValueType::Bool), Some(token.clone()), search_index);
                     } else {
                         search_index -= 1;
                     }

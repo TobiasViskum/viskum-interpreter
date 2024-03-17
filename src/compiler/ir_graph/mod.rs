@@ -2,13 +2,17 @@ use std::collections::HashMap;
 
 use indexmap::IndexSet;
 
-use crate::{ operations::Op, value::Value, vm::instructions::IRInstructionSrc };
+use crate::{
+    operations::Op,
+    value::Value,
+    vm::instructions::{ helper_structs::InstructionRegister, IRInstructionSrc },
+};
 
 #[derive(Debug, Clone)]
 pub enum IRValue {
-    Register(usize),
+    Register(InstructionRegister),
     Constant(Value),
-    VariableRegister(usize),
+    VariableRegister(InstructionRegister),
 }
 
 impl IRValue {

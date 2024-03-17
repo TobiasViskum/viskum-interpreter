@@ -14,7 +14,7 @@ use self::ast_generator::AstGenerator;
 
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
-    source: &'a str,
+    source: &'a Vec<char>,
     next: Option<Token>,
     current: Option<Token>,
     previous_tokens: Vec<Token>,
@@ -25,7 +25,7 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(source: &'a str, error_handler: &'a mut ErrorHandler) -> Self {
+    pub fn new(source: &'a Vec<char>, error_handler: &'a mut ErrorHandler) -> Self {
         Self {
             lexer: Lexer::new(source),
             source,
@@ -61,7 +61,15 @@ impl<'a> Parser<'a> {
             }
         }
 
+        // match self.ast_generator.push_and_end_scope() {
+        //     Ok(_) => {}
+        //     Err((msg, tokens_metadata)) => {
+        //         self.error_handler.report_compile_error(msg, tokens_metadata);
+        //     }
+        // }
+
         let ast = self.ast_generator.get_ast();
+
         self.free();
         ast
     }

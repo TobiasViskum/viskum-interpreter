@@ -1,13 +1,15 @@
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum Op {
     BinaryOp(BinaryOp),
     UnaryOp(UnaryOp),
     Define,
     Assign,
+    StartScope,
+    EndScope,
     NoOp,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum BinaryOp {
     Add,
     Sub,
@@ -26,7 +28,7 @@ impl BinaryOp {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum UnaryOp {
     Neg,
     Truthy,
@@ -59,6 +61,8 @@ impl Op {
 
             Op::Define => "definement".to_string(),
             Op::Assign => "assignment".to_string(),
+            Op::StartScope => "start scope".to_string(),
+            Op::EndScope => "end scope".to_string(),
             Op::NoOp => "no operation".to_string(),
         }
     }

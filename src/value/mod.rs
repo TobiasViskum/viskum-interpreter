@@ -1,6 +1,6 @@
 use crate::{ operations::{ BinaryOp, Op, UnaryOp }, util::make_first_char_uppercase };
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum ValueType {
     Int32,
     Bool,
@@ -19,38 +19,81 @@ impl ValueType {
 
     pub fn type_check_binary(&self, other: &ValueType, op: BinaryOp) -> Result<ValueType, String> {
         match op {
-            BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div => {
-                if self == other {
-                    Ok(self.clone())
-                } else {
-                    Err(
-                        format!(
-                            "{} is not defined for {} and {}",
-                            make_first_char_uppercase(Op::BinaryOp(op).to_op_string()),
-                            self.to_type_string(),
-                            other.to_type_string()
-                        )
-                    )
-                }
-            }
+            BinaryOp::Add => self.try_add(other),
+            BinaryOp::Mul => self.try_mul(other),
+            BinaryOp::Div => self.try_div(other),
+            BinaryOp::Sub => self.try_sub(other),
         }
     }
 
     pub fn type_check_unary(&self, op: UnaryOp) -> Result<ValueType, String> {
         match op {
-            UnaryOp::Neg | UnaryOp::Truthy => {
-                if self == &ValueType::Int32 {
-                    Ok(self.clone())
-                } else {
-                    Err(
-                        format!(
-                            "{} is not defined for {}",
-                            make_first_char_uppercase(Op::UnaryOp(op).to_op_string()),
-                            self.to_type_string()
-                        )
+            UnaryOp::Neg => self.try_neg(),
+            UnaryOp::Truthy => Ok(*self),
+        }
+    }
+
+    pub fn try_add(&self, other: &ValueType) -> Result<ValueType, String> {
+        match (self, other) {
+            (ValueType::Int32, ValueType::Int32) => Ok(ValueType::Int32),
+            _ =>
+                Err(
+                    format!(
+                        "Addition is not defined for {} and {}",
+                        self.to_type_string(),
+                        other.to_type_string()
                     )
-                }
-            }
+                ),
+        }
+    }
+
+    pub fn try_mul(&self, other: &ValueType) -> Result<ValueType, String> {
+        match (self, other) {
+            (ValueType::Int32, ValueType::Int32) => Ok(ValueType::Int32),
+            _ =>
+                Err(
+                    format!(
+                        "Multiplication is not defined for {} and {}",
+                        self.to_type_string(),
+                        other.to_type_string()
+                    )
+                ),
+        }
+    }
+
+    pub fn try_div(&self, other: &ValueType) -> Result<ValueType, String> {
+        match (self, other) {
+            (ValueType::Int32, ValueType::Int32) => Ok(ValueType::Int32),
+            _ =>
+                Err(
+                    format!(
+                        "Division is not defined for {} and {}",
+                        self.to_type_string(),
+                        other.to_type_string()
+                    )
+                ),
+        }
+    }
+
+    pub fn try_sub(&self, other: &ValueType) -> Result<ValueType, String> {
+        match (self, other) {
+            (ValueType::Int32, ValueType::Int32) => Ok(ValueType::Int32),
+            _ =>
+                Err(
+                    format!(
+                        "Subtraction is not defined for {} and {}",
+                        self.to_type_string(),
+                        other.to_type_string()
+                    )
+                ),
+        }
+    }
+
+    pub fn try_neg(&self) -> Result<ValueType, String> {
+        if self == &ValueType::Int32 {
+            Ok(*self)
+        } else {
+            Err(format!("Negation is not defined for {}", self.to_type_string()))
         }
     }
 }

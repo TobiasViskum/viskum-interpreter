@@ -1,16 +1,18 @@
 mod helper_methods;
+pub mod helper_structs;
 use crate::value::Value;
+use self::helper_structs::InstructionRegister;
 
 #[derive(Debug, Clone)]
 pub enum VMInstructionSrc {
-    Register(usize),
+    Register(InstructionRegister),
     Constant(Value),
 }
 
 impl VMInstructionSrc {
     pub fn dissassemble(&self) -> String {
         match self {
-            Self::Register(value) => { format!("R{}", value) },
+            Self::Register(value) => { format!("{}", value.dissassemble()) },
             Self::Constant(value) => { format!("{}", value.to_string()) },
         }
     }
@@ -19,44 +21,46 @@ impl VMInstructionSrc {
 #[derive(Debug, Clone)]
 pub enum VMInstruction {
     Halt,
+    StartScope,
+    EndScope,
     Load {
-        reg: usize,
+        reg: InstructionRegister,
         src: VMInstructionSrc,
     },
     Add {
-        dest: usize,
+        dest: InstructionRegister,
         src1: VMInstructionSrc,
         src2: VMInstructionSrc,
     },
     Sub {
-        dest: usize,
+        dest: InstructionRegister,
         src1: VMInstructionSrc,
         src2: VMInstructionSrc,
     },
     Mul {
-        dest: usize,
+        dest: InstructionRegister,
         src1: VMInstructionSrc,
         src2: VMInstructionSrc,
     },
     Div {
-        dest: usize,
+        dest: InstructionRegister,
         src1: VMInstructionSrc,
         src2: VMInstructionSrc,
     },
     Neg {
-        dest: usize,
+        dest: InstructionRegister,
         src: VMInstructionSrc,
     },
     Truthy {
-        dest: usize,
+        dest: InstructionRegister,
         src: VMInstructionSrc,
     },
     Define {
-        dest: usize,
+        dest: InstructionRegister,
         src: VMInstructionSrc,
     },
     Assign {
-        dest: usize,
+        dest: InstructionRegister,
         src: VMInstructionSrc,
     },
 }
@@ -65,33 +69,35 @@ impl VMInstruction {
     pub fn dissassemble(&self) -> String {
         match self {
            Self::Halt => { "HALT".to_string() }
+           Self::StartScope => { "STARTSCOPE".to_string() }
+           Self::EndScope => { "ENDSCOPE".to_string() }
 
             Self::Load { reg, src } => {
-                format!("LOAD R{} {}", reg, src.dissassemble())
+                format!("LOAD {} {}", reg.dissassemble(), src.dissassemble())
             }
             Self::Add { dest, src1, src2 } => {
-                format!("ADD R{} {} {}", dest, src1.dissassemble(), src2.dissassemble())
+                format!("ADD {} {} {}", dest.dissassemble(), src1.dissassemble(), src2.dissassemble())
             }
             Self::Sub { dest, src1, src2 } => {
-                format!("SUB R{} {} {}", dest, src1.dissassemble(), src2.dissassemble())
+                format!("SUB {} {} {}", dest.dissassemble(), src1.dissassemble(), src2.dissassemble())
             }
             Self::Mul { dest, src1, src2 } => {
-                format!("MUL R{} {} {}", dest, src1.dissassemble(), src2.dissassemble())
+                format!("MUL {} {} {}", dest.dissassemble(), src1.dissassemble(), src2.dissassemble())
             }
             Self::Div { dest, src1, src2 } => {
-                format!("DIV R{} {} {}", dest, src1.dissassemble(), src2.dissassemble())
+                format!("DIV {} {} {}", dest.dissassemble(), src1.dissassemble(), src2.dissassemble())
             }
             Self::Neg { dest, src } => {
-                format!("NEG R{} {}", dest, src.dissassemble())
+                format!("NEG {} {}", dest.dissassemble(), src.dissassemble())
             }
             Self::Truthy { dest, src } => {
-                format!("TRUTHY R{} {}", dest, src.dissassemble())
+                format!("TRUTHY {} {}", dest.dissassemble(), src.dissassemble())
             }
             Self::Define { dest, src } => {
-                format!("DEFINE R{} {}", dest, src.dissassemble())
+                format!("DEFINE {} {}", dest.dissassemble(), src.dissassemble())
             }
             Self::Assign { dest, src } => {
-                format!("ASSIGN R{} {}", dest, src.dissassemble())
+                format!("ASSIGN {} {}", dest.dissassemble(), src.dissassemble())
             }
         }
     }
@@ -100,17 +106,17 @@ impl VMInstruction {
 
 #[derive(Debug, Clone)]
 pub enum IRInstructionSrc {
-    Register(usize),
+    Register(InstructionRegister),
     Constant(Value),
-    VariableRegister(usize),
+    VariableRegister(InstructionRegister),
 }
 
 impl IRInstructionSrc {
     pub fn dissassemble(&self) -> String {
         match self {
-            Self::Register(value) => { format!("R{}", value) },
+            Self::Register(value) => { format!("{}", value.dissassemble()) },
             Self::Constant(value) => { format!("{}", value.to_string()) },
-            Self::VariableRegister(value) => { format!("R{}", value) },
+            Self::VariableRegister(value) => { format!("{}", value.dissassemble()) },
         }
     }
 }
@@ -118,44 +124,46 @@ impl IRInstructionSrc {
 #[derive(Debug, Clone)]
 pub enum IRInstruction {
     Halt,
+    StartScope,
+    EndScope,
     Load {
-        reg: usize,
+        reg: InstructionRegister,
         src: IRInstructionSrc,
     },
     Add {
-        dest: usize,
+        dest: InstructionRegister,
         src1: IRInstructionSrc,
         src2: IRInstructionSrc,
     },
     Sub {
-        dest: usize,
+        dest: InstructionRegister,
         src1: IRInstructionSrc,
         src2: IRInstructionSrc,
     },
     Mul {
-        dest: usize,
+        dest: InstructionRegister,
         src1: IRInstructionSrc,
         src2: IRInstructionSrc,
     },
     Div {
-        dest: usize,
+        dest: InstructionRegister,
         src1: IRInstructionSrc,
         src2: IRInstructionSrc,
     },
     Neg {
-        dest: usize,
+        dest: InstructionRegister,
         src: IRInstructionSrc,
     },
     Truthy {
-        dest: usize,
+        dest: InstructionRegister,
         src: IRInstructionSrc,
     },
     Define {
-        dest: usize,
+        dest: InstructionRegister,
         src: IRInstructionSrc,
     },
     Assign {
-        dest: usize,
+        dest: InstructionRegister,
         src: IRInstructionSrc,
     },
 }
@@ -164,33 +172,35 @@ impl IRInstruction {
     pub fn dissassemble(&self) -> String {
         match self {
            Self::Halt => { "HALT".to_string() }
+           Self::StartScope => { "STARTSCOPE".to_string() }
+           Self::EndScope => { "ENDSCOPE".to_string() }
 
             Self::Load { reg, src } => {
-                format!("LOAD R{} {}", reg, src.dissassemble())
+                format!("LOAD {} {}", reg.dissassemble(), src.dissassemble())
             }
             Self::Add { dest, src1, src2 } => {
-                format!("ADD R{} {} {}", dest, src1.dissassemble(), src2.dissassemble())
+                format!("ADD {} {} {}", dest.dissassemble(), src1.dissassemble(), src2.dissassemble())
             }
             Self::Sub { dest, src1, src2 } => {
-                format!("SUB R{} {} {}", dest, src1.dissassemble(), src2.dissassemble())
+                format!("SUB {} {} {}", dest.dissassemble(), src1.dissassemble(), src2.dissassemble())
             }
             Self::Mul { dest, src1, src2 } => {
-                format!("MUL R{} {} {}", dest, src1.dissassemble(), src2.dissassemble())
+                format!("MUL {} {} {}", dest.dissassemble(), src1.dissassemble(), src2.dissassemble())
             }
             Self::Div { dest, src1, src2 } => {
-                format!("DIV R{} {} {}", dest, src1.dissassemble(), src2.dissassemble())
+                format!("DIV {} {} {}", dest.dissassemble(), src1.dissassemble(), src2.dissassemble())
             }
             Self::Neg { dest, src } => {
-                format!("NEG R{} {}", dest, src.dissassemble())
+                format!("NEG {} {}", dest.dissassemble(), src.dissassemble())
             }
             Self::Truthy { dest, src } => {
-                format!("TRUTHY R{} {}", dest, src.dissassemble())
+                format!("TRUTHY {} {}", dest.dissassemble(), src.dissassemble())
             }
             Self::Define { dest, src } => {
-                format!("DEFINE R{} {}", dest, src.dissassemble())
+                format!("DEFINE {} {}", dest.dissassemble(), src.dissassemble())
             }
             Self::Assign { dest, src } => {
-                format!("ASSIGN R{} {}", dest, src.dissassemble())
+                format!("ASSIGN {} {}", dest.dissassemble(), src.dissassemble())
             }
         }
     }

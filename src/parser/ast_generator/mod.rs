@@ -2,15 +2,11 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
+        expr::{ BinaryExpr, Expr, UnaryExpr },
+        stmt::{ ScopeStmt, Stmt, VariableAssignmentStmt, VariableDefinitionStmt },
         Ast,
         AstIdentifier,
         AstValue,
-        BinaryExpr,
-        Expr,
-        Stmt,
-        UnaryExpr,
-        VariableAssignment,
-        VariableDefinition,
     },
     operations::{ BinaryOp, UnaryOp },
     value::ValueType,
@@ -26,19 +22,19 @@ struct AstVariableValue {
 
 impl AstVariableValue {
     pub fn to_tuple(&self) -> (ValueType, bool, bool) {
-        (self.value_type.clone(), self.is_mutable, self.is_initialized)
+        (self.value_type, self.is_mutable, self.is_initialized)
     }
 }
 
 #[derive(Debug)]
-pub struct AstVariables {
-    variables: HashMap<String, AstVariableValue>,
+pub struct AstScope {
+    definitions: HashMap<String, AstVariableValue>,
 }
 
-impl AstVariables {
+impl AstScope {
     pub fn new() -> Self {
         Self {
-            variables: HashMap::new(),
+            definitions: HashMap::new(),
         }
     }
 
@@ -49,7 +45,7 @@ impl AstVariables {
         is_mutable: bool,
         is_initialized: bool
     ) {
-        self.variables.insert(lexeme, AstVariableValue {
+        self.definitions.insert(lexeme, AstVariableValue {
             value_type,
             is_mutable,
             is_initialized,
@@ -57,30 +53,99 @@ impl AstVariables {
     }
 
     pub fn get(&self, lexeme: &String) -> Option<(ValueType, bool, bool)> {
-        match self.variables.get(lexeme) {
+        match self.definitions.get(lexeme) {
             Some(v) => Some(v.to_tuple()),
             None => None,
         }
     }
 }
 
+pub struct AstEnvironment {
+    scopes: Vec<AstScope>,
+    scope_depth: usize,
+}
+
+impl AstEnvironment {
+    pub fn new() -> Self {
+        Self {
+            scopes: vec![AstScope::new()],
+            scope_depth: 0,
+        }
+    }
+
+    pub fn get_scope_depth(&self) -> usize {
+        self.scope_depth
+    }
+
+    pub fn start_scope(&mut self) {
+        self.scope_depth += 1;
+        self.scopes.push(AstScope::new());
+    }
+
+    pub fn end_scope(&mut self) {
+        if self.scope_depth > 0 {
+            self.scope_depth -= 1;
+        }
+        self.scopes.pop();
+    }
+
+    pub fn insert(
+        &mut self,
+        lexeme: String,
+        value_type: ValueType,
+        is_mutable: bool,
+        is_initialized: bool
+    ) {
+        self.scopes[self.scope_depth].insert(lexeme, value_type, is_mutable, is_initialized);
+    }
+
+    pub fn get(&self, lexeme: &String) -> Option<(ValueType, bool, bool)> {
+        for i in (0..self.scope_depth + 1).rev() {
+            match self.scopes[i].get(lexeme) {
+                Some(v) => {
+                    return Some(v);
+                }
+                None => {
+                    continue;
+                }
+            }
+        }
+
+        None
+    }
+}
+
 pub struct AstGenerator {
     ast: Option<Ast>,
-    statements: Vec<Stmt>,
-    expressions: Vec<Expr>,
+    stmts: Vec<Stmt>,
+    exprs: Vec<Expr>,
     panic_mode: bool,
-    variables: AstVariables,
+    ast_environment: AstEnvironment,
 }
 
 impl AstGenerator {
     pub fn new() -> Self {
         Self {
             ast: Some(Ast::new()),
-            statements: Vec::new(),
-            expressions: Vec::new(),
+            stmts: Vec::new(),
+            exprs: Vec::new(),
             panic_mode: false,
-            variables: AstVariables::new(),
+            ast_environment: AstEnvironment::new(),
         }
+    }
+
+    fn get_scope_depth(&self) -> usize {
+        self.ast_environment.get_scope_depth()
+    }
+
+    pub fn start_scope(&mut self) {
+        self.ast_environment.start_scope();
+        self.ast.as_mut().unwrap().start_scope();
+    }
+
+    pub fn end_scope(&mut self) {
+        self.ast_environment.end_scope();
+        self.ast.as_mut().unwrap().end_scope()
     }
 
     pub fn free(&mut self) {
@@ -96,11 +161,11 @@ impl AstGenerator {
     }
 
     pub fn emit_constant_literal(&mut self, value: AstValue) {
-        self.expressions.push(Expr::Literal(value));
+        self.exprs.push(Expr::Literal(value));
     }
 
     pub fn emit_identifier_lookup(&mut self, variable: AstIdentifier) {
-        self.expressions.push(Expr::IdentifierLookup(variable));
+        self.exprs.push(Expr::IdentifierLookup(variable));
     }
 
     pub fn emit_variable_assignment(
@@ -110,8 +175,8 @@ impl AstGenerator {
         if self.panic_mode {
             return Ok(());
         }
-        let value = self.expressions.pop().unwrap();
-        let identifier = match self.expressions.pop().unwrap() {
+        let value = self.exprs.pop().unwrap();
+        let identifier = match self.exprs.pop().unwrap() {
             Expr::IdentifierLookup(v) => v,
             _ => {
                 return Err(("Expected identifier in assignment".to_string(), vec![token_metadata]));
@@ -119,12 +184,10 @@ impl AstGenerator {
         };
 
         let variable_assignment = Stmt::VariableAssignment(
-            VariableAssignment::new(None, identifier, value)
+            VariableAssignmentStmt::new(None, identifier, value)
         );
 
-        self.statements.push(variable_assignment);
-
-        Ok(())
+        self.push_stmt(variable_assignment)
     }
 
     pub fn emit_variable_definition(
@@ -135,12 +198,12 @@ impl AstGenerator {
         is_mutable: bool,
         last_token_in_definition: Token
     ) -> Result<(), (String, Vec<TokenMetadata>)> {
-        let value = self.expressions.pop();
+        let value = self.exprs.pop();
 
         if
             !matches!(
                 identifier_token.get_ttype(),
-                TokenType::TokenIdentifier | TokenType::TokenInt32
+                TokenType::TokenIdentifier | TokenType::TokenInt32 | TokenType::TokenBool
             )
         {
             return Err((
@@ -150,7 +213,7 @@ impl AstGenerator {
         }
 
         let variable_definition = Stmt::VariableDefinition(
-            VariableDefinition::new(
+            VariableDefinitionStmt::new(
                 lexeme,
                 value_type,
                 is_mutable,
@@ -159,17 +222,15 @@ impl AstGenerator {
             )
         );
 
-        self.statements.push(variable_definition);
-
-        Ok(())
+        self.push_stmt(variable_definition)
     }
 
     pub fn emit_binary_op(
         &mut self,
         expr_op: BinaryOp
     ) -> Result<(), (String, Vec<TokenMetadata>)> {
-        let popped_left = self.expressions.pop();
-        let popped_right = self.expressions.pop();
+        let popped_left = self.exprs.pop();
+        let popped_right = self.exprs.pop();
 
         let (left, right) = match (popped_left, popped_right) {
             (Some(left), Some(right)) => (left, right),
@@ -194,7 +255,7 @@ impl AstGenerator {
 
         let binary_expr = BinaryExpr {
             left: Box::new(left),
-            operator: expr_op.clone(),
+            operator: expr_op,
             right: Box::new(right),
         };
 
@@ -208,7 +269,7 @@ impl AstGenerator {
 
         let expr = Expr::BinaryExpr(binary_expr);
 
-        self.expressions.push(expr);
+        self.exprs.push(expr);
 
         Ok(())
     }
@@ -218,7 +279,7 @@ impl AstGenerator {
             return Ok(());
         }
 
-        let right = self.expressions.pop().unwrap();
+        let right = self.exprs.pop().unwrap();
 
         let unary_expr = UnaryExpr {
             operator: expr_op,
@@ -235,7 +296,7 @@ impl AstGenerator {
 
         let expr = Expr::UnaryExpr(unary_expr);
 
-        self.expressions.push(expr);
+        self.exprs.push(expr);
 
         Ok(())
     }
@@ -245,15 +306,11 @@ impl AstGenerator {
             self.exit_panic_mode();
             Ok(())
         } else {
-            match self.expressions.pop() {
+            match self.exprs.pop() {
                 Some(expr) => {
-                    let mut token_vec: Vec<TokenMetadata> = Vec::new();
-                    match expr.type_check(&self.variables, &mut token_vec) {
-                        Ok(_) => {
-                            self.ast.as_mut().unwrap().push_stmt(Stmt::ExprStmt(expr));
-                            Ok(())
-                        }
-                        Err(e) => { Err((e, token_vec)) }
+                    match self.push_stmt(Stmt::ExprStmt(expr)) {
+                        Ok(_) => Ok(()),
+                        Err((e, token_vec)) => Err((e, token_vec)),
                     }
                 }
                 None => Ok(()), // Change this to an error
@@ -261,123 +318,25 @@ impl AstGenerator {
         }
     }
 
-    pub fn push_stmt(&mut self) -> Result<(), (String, Vec<TokenMetadata>)> {
-        if self.panic_mode {
-            self.exit_panic_mode();
-            Ok(())
-        } else {
-            match self.statements.pop() {
-                Some(mut stmt) => {
-                    let mut token_vec: Vec<TokenMetadata> = Vec::new();
-                    match stmt.type_check(&mut self.variables, &mut token_vec) {
-                        Ok(_) => {
-                            self.ast.as_mut().unwrap().push_stmt(stmt);
-                            Ok(())
-                        }
-                        Err(e) => { Err((e, token_vec)) }
-                    }
-                }
-                None => Ok(()), // Change this to an error
+    pub fn push_stmt(&mut self, stmt: Stmt) -> Result<(), (String, Vec<TokenMetadata>)> {
+        let mut token_vec = Vec::new();
+        let mut stmt = stmt;
+        match stmt.type_check(&mut self.ast_environment, &mut token_vec) {
+            Ok(_) => {
+                self.ast.as_mut().unwrap().push_stmt(stmt);
+                Ok(())
+            }
+            Err(e) => {
+                return Err((e, token_vec));
             }
         }
     }
 
     pub fn pop_expr(&mut self) -> Option<Expr> {
-        self.expressions.pop()
+        self.exprs.pop()
     }
 
     pub fn get_ast(&mut self) -> Ast {
         self.ast.take().unwrap()
     }
 }
-
-// pub fn evaluate_constant_expression(expr: Expr) -> Result<Expr, (String, TokenMetadata)> {
-//     match expr {
-//         Expr::BinaryExpr(binary_expr) => {
-//             let evaluated_left = evaluate_constant_expression(*binary_expr.left);
-//             let evaluated_right = evaluate_constant_expression(*binary_expr.right);
-
-//             match (evaluated_left, evaluated_right) {
-//                 (Ok(left), Ok(right)) => {
-//                     match (left, right) {
-//                         (Expr::Literal(lhs), Expr::Literal(rhs)) => {
-//                             match binary_expr.operator {
-//                                 BinaryOp::Add => {
-//                                     match lhs.get_value().add(&rhs.get_value()) {
-//                                         Ok(v) =>
-//                                             Ok(
-//                                                 Expr::Literal(
-//                                                     AstValue::new(v, lhs.get_token_metadata())
-//                                                 )
-//                                             ),
-//                                         Err(e) => Err((e, lhs.get_token_metadata())),
-//                                     }
-//                                 }
-//                                 BinaryOp::Sub => {
-//                                     match lhs.get_value().sub(&rhs.get_value()) {
-//                                         Ok(v) =>
-//                                             Ok(
-//                                                 Expr::Literal(
-//                                                     AstValue::new(v, lhs.get_token_metadata())
-//                                                 )
-//                                             ),
-//                                         Err(e) => Err((e, lhs.get_token_metadata())),
-//                                     }
-//                                 }
-//                                 BinaryOp::Div => {
-//                                     match lhs.get_value().div(&rhs.get_value()) {
-//                                         Ok(v) =>
-//                                             Ok(
-//                                                 Expr::Literal(
-//                                                     AstValue::new(v, lhs.get_token_metadata())
-//                                                 )
-//                                             ),
-//                                         Err(e) => Err((e, lhs.get_token_metadata())),
-//                                     }
-//                                 }
-//                                 BinaryOp::Mul => {
-//                                     match lhs.get_value().mul(&rhs.get_value()) {
-//                                         Ok(v) =>
-//                                             Ok(
-//                                                 Expr::Literal(
-//                                                     AstValue::new(v, lhs.get_token_metadata())
-//                                                 )
-//                                             ),
-//                                         Err(e) => Err((e, lhs.get_token_metadata())),
-//                                     }
-//                                 }
-//                             }
-//                         }
-//                         _ => panic!("Expected literals"),
-//                     }
-//                 }
-//                 (Err(e), _) => Err(e),
-//                 (_, Err(e)) => Err(e),
-//             }
-//         }
-//         Expr::UnaryExpr(unary_expr) => {
-//             let evaluated_right = evaluate_constant_expression(*unary_expr.right);
-
-//             match evaluated_right {
-//                 Ok(right) => {
-//                     let unary_expr = UnaryExpr {
-//                         operator: unary_expr.operator.clone(),
-//                         right: Box::new(right),
-//                     };
-
-//                     let expr = match unary_expr.type_check_and_get_eval() {
-//                         Ok(Some(expr)) => expr,
-//                         Ok(None) => Expr::UnaryExpr(unary_expr),
-//                         Err(e) => {
-//                             return Err(e);
-//                         }
-//                     };
-
-//                     Ok(expr)
-//                 }
-//                 Err(e) => Err(e),
-//             }
-//         }
-//         Expr::Literal(value) => Ok(Expr::Literal(value.clone())),
-//     }
-// }
