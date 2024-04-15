@@ -7,7 +7,6 @@ impl<'a> Lexer<'a> {
         self.current += 1;
     }
 
-    #[profiler::function_tracker]
     pub(super) fn peek(&self, offset: i8) -> Option<&char> {
         let index = ((self.current as isize) + (offset as isize)) as usize;
 
@@ -35,12 +34,10 @@ impl<'a> Lexer<'a> {
         self.current >= self.source.len()
     }
 
-    #[profiler::function_tracker]
     pub(super) fn get_character(&self, index: usize) -> &char {
         self.source.get(index).unwrap()
     }
 
-    #[profiler::function_tracker]
     pub(super) fn check_keyword(
         &self,
         start: usize,
@@ -48,11 +45,9 @@ impl<'a> Lexer<'a> {
         rest: &str,
         ttype: TokenType
     ) -> TokenType {
-        let mut search_lexeme = String::new();
-
-        for i in 0..length {
-            search_lexeme.push(*self.source.get(self.start + start + i).unwrap());
-        }
+        let search_lexeme = self.source[self.start + start..self.start + start + length]
+            .iter()
+            .collect::<String>();
 
         if self.current - self.start == start + length && search_lexeme == rest {
             ttype

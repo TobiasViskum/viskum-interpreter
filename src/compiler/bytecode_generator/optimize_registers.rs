@@ -1,4 +1,6 @@
-use std::{ borrow::Borrow, cell::RefCell, collections::HashMap };
+use std::cell::RefCell;
+
+use ahash::AHashMap;
 
 use crate::vm::instructions::{
     helper_structs::InstructionRegister,
@@ -14,9 +16,9 @@ impl<'a> BytecodeGenerator<'a> {
     pub fn get_optimized_registers(&mut self) -> Vec<VMInstruction> {
         let mut instructions: Vec<VMInstruction> = Vec::new();
 
-        for instruction in &self.instructions {
-            println!("{}", instruction.dissassemble());
-        }
+        // for instruction in &self.instructions {
+        //     println!("{}", instruction.dissassemble());
+        // }
 
         for i in 0..self.instructions.len() {
             let instruction = self.instructions.get(i).unwrap();
@@ -173,7 +175,7 @@ impl<'a> BytecodeGenerator<'a> {
         &self.bytecode_scope_registers.get(scope_depth).unwrap().available_registers
     }
 
-    fn get_virtual_registers(&self, scope_depth: usize) -> &RefCell<HashMap<usize, usize>> {
+    fn get_virtual_registers(&self, scope_depth: usize) -> &RefCell<AHashMap<usize, usize>> {
         &self.bytecode_scope_registers.get(scope_depth).unwrap().virtual_registers
     }
 
@@ -244,20 +246,6 @@ impl<'a> BytecodeGenerator<'a> {
             .push(instruction_register.register);
     }
 
-    /*
-     fn get_physcal_register(&self, virtual_register: usize) -> usize {
-        *self.virtual_registers.borrow().get(&virtual_register).unwrap()
-    }
-
-    fn remove_virtual_register(&self, virtual_register: usize) {
-        self.virtual_registers.borrow_mut().remove(&virtual_register);
-    }
-
-    fn release_physical_register(&self, physical_register: usize) {
-        self.available_registers.borrow_mut().push(physical_register);
-    }
-    */
-
     fn start_scope(&mut self) {
         self.scope_depth += 1;
         self.bytecode_scope_registers.push(BytecodeScopeRegisters::new());
@@ -268,22 +256,3 @@ impl<'a> BytecodeGenerator<'a> {
         self.bytecode_scope_registers.pop();
     }
 }
-
-/*
-DEFINE S0:R0 1
-STARTSCOPE
-    DEFINE S1:R2 2
-    ADD S1:R4 S0:R2 1
-    STARTSCOPE
-        DEFINE S2:R6 3
-        ADD S2:R8 S0:R6 1
-    ENDSCOPE
-    LOAD S1:R10 true
-ENDSCOPE
-LOAD S0:R11 false
-LOAD S0:R12 true
-STARTSCOPE
-    ADD S1:R13 S0:R0 2
-ENDSCOPE
-HALT
-*/

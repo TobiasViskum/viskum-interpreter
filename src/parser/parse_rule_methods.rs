@@ -1,6 +1,8 @@
-use crate::ast::{ AstIdentifier, AstValue };
+use crate::ast::expr::{ AstIdentifier, AstValue };
+use crate::ast::stmt::TypeDefStmt;
 use crate::operations::{ BinaryOp, UnaryOp };
-use crate::{ parser::token::token_type::TokenType::*, value::Value };
+use crate::value_v2::ValueHolder;
+use crate::parser::token::token_type::TokenType::{ self, * };
 use super::precedence::Precedence::*;
 
 use super::Parser;
@@ -12,7 +14,7 @@ impl<'a> Parser<'a> {
 
         if let Ok(int_value) = lexeme.parse::<i32>() {
             self.ast_generator.emit_constant_literal(
-                AstValue::new(Value::Int32(int_value), token.get_metadata())
+                AstValue::new(ValueHolder::new_int32(int_value), token.get_metadata())
             )
         }
     }
@@ -24,20 +26,61 @@ impl<'a> Parser<'a> {
         self.ast_generator.emit_identifier_lookup(AstIdentifier::new(lexeme, token.get_metadata()));
     }
 
+    pub fn typing(&mut self) {
+        self.advance();
+
+        let lexeme = self.get_previous().get_lexeme(self.source);
+
+        self.consume(
+            TokenType::TokenAssign,
+            format!("Expected '=' after type definition but got '{}'", lexeme).as_str()
+        );
+
+        let typing = match self.resolve_typing() {
+            Ok(typing) => typing,
+            Err(_) => {
+                return;
+            }
+        };
+
+        match self.ast_generator.emit_type_definition(TypeDefStmt::new(lexeme, typing)) {
+            Ok(_) => {}
+            Err((msg, token_vec)) => { self.report_compile_error(msg, token_vec) }
+        }
+    }
+
     pub fn literal(&mut self) {
         let token = self.get_previous();
 
         match token.get_ttype() {
             TokenFalse =>
                 self.ast_generator.emit_constant_literal(
-                    AstValue::new(Value::Bool(false), token.get_metadata())
+                    AstValue::new(ValueHolder::new_bool(false), token.get_metadata())
                 ),
             TokenTrue =>
                 self.ast_generator.emit_constant_literal(
-                    AstValue::new(Value::Bool(true), token.get_metadata())
+                    AstValue::new(ValueHolder::new_bool(true), token.get_metadata())
                 ),
             _ => {}
         }
+    }
+
+    pub fn function(&mut self) {
+        self.advance();
+        let lexeme = self.get_previous().get_lexeme(self.source);
+
+        let function_args = self.resolve_function_args();
+        let return_type = self.resolve_function_return_type();
+
+        self.start_function(lexeme, function_args, return_type);
+
+        self.consume(TokenLeftCurlyBrace, "Expected '{' before function body");
+        while !self.is_at_end() && !matches!(self.get_current().get_ttype(), &TokenRightCurlyBrace) {
+            self.statement();
+        }
+        self.consume(TokenRightCurlyBrace, "Expected '}' after function body");
+
+        self.end_function();
     }
 
     pub fn grouping(&mut self) {

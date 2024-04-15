@@ -1,19 +1,98 @@
 use std::{ collections::HashMap, fmt::format };
 
-use crate::{
-    ast::Ast,
-    compiler::bytecode_generator::BytecodeGenerator,
-    error_handler::ErrorHandler,
-    value::ValueType,
-    vm::instructions::VMInstruction,
-};
+use crate::{ ast::Ast, error_handler::ErrorHandler, vm::instructions::Instruction };
 
-use self::ir_generator::IRGenerator;
+pub mod cfg;
+// pub mod ir_graph;
+// mod ir_generator;
+// mod bytecode_generator;
 
-pub mod ir_graph;
-mod ir_generator;
+pub struct Compiler<'a> {
+    error_handler: &'a mut ErrorHandler,
+}
 
-mod bytecode_generator;
+impl<'a> Compiler<'a> {
+    pub fn new(error_handler: &'a mut ErrorHandler) -> Self {
+        Self {
+            error_handler,
+        }
+    }
+
+    #[profiler::function_tracker]
+    pub fn compile(&mut self, ast: Ast) -> Option<Vec<Instruction>> {
+        let mut cfg = ast.generate_cfg();
+
+        let instructions = cfg.optimize_and_generate_bytecode();
+
+        #[cfg(debug_assertions)]
+        {
+            let mut indentation_level = 0;
+            let indentation_size = 4;
+
+            if !self.error_handler.has_error() {
+                println!("Optimized instructions:");
+                println!("----------------------\n");
+                for instruction in &instructions {
+                    match instruction {
+                        Instruction::EndScope => {
+                            indentation_level -= 1;
+                        }
+                        _ => {}
+                    }
+
+                    let print_string = format!(
+                        "{}{}",
+                        " ".repeat(indentation_level * indentation_size),
+                        instruction.dissassemble()
+                    );
+
+                    match instruction {
+                        Instruction::StartScope => {
+                            println!("{}\n", print_string);
+                        }
+                        Instruction::EndScope => {
+                            println!("\n{}", print_string);
+                        }
+                        _ => println!("{}", print_string),
+                    }
+
+                    match instruction {
+                        Instruction::StartScope => {
+                            indentation_level += 1;
+                        }
+                        _ => {}
+                    }
+                }
+                println!("\n----------------------")
+            }
+        }
+
+        Some(instructions)
+    }
+}
+
+/*
+DEFINE R0 1
+STARTSCOPE
+
+    DEFINE R0 2
+    ADD R1 R0 1
+    STARTSCOPE
+
+        DEFINE R0 3
+        ADD R1 R0 1
+
+    ENDSCOPE
+    LOAD R2 true
+
+ENDSCOPE
+LOAD R1 false
+HALT
+*/
+
+/*
+/* 
+
 
 #[derive(Debug)]
 pub struct Variable {
@@ -34,7 +113,7 @@ impl Variable {
 
 #[derive(Debug)]
 struct EnvironmentScope {
-    definitions: HashMap<(String, usize), Variable>,
+    definitions: HashMap<(String, usize), (Variable, bool)>, // (lexeme, subscript), (variable, is_definition)
 }
 
 impl EnvironmentScope {
@@ -45,7 +124,6 @@ impl EnvironmentScope {
     }
 }
 
-#[derive(Debug)]
 pub struct Environment {
     scopes: Vec<EnvironmentScope>,
     scope_depth: usize,
@@ -72,17 +150,20 @@ impl Environment {
         self.scope_depth -= 1;
     }
 
-    pub fn insert(&mut self, variable_name: String, value: Variable, subscript: usize) {
-        self.scopes[self.scope_depth].definitions.insert((variable_name, subscript), value);
-        // println!("INSERT, scopes: {:#?}", self.scopes);
+    pub fn insert(
+        &mut self,
+        variable_name: String,
+        value: Variable,
+        subscript: usize,
+        is_definition: bool
+    ) {
+        self.scopes[self.scope_depth].definitions.insert(
+            (variable_name, subscript),
+            (value, is_definition)
+        );
     }
 
-    pub fn get(&self, variable_name: String, subscript: usize) -> Option<&Variable> {
-        // println!("GET, scopes: {:#?}", self.scopes);
-        self.scopes[self.scope_depth].definitions.get(&(variable_name, subscript))
-    }
-
-    fn get_variable_with_highest_subscript(
+    pub fn get_variable_with_highest_subscript(
         &self,
         name: &String
     ) -> (Option<&Variable>, Option<usize>) {
@@ -95,7 +176,8 @@ impl Environment {
                 if lexeme == name && *subscript > highest_subscript {
                     scope = Some(i);
                     highest_subscript = *subscript;
-                    variable = Some(var);
+                    variable = Some(&var.0);
+                    break;
                 }
             }
         }
@@ -103,7 +185,26 @@ impl Environment {
         (variable, scope)
     }
 
-    fn count_variables_of_name(&self, name: &String) -> (usize, Option<ValueType>, bool) {
+    pub fn get_latest_variable_definition(&self, name: &String) -> (Option<usize>, Option<usize>) {
+        let mut register = None;
+        let mut scope = None;
+
+        println!("scopes: {:#?}", self.scopes);
+
+        for i in (0..=self.scope_depth).rev() {
+            for ((lexeme, _), (variable, is_definition)) in self.scopes[i].definitions.iter() {
+                if lexeme == name && *is_definition {
+                    register = Some(variable.location);
+                    scope = Some(i);
+                    return (register, scope);
+                }
+            }
+        }
+
+        (register, scope)
+    }
+
+    pub fn count_variables_of_name(&self, name: &String) -> (usize, Option<ValueType>, bool) {
         let mut count = 0;
         let mut value_type: Option<ValueType> = None;
         let mut is_mutable = false;
@@ -111,8 +212,8 @@ impl Environment {
             for ((lexeme, _), variable) in self.scopes[i].definitions.iter() {
                 if lexeme == name {
                     if count == 0 {
-                        value_type = Some(variable.value_type);
-                        is_mutable = variable.is_mutable;
+                        value_type = Some(variable.0.value_type);
+                        is_mutable = variable.0.is_mutable;
                     }
                     count += 1;
                 }
@@ -123,103 +224,5 @@ impl Environment {
     }
 }
 
-pub struct Compiler<'a> {
-    error_handler: &'a mut ErrorHandler,
-    environment: Environment,
-}
-
-impl<'a> Compiler<'a> {
-    pub fn new(error_handler: &'a mut ErrorHandler) -> Self {
-        Self {
-            error_handler,
-            environment: Environment::new(),
-        }
-    }
-
-    pub fn compile(&mut self, ast: Ast) -> Option<Vec<VMInstruction>> {
-        let mut ir_generator = IRGenerator::new(&mut self.environment);
-        let ir_graph = ir_generator.generate_ir_from_ast(ast);
-
-        let mut bytecode_generator = BytecodeGenerator::new(&ir_graph);
-
-        if self.error_handler.has_error() {
-            return None;
-        }
-
-        bytecode_generator.generate_bytecode();
-
-        // #[cfg(debug_assertions)]
-        // {
-        //     if !self.error_handler.has_error() {
-        //         println!("Unoptimized instructions:");
-        //         bytecode_generator.dissassemble();
-        //     }
-        // }
-
-        let optimized_registers = bytecode_generator.get_optimized_registers();
-
-        #[cfg(debug_assertions)]
-        {
-            let mut indentation_level = 0;
-            let indentation_size = 4;
-
-            if !self.error_handler.has_error() {
-                println!("Optimized instructions:");
-                println!("----------------------\n");
-                for instruction in &optimized_registers {
-                    match instruction {
-                        VMInstruction::EndScope => {
-                            indentation_level -= 1;
-                        }
-                        _ => {}
-                    }
-
-                    let print_string = format!(
-                        "{}{}",
-                        " ".repeat(indentation_level * indentation_size),
-                        instruction.dissassemble()
-                    );
-
-                    match instruction {
-                        VMInstruction::StartScope => {
-                            println!("{}\n", print_string);
-                        }
-                        VMInstruction::EndScope => {
-                            println!("\n{}", print_string);
-                        }
-                        _ => println!("{}", print_string),
-                    }
-
-                    match instruction {
-                        VMInstruction::StartScope => {
-                            indentation_level += 1;
-                        }
-                        _ => {}
-                    }
-                }
-                println!("\n----------------------")
-            }
-        }
-
-        Some(optimized_registers)
-    }
-}
-
-/*
-DEFINE R0 1
-STARTSCOPE
-
-    DEFINE R0 2
-    ADD R1 R0 1
-    STARTSCOPE
-
-        DEFINE R0 3
-        ADD R1 R0 1
-
-    ENDSCOPE
-    LOAD R2 true
-
-ENDSCOPE
-LOAD R1 false
-HALT
+*/
 */

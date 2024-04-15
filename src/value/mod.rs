@@ -1,4 +1,4 @@
-use crate::{ operations::{ BinaryOp, Op, UnaryOp }, util::make_first_char_uppercase };
+use crate::operations::{ BinaryOp, UnaryOp };
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum ValueType {
@@ -6,6 +6,7 @@ pub enum ValueType {
     Bool,
     Unkown,
     Empty,
+    Void,
 }
 impl ValueType {
     pub fn to_type_string(&self) -> String {
@@ -14,6 +15,7 @@ impl ValueType {
             ValueType::Bool => "bool".to_string(),
             ValueType::Unkown => "unknown".to_string(),
             ValueType::Empty => "empty".to_string(),
+            ValueType::Void => "void".to_string(),
         }
     }
 

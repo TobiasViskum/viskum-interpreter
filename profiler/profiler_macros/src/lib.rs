@@ -86,21 +86,23 @@ pub fn start(attr: TokenStream, item: TokenStream) -> TokenStream {
         let timing_code =
             quote! {{
                
-            let start = std::time::Instant::now();
+            let _____start_____ = std::time::Instant::now();
 
-            let result = {
+            let _____result_____ = {
                 #(#stmts)*
             };
 
-            let elapsed = start.elapsed();
+            let _____elapsed_____ = _____start_____.elapsed();
 
-            profiler::insert_time("PROGRAM", elapsed);
+            profiler::insert_time("PROGRAM", _____elapsed_____);
 
             if #attr != "false"  {
                 profiler::show_profiler();
+            } else {
+                println!("Elapted time: {:?}", _____elapsed_____);
             }
            
-            result
+            _____result_____
         }};
 
         let timed_block: syn::Block = match syn::parse2(timing_code) {

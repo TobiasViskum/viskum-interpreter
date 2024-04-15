@@ -9,3 +9,4 @@ if count < 10 { goto reIncr }
 count = 0
 
 stdout.println("Hello")
+

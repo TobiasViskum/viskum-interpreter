@@ -1,6 +1,8 @@
-use crate::{ parser::{ ast_generator::AstEnvironment, token::TokenMetadata }, value::ValueType };
+use std::rc::Rc;
 
-use super::{ expr::Expr, AstIdentifier };
+use crate::{ parser::{ self, token::{ Token, TokenMetadata } }, value_v2::ValueType };
+
+use super::{ expr::{ AstIdentifier, Expr }, type_check::{ AstEnvironment, SymbolTypeDef } };
 
 #[derive(Debug)]
 pub enum Stmt {
@@ -8,15 +10,33 @@ pub enum Stmt {
     VariableDefinition(VariableDefinitionStmt),
     VariableAssignment(VariableAssignmentStmt),
     ScopeStmt(ScopeStmt),
+    FunctionStmt(FunctionStmt),
+    TypeDefStmt(TypeDefStmt),
 }
 
 impl Stmt {
     pub fn type_check(
         &mut self,
-        ast_environment: &mut AstEnvironment,
+        ast_environment: &mut parser::ast_generator::AstEnvironment,
         token_vec: &mut Vec<TokenMetadata>
     ) -> Result<(), String> {
         match self {
+            Stmt::TypeDefStmt(_) => { Ok(()) }
+            Stmt::FunctionStmt(_) => {
+                // let mut function_environment = AstEnvironment::new();
+                // for parameter in parameters {
+                //     function_environment.insert(
+                //         parameter.name.to_string(),
+                //         parameter.value_type,
+                //         parameter.is_mutable,
+                //         true
+                //     );
+                // }
+
+                // body.type_check(&mut function_environment, token_vec)?;
+
+                Ok(())
+            }
             Stmt::ScopeStmt(_) => { Ok(()) }
             Stmt::ExprStmt(expr) => {
                 expr.type_check(ast_environment, token_vec)?;
@@ -45,8 +65,8 @@ impl Stmt {
                 let value_type = match &variable_definition.value_type {
                     Some(value_type) => {
                         if
-                            &resulted_value_type != value_type &&
-                            &resulted_value_type != &ValueType::Empty
+                            !&resulted_value_type.is(value_type) &&
+                            !&resulted_value_type.is(&ValueType::Empty)
                         {
                             if let Some(value) = &variable_definition.value {
                                 value.push_to_token_vec(token_vec);
@@ -55,7 +75,7 @@ impl Stmt {
 
                             ast_environment.insert(
                                 variable_definition.name.to_string(),
-                                *value_type,
+                                value_type.clone(),
                                 variable_definition.is_mutable,
                                 true
                             );
@@ -77,12 +97,12 @@ impl Stmt {
 
                 ast_environment.insert(
                     variable_definition.name.to_string(),
-                    *value_type,
+                    value_type.clone(),
                     variable_definition.is_mutable,
-                    resulted_value_type != ValueType::Empty // Compare type to if is empty
+                    !resulted_value_type.is(&ValueType::Empty) // Compare type to if is empty
                 );
 
-                variable_definition.value_type = Some(*value_type);
+                variable_definition.value_type = Some(value_type.clone());
 
                 Ok(())
             }
@@ -116,11 +136,11 @@ impl Stmt {
                             )
                         );
                     } else {
-                        if &resulted_value_type != &value_type {
+                        if !&resulted_value_type.is(&value_type) {
                             variable_assignment.value.push_to_token_vec(token_vec);
                             variable_assignment.field.push_to_token_vec(token_vec);
 
-                            let error_message = if &value_type == &ValueType::Unkown {
+                            let error_message = if value_type.is(&ValueType::Unkown) {
                                 format!(
                                     "The tye of variable '{}' is unknown and cannot be assigned to",
                                     variable_assignment.field.lexeme
@@ -211,7 +231,129 @@ impl ScopeStmt {
         }
     }
 
+    // pub fn type_check(&self, ast_environment: &mut AstEnvironment) {
+    //     self.forward_declare(ast_environment);
+
+    //     for stmt in &self.stmts {
+    //         match stmt {
+
+    //         }
+    //     }
+    // }
+
+    pub fn forward_declare(&self, ast_environment: &mut AstEnvironment) {
+        for stmt in &self.stmts {
+            match stmt {
+                Stmt::TypeDefStmt(type_def_stmt) => {
+                    let type_name = type_def_stmt.type_name.clone();
+                    let typing_value = match &type_def_stmt.typing.typing_value {
+                        TypingValue::Custom(_) => { panic!("Custom types not supported yet") }
+                        TypingValue::ValueType(value_type) => { value_type.clone() }
+                    };
+
+                    ast_environment.scopes[ast_environment.scope_depth].type_definitions.insert(
+                        type_name,
+                        SymbolTypeDef {
+                            value_type: typing_value,
+                        }
+                    );
+                }
+                _ => {}
+            }
+        }
+    }
+
     pub fn push_stmt(&mut self, stmt: Stmt) {
         self.stmts.push(stmt);
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionArgument {
+    pub name: String,
+    pub value_type: ValueType,
+    pub is_mutable: bool,
+}
+
+#[derive(Debug)]
+pub struct FunctionStmt {
+    pub name: String,
+    pub parameters: Vec<FunctionArgument>,
+    pub body: ScopeStmt,
+}
+
+impl FunctionStmt {
+    pub fn new(name: String, parameters: Vec<FunctionArgument>, body: ScopeStmt) -> Self {
+        Self {
+            name,
+            parameters,
+            body,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct TypeDefStmt {
+    pub type_name: String,
+    pub typing: Typing,
+}
+
+impl TypeDefStmt {
+    pub fn new(type_name: String, typing: Typing) -> Self {
+        Self {
+            type_name,
+            typing,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum TypingValue {
+    ValueType(ValueType),
+    Custom(String),
+}
+
+#[derive(Debug)]
+pub struct Typing {
+    pub typing_value: TypingValue,
+    pub token_metadata: TokenMetadata,
+    pub type_args: Option<Vec<Typing>>,
+}
+
+impl Typing {
+    pub fn new(
+        typing_value: TypingValue,
+        token_metadata: TokenMetadata,
+        type_args: Option<Vec<Typing>>
+    ) -> Self {
+        Self {
+            typing_value,
+            token_metadata,
+            type_args,
+        }
+    }
+
+    pub fn new_int32(token_metadata: TokenMetadata) -> Self {
+        Self {
+            typing_value: TypingValue::ValueType(ValueType::new_int32()),
+            token_metadata,
+            type_args: None,
+        }
+    }
+
+    pub fn new_bool(token_metadata: TokenMetadata) -> Self {
+        Self {
+            typing_value: TypingValue::ValueType(ValueType::new_bool()),
+            token_metadata,
+            type_args: None,
+        }
+    }
+
+    pub fn new_custom(custom_name: String, token_metadata: TokenMetadata) -> Self {
+        Self {
+            typing_value: TypingValue::Custom(custom_name),
+            token_metadata,
+            type_args: None,
+        }
     }
 }

@@ -1,6 +1,8 @@
 mod optimize_registers;
 
-use std::{ cell::RefCell, collections::HashMap };
+use std::cell::RefCell;
+
+use ahash::AHashMap;
 
 use crate::{
     constants::REGISTERS,
@@ -13,53 +15,19 @@ use super::ir_graph::{ IRControlFlowEdge, IREdge, IRGraph, IRNode, IRValue };
 
 #[derive(Debug)]
 pub struct BytecodeScopeRegisters {
-    virtual_registers: RefCell<HashMap<usize, usize>>,
+    virtual_registers: RefCell<AHashMap<usize, usize>>,
     available_registers: RefCell<Vec<usize>>,
 }
 
 impl BytecodeScopeRegisters {
+    #[profiler::function_tracker]
     pub fn new() -> Self {
-        let mut available_registers = Vec::new();
-        for i in (0..REGISTERS - 1).rev() {
-            available_registers.push(i);
-        }
+        let available_registers: Vec<usize> = (0..REGISTERS).rev().collect();
 
         Self {
-            virtual_registers: RefCell::new(HashMap::new()),
+            virtual_registers: RefCell::new(AHashMap::default()),
             available_registers: RefCell::new(available_registers),
         }
-    }
-
-    fn get_next_register(&self) -> usize {
-        match self.available_registers.borrow_mut().pop() {
-            Some(register) => register,
-            None => { panic!("No available registers") }
-        }
-    }
-
-    fn map_virtual_reg_to_physical_reg(&self, virtual_register: usize) -> usize {
-        let physical_register = self.get_next_register();
-        self.virtual_registers.borrow_mut().insert(virtual_register, physical_register);
-        physical_register
-    }
-
-    fn get_and_release_physical_register(&self, virtual_register: usize) -> usize {
-        let physical_register = *self.virtual_registers.borrow().get(&virtual_register).unwrap();
-        self.remove_virtual_register(virtual_register);
-        self.release_physical_register(physical_register);
-        physical_register
-    }
-
-    fn get_physcal_register(&self, virtual_register: usize) -> usize {
-        *self.virtual_registers.borrow().get(&virtual_register).unwrap()
-    }
-
-    fn remove_virtual_register(&self, virtual_register: usize) {
-        self.virtual_registers.borrow_mut().remove(&virtual_register);
-    }
-
-    fn release_physical_register(&self, physical_register: usize) {
-        self.available_registers.borrow_mut().push(physical_register);
     }
 }
 
@@ -72,11 +40,6 @@ pub struct BytecodeGenerator<'a> {
 
 impl<'a> BytecodeGenerator<'a> {
     pub fn new(ir_graph: &'a IRGraph) -> Self {
-        let mut available_registers = Vec::new();
-        for i in (1..REGISTERS).rev() {
-            available_registers.push(i - 1);
-        }
-
         Self {
             ir_graph: ir_graph,
             instructions: Vec::with_capacity(256),
@@ -158,39 +121,58 @@ impl<'a> BytecodeGenerator<'a> {
     }
 
     fn generate_assignment_instruction(&mut self, node: &IRNode, node_id: usize) {
-        let dest = match &node.result {
-            IRValue::VariableRegister(register) => register,
-            IRValue::Register(_) | IRValue::Constant(_) => {
+        let mut dest = match &node.result {
+            IRValue::VariableRegister(register) => *register,
+            IRValue::Register(_) | IRValue::Constant(_) | IRValue::DefinitionReference(_) => {
                 panic!("Unsupported operation.");
             }
         };
 
-        let edge_to_this_node = self.get_edge_to_node(node_id).unwrap();
-        let edge_src = edge_to_this_node.src;
+        let mut instruction_value: IRValue = IRValue::Constant(Value::Empty);
 
-        let adj_node = self.get_node(edge_src).unwrap().clone();
+        let edges_to_this_node = self.get_edges_to_node(node_id);
+        for edge_to_this_node in &edges_to_this_node {
+            let edge_src = edge_to_this_node.src;
 
-        match &adj_node.result {
-            IRValue::Constant(value) => {
-                let instruction = IRInstruction::new_assign(*dest, IRValue::Constant(*value));
-                self.instructions.push(instruction);
-            }
-            IRValue::Register(register) => {
-                self.generate_instruction_from_node(edge_src);
-                let instruction = IRInstruction::new_assign(*dest, IRValue::Register(*register));
-                self.instructions.push(instruction);
-            }
-            IRValue::VariableRegister(register) => {
-                let instruction = IRInstruction::new_assign(*dest, IRValue::Register(*register));
-                self.instructions.push(instruction);
+            let adj_node = self.get_node(edge_src).unwrap().clone();
+
+            match &adj_node.result {
+                IRValue::Constant(value) => {
+                    instruction_value = IRValue::Constant(*value);
+                    // let instruction = IRInstruction::new_assign(*dest, IRValue::Constant(*value));
+                    // self.instructions.push(instruction);
+                }
+                IRValue::Register(register) => {
+                    self.generate_instruction_from_node(edge_src);
+                    instruction_value = IRValue::Register(*register);
+                    // let instruction = IRInstruction::new_assign(
+                    //     *dest,
+                    //     IRValue::Register(*register)
+                    // );
+                    // self.instructions.push(instruction);
+                }
+                IRValue::VariableRegister(register) => {
+                    instruction_value = IRValue::Register(*register);
+                    // let instruction = IRInstruction::new_assign(
+                    //     *dest,
+                    //     IRValue::Register(*register)
+                    // );
+                    // self.instructions.push(instruction);
+                }
+                IRValue::DefinitionReference(register) => {
+                    // dest = *register;
+                }
             }
         }
+
+        let instruction = IRInstruction::new_assign(dest, instruction_value);
+        self.instructions.push(instruction);
     }
 
     fn generate_definement_instruction(&mut self, node: &IRNode, node_id: usize) {
         let dest = match &node.result {
             IRValue::VariableRegister(register) => register,
-            IRValue::Register(_) | IRValue::Constant(_) => {
+            IRValue::Register(_) | IRValue::Constant(_) | IRValue::DefinitionReference(_) => {
                 panic!("Unsupported operation.");
             }
         };
@@ -222,6 +204,9 @@ impl<'a> BytecodeGenerator<'a> {
                     );
                     self.instructions.push(instruction);
                 }
+                IRValue::DefinitionReference(_) => {
+                    panic!("Unsupported operation.");
+                }
             }
         } else {
             let instruction = IRInstruction::new_define(*dest, IRValue::Constant(Value::Empty));
@@ -232,7 +217,9 @@ impl<'a> BytecodeGenerator<'a> {
     fn generate_unary_instruction(&mut self, node: &IRNode, node_id: usize, unary_op: &UnaryOp) {
         let dest = match &node.result {
             IRValue::Register(register) => register,
-            IRValue::VariableRegister(_) | IRValue::Constant(_) => {
+            | IRValue::VariableRegister(_)
+            | IRValue::Constant(_)
+            | IRValue::DefinitionReference(_) => {
                 panic!("Unsupported operation.");
             }
         };
@@ -256,6 +243,9 @@ impl<'a> BytecodeGenerator<'a> {
                 src = IRValue::Register(*register);
                 self.generate_instruction_from_node(edge_src);
             }
+            IRValue::DefinitionReference(_) => {
+                panic!("Unsupported operation.");
+            }
         }
 
         let instruction = IRInstruction::new_unary(unary_op, *dest, src);
@@ -268,7 +258,9 @@ impl<'a> BytecodeGenerator<'a> {
         let dest = match &node.result {
             IRValue::Register(register) =>
                 InstructionRegister::new(register.register, register.scope),
-            IRValue::VariableRegister(_) | IRValue::Constant(_) => {
+            | IRValue::VariableRegister(_)
+            | IRValue::Constant(_)
+            | IRValue::DefinitionReference(_) => {
                 panic!("Unsupported operation.");
             }
         };
@@ -322,6 +314,9 @@ impl<'a> BytecodeGenerator<'a> {
                             )
                         );
                     }
+                }
+                IRValue::DefinitionReference(_) => {
+                    panic!("Unsupported operation.");
                 }
             }
         }

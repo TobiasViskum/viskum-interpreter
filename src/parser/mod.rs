@@ -31,7 +31,7 @@ impl<'a> Parser<'a> {
             source,
             next: None,
             current: None,
-            previous_tokens: Vec::with_capacity(256),
+            previous_tokens: Vec::with_capacity(source.len() / 2),
             had_error: false,
             panic_mode: false,
             ast_generator: AstGenerator::new(),

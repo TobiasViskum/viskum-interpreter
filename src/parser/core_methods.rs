@@ -1,10 +1,11 @@
-use crate::{ ast::AstIdentifier, operations::Op, value::ValueType };
+use std::fmt::format;
 
-use super::{
-    precedence::Precedence,
-    token::{ token_type::TokenType, Token, TokenMetadata },
-    Parser,
+use crate::{
+    ast::{ expr::AstIdentifier, stmt::{ FunctionArgument, Typing } },
+    value_v2::ValueType,
 };
+
+use super::{ precedence::Precedence, token::{ token_type::TokenType, Token }, Parser };
 
 impl<'a> Parser<'a> {
     pub(super) fn statement(&mut self) {
@@ -264,33 +265,49 @@ impl<'a> Parser<'a> {
                 }
             }
         } else {
-            // if let Some(msg) = msg {
-            //     let mut msg = msg.to_string();
-            //     let report_token = if self.get_previous().get_ttype() == &TokenType::TokenEOF {
-            //         msg = format!("{}unexpected end of file", msg);
-            //         self.peek(-2).unwrap()
-            //     } else {
-            //         self.get_previous()
-            //     };
-
-            //     self.report_compile_error(msg.to_string(), vec![report_token.get_metadata()]);
-            // } else {
-            //     if self.get_previous().get_ttype() == &TokenType::TokenEOF {
-            //         self.report_compile_error(
-            //             "Unexpected end of file (no prefix rule)".to_string(),
-            //             vec![self.get_previous().get_metadata()]
-            //         )
-            //     } else {
-            //         self.report_compile_error(
-            //             format!(
-            //                 "Unexpected token: '{}' (no prefix rule)",
-            //                 self.get_previous().get_lexeme(self.source)
-            //             ),
-            //             vec![self.get_previous().get_metadata()]
-            //         )
-            //     }
-            // }
+            self.report_compile_error(
+                format!(
+                    "Unexpected token: '{}' (no prefix rule)",
+                    self.get_previous().get_lexeme(self.source)
+                ),
+                vec![self.get_previous().get_metadata()]
+            )
         }
+    }
+
+    pub(super) fn resolve_typing(&mut self) -> Result<Typing, ()> {
+        let current_token = self.get_current();
+        let token_metadata = current_token.get_metadata();
+
+        let typing = match current_token.get_ttype() {
+            TokenType::TokenInt32 => Typing::new_int32(token_metadata),
+            TokenType::TokenBool => Typing::new_bool(token_metadata),
+            TokenType::TokenIdentifier =>
+                Typing::new_custom(current_token.get_lexeme(self.source), token_metadata),
+            _ => {
+                self.report_compile_error(
+                    format!(
+                        "Unexpected '{}' cannot be used as a type",
+                        current_token.get_lexeme(self.source)
+                    ),
+                    vec![token_metadata]
+                );
+                return Err(());
+            }
+        };
+
+        self.advance();
+
+        Ok(typing)
+        /* 
+        Idea for resolving types like: state<i32>
+
+        .append_type() -> Result<(), String> // x does not take any type parameters
+        */
+
+        // match current_token.get_ttype() {
+        //     TokenType::TokenIdentifier => crate::value_v2::ValueType::
+        // }
     }
 
     pub(super) fn resolve_type(&mut self) -> (Option<ValueType>, Option<Token>, isize) {
@@ -308,9 +325,9 @@ impl<'a> Parser<'a> {
                     }
 
                     if token.get_ttype() == &TokenType::TokenInt32 {
-                        return (Some(ValueType::Int32), Some(token.clone()), search_index);
+                        return (Some(ValueType::new_int32()), Some(token.clone()), search_index);
                     } else if token.get_ttype() == &TokenType::TokenBool {
-                        return (Some(ValueType::Bool), Some(token.clone()), search_index);
+                        return (Some(ValueType::new_bool()), Some(token.clone()), search_index);
                     } else {
                         search_index -= 1;
                     }
@@ -327,6 +344,51 @@ impl<'a> Parser<'a> {
             Some(token) => (token.get_ttype() == &TokenType::TokenMutable, start_search_index),
             None => (false, start_search_index),
         }
+    }
+
+    pub(super) fn resolve_function_args(&mut self) -> Vec<FunctionArgument> {
+        let mut args = vec![];
+
+        type Hello = i32;
+
+        let mut i32 = 0;
+
+        // while
+        //     !self.is_at_end() &&
+        //     !matches!(self.get_current().get_ttype(), &TokenType::TokenRightParen)
+        // {
+        //     self.advance();
+        //     if let Some(type_token) = self.consume_type("Expected type in function argument") {
+        //         self.advance();
+        //         if let
+        //     }
+        // }
+
+        args
+    }
+
+    // Temporary functions
+    fn consume_type(&mut self, msg: &str) -> Option<&TokenType> {
+        if matches!(self.get_current().get_ttype(), TokenType::TokenInt32 | TokenType::TokenBool) {
+            Some(self.get_current().get_ttype())
+        } else {
+            self.report_compile_error(msg.to_string(), vec![self.get_current().get_metadata()]);
+            None
+        }
+    }
+
+    fn consume_identifier(&mut self, msg: &str) -> Option<String> {
+        if matches!(self.get_current().get_ttype(), TokenType::TokenIdentifier) {
+            Some(self.get_current().get_lexeme(self.source))
+        } else {
+            self.report_compile_error(msg.to_string(), vec![self.get_current().get_metadata()]);
+            None
+        }
+    }
+
+    pub(super) fn resolve_function_return_type(&mut self) -> ValueType {
+        // ValueType::Void
+        panic!("NOT IMPLEMENTED: FN RETURN TYPE")
     }
 
     pub(super) fn synchronize(&mut self) {

@@ -26,6 +26,17 @@ impl BinaryOp {
             BinaryOp::Div => 1,
         }
     }
+
+    pub fn to_op_string(&self) -> String {
+        (
+            match self {
+                Self::Add => "Addition",
+                Self::Sub => "Subtraction",
+                Self::Mul => "Multiplication",
+                Self::Div => "Division",
+            }
+        ).to_string()
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -40,6 +51,15 @@ impl UnaryOp {
             UnaryOp::Neg => 1,
             UnaryOp::Truthy => 1,
         }
+    }
+
+    pub fn to_op_string(&self) -> String {
+        (
+            match self {
+                Self::Neg => "Negation",
+                Self::Truthy => "Truthy",
+            }
+        ).to_string()
     }
 }
 

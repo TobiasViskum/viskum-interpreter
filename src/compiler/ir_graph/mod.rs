@@ -13,6 +13,7 @@ pub enum IRValue {
     Register(InstructionRegister),
     Constant(Value),
     VariableRegister(InstructionRegister),
+    DefinitionReference(InstructionRegister),
 }
 
 impl IRValue {
@@ -21,6 +22,9 @@ impl IRValue {
             IRValue::Register(register) => IRInstructionSrc::Register(*register),
             IRValue::Constant(value) => IRInstructionSrc::Constant(*value),
             IRValue::VariableRegister(register) => IRInstructionSrc::VariableRegister(*register),
+            IRValue::DefinitionReference(_) => {
+                panic!("Cannot convert IRValue::RegisterReference to IRInstructionSrc")
+            }
         }
     }
 }

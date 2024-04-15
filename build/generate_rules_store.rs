@@ -38,7 +38,11 @@ pub fn generate_rules_store() -> io::Result<()> {
 
     writeln!(file, "lazy_static! {{")?;
     writeln!(file, "    pub static ref PARSE_RULES: Vec<ParseRule> = {{")?;
-    writeln!(file, "        let mut parse_rules_vec = Vec::new();")?;
+    writeln!(
+        file,
+        "        let mut parse_rules_vec = Vec::with_capacity({});",
+        TOKEN_TYPES_AND_PARSE_RULES.len()
+    )?;
     for parse_rule in TOKEN_TYPES_AND_PARSE_RULES {
         let split = parse_rule.split("=").collect::<Vec<&str>>();
 

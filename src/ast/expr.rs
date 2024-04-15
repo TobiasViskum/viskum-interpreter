@@ -1,10 +1,9 @@
 use crate::{
+    compiler::cfg::dag::{ DAGNode, DAGOp, DAG },
     operations::{ BinaryOp, UnaryOp },
     parser::{ ast_generator::AstEnvironment, token::TokenMetadata },
-    value::ValueType,
+    value_v2::{ Value, ValueHolder, ValueType },
 };
-
-use super::{ AstIdentifier, AstValue };
 
 #[derive(Debug)]
 pub enum Expr {
@@ -15,6 +14,25 @@ pub enum Expr {
 }
 
 impl Expr {
+    pub fn compile_to_dag(&self) -> DAG {
+        let mut dag = DAG::new();
+
+        let entry_node_id = self.compile_to_dag_node(&mut dag);
+
+        dag.set_entry_node_id(entry_node_id);
+
+        dag
+    }
+
+    pub fn compile_to_dag_node(&self, dag: &mut DAG) -> usize {
+        match self {
+            Expr::BinaryExpr(expr) => expr.compile_to_dag_node(dag),
+            Expr::UnaryExpr(expr) => expr.compile_to_dag_node(dag),
+            Expr::Literal(ast_value) => ast_value.compile_to_dag_node(dag),
+            Expr::IdentifierLookup(ast_identifier) => ast_identifier.compile_to_dag_node(dag),
+        }
+    }
+
     pub fn type_check(
         &self,
         ast_environemtn: &AstEnvironment,
@@ -23,7 +41,7 @@ impl Expr {
         match self {
             Expr::BinaryExpr(expr) => expr.type_check(ast_environemtn, token_vec),
             Expr::UnaryExpr(expr) => expr.type_check(ast_environemtn, token_vec),
-            Expr::Literal(ast_value) => Ok(ast_value.value.to_value_type()),
+            Expr::Literal(ast_value) => Ok(ast_value.value.value_type.clone()),
             Expr::IdentifierLookup(ast_identifier) => {
                 if let Some((value_type, _, _)) = ast_environemtn.get(&ast_identifier.lexeme) {
                     Ok(value_type)
@@ -53,6 +71,17 @@ pub struct BinaryExpr {
 }
 
 impl BinaryExpr {
+    pub fn compile_to_dag_node(&self, dag: &mut DAG) -> usize {
+        let left_dag = self.left.compile_to_dag_node(dag);
+        let right_dag = self.right.compile_to_dag_node(dag);
+
+        let op = DAGOp::BinaryOp(self.operator);
+
+        let mut dag_node = DAGNode::new(op, Some(vec![left_dag, right_dag]));
+
+        dag.add_node(dag_node)
+    }
+
     pub fn push_to_token_vec(&self, token_vec: &mut Vec<TokenMetadata>) {
         self.left.push_to_token_vec(token_vec);
         self.right.push_to_token_vec(token_vec);
@@ -84,6 +113,16 @@ pub struct UnaryExpr {
 }
 
 impl UnaryExpr {
+    pub fn compile_to_dag_node(&self, dag: &mut DAG) -> usize {
+        let right_dag = self.right.compile_to_dag_node(dag);
+
+        let op = DAGOp::UnaryOp(self.operator);
+
+        let mut dag_node = DAGNode::new(op, Some(vec![right_dag]));
+
+        dag.add_node(dag_node)
+    }
+
     pub fn push_to_token_vec(&self, token_vec: &mut Vec<TokenMetadata>) {
         self.right.push_to_token_vec(token_vec);
     }
@@ -109,5 +148,75 @@ impl UnaryExpr {
                 Err(e)
             }
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AstValue {
+    pub value: ValueHolder,
+    pub token_metadata: TokenMetadata,
+}
+
+impl AstValue {
+    pub fn compile_to_dag_node(&self, dag: &mut DAG) -> usize {
+        let op = DAGOp::Const(self.value.value.clone());
+
+        let mut dag_node = DAGNode::new(op, None);
+
+        dag.add_node(dag_node)
+    }
+
+    pub fn new(value: ValueHolder, token_metadata: TokenMetadata) -> Self {
+        Self {
+            value,
+            token_metadata,
+        }
+    }
+
+    pub fn get_value(&self) -> Value {
+        self.value.value.clone()
+    }
+
+    pub fn get_token_metadata(&self) -> TokenMetadata {
+        self.token_metadata
+    }
+
+    pub fn push_to_token_vec(&self, token_vec: &mut Vec<TokenMetadata>) {
+        token_vec.push(self.token_metadata);
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AstIdentifier {
+    pub lexeme: String,
+    pub token_metadata: TokenMetadata,
+}
+
+impl AstIdentifier {
+    pub fn compile_to_dag_node(&self, dag: &mut DAG) -> usize {
+        let op = DAGOp::Identifier(self.lexeme.clone());
+
+        let mut dag_node = DAGNode::new(op, None);
+
+        dag.add_node(dag_node)
+    }
+
+    pub fn new(lexeme: String, token_metadata: TokenMetadata) -> Self {
+        Self {
+            lexeme,
+            token_metadata,
+        }
+    }
+
+    pub fn get_lexeme(&self) -> String {
+        self.lexeme.clone()
+    }
+
+    pub fn get_token_metadata(&self) -> TokenMetadata {
+        self.token_metadata
+    }
+
+    pub fn push_to_token_vec(&self, token_vec: &mut Vec<TokenMetadata>) {
+        token_vec.push(self.token_metadata);
     }
 }

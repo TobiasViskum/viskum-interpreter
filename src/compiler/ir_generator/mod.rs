@@ -78,7 +78,8 @@ impl<'a> IRGenerator<'a> {
                         variable_definition.value_type.unwrap(),
                         variable_definition.is_mutable
                     ),
-                    subscript
+                    subscript,
+                    true
                 );
 
                 let definition_id = self.add_node(IRNode {
@@ -100,26 +101,38 @@ impl<'a> IRGenerator<'a> {
                     &variable_name
                 );
                 let subscript = subscript + 1;
+                let value_type = value_type.unwrap();
 
-                if let Some(value_type) = value_type {
-                    self.environment.insert(
-                        variable_name,
-                        Variable::new(next_register, value_type, is_mutable),
-                        subscript
-                    );
+                let assign_id = self.add_node(IRNode {
+                    operation: Op::Assign,
+                    result: IRValue::VariableRegister(
+                        InstructionRegister::new(next_register, self.scope_depth)
+                    ),
+                });
 
-                    let assign_id = self.add_node(IRNode {
-                        operation: Op::Assign,
-                        result: IRValue::VariableRegister(
-                            InstructionRegister::new(next_register, self.scope_depth)
-                        ),
-                    });
+                let value_id = self.compile_expr(&variable_assignment.value);
+                self.add_edge(value_id, assign_id);
 
-                    let value_id = self.compile_expr(&variable_assignment.value);
+                // let (register, scope) = self.environment.get_latest_variable_definition(
+                //     &variable_name
+                // );
 
-                    self.add_edge(value_id, assign_id);
-                    linked_ids.push(assign_id);
-                }
+                // let definition_reference_id = self.add_node(IRNode {
+                //     operation: Op::NoOp,
+                //     result: IRValue::DefinitionReference(
+                //         InstructionRegister::new(register.unwrap(), scope.unwrap())
+                //     ),
+                // });
+                // self.add_edge(definition_reference_id, assign_id);
+
+                self.environment.insert(
+                    variable_name,
+                    Variable::new(next_register, value_type, is_mutable),
+                    subscript,
+                    false
+                );
+
+                linked_ids.push(assign_id);
             }
         }
     }

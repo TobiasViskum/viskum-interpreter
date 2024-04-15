@@ -1,67 +1,15 @@
 use crate::{
     operations::{ BinaryOp, UnaryOp },
     parser::{ ast_generator::AstEnvironment, token::TokenMetadata },
-    value::{ Value, ValueType },
+    value_v2::ValueType,
 };
 
-use self::{ expr::Expr, stmt::{ ScopeStmt, Stmt } };
+use self::{ expr::Expr, stmt::{ FunctionArgument, FunctionStmt, ScopeStmt, Stmt } };
 
+mod generate_cfg;
 pub mod expr;
 pub mod stmt;
-
-#[derive(Debug, Clone)]
-pub struct AstValue {
-    value: Value,
-    token_metadata: TokenMetadata,
-}
-
-impl AstValue {
-    pub fn new(value: Value, token_metadata: TokenMetadata) -> Self {
-        Self {
-            value,
-            token_metadata,
-        }
-    }
-
-    pub fn get_value(&self) -> Value {
-        self.value
-    }
-
-    pub fn get_token_metadata(&self) -> TokenMetadata {
-        self.token_metadata
-    }
-
-    pub fn push_to_token_vec(&self, token_vec: &mut Vec<TokenMetadata>) {
-        token_vec.push(self.token_metadata);
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct AstIdentifier {
-    lexeme: String,
-    token_metadata: TokenMetadata,
-}
-
-impl AstIdentifier {
-    pub fn new(lexeme: String, token_metadata: TokenMetadata) -> Self {
-        Self {
-            lexeme,
-            token_metadata,
-        }
-    }
-
-    pub fn get_lexeme(&self) -> String {
-        self.lexeme.clone()
-    }
-
-    pub fn get_token_metadata(&self) -> TokenMetadata {
-        self.token_metadata
-    }
-
-    pub fn push_to_token_vec(&self, token_vec: &mut Vec<TokenMetadata>) {
-        token_vec.push(self.token_metadata);
-    }
-}
+mod type_check;
 
 #[derive(Debug)]
 pub struct Ast {
@@ -85,6 +33,15 @@ impl Ast {
             panic!("No scope to push to");
         }
     }
+
+    pub fn start_function(
+        &mut self,
+        name: String,
+        args: Vec<FunctionArgument>,
+        return_type: ValueType
+    ) {}
+
+    pub fn end_function(&mut self) {}
 
     pub fn start_scope(&mut self) {
         if self.current_scope_ptr.is_none() {

@@ -2,14 +2,19 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{
-        expr::{ BinaryExpr, Expr, UnaryExpr },
-        stmt::{ ScopeStmt, Stmt, VariableAssignmentStmt, VariableDefinitionStmt },
+        expr::{ AstIdentifier, AstValue, BinaryExpr, Expr, UnaryExpr },
+        stmt::{
+            FunctionArgument,
+            ScopeStmt,
+            Stmt,
+            TypeDefStmt,
+            VariableAssignmentStmt,
+            VariableDefinitionStmt,
+        },
         Ast,
-        AstIdentifier,
-        AstValue,
     },
     operations::{ BinaryOp, UnaryOp },
-    value::ValueType,
+    value_v2::ValueType,
 };
 use super::token::{ token_type::TokenType, Token, TokenMetadata };
 
@@ -22,7 +27,7 @@ struct AstVariableValue {
 
 impl AstVariableValue {
     pub fn to_tuple(&self) -> (ValueType, bool, bool) {
-        (self.value_type, self.is_mutable, self.is_initialized)
+        (self.value_type.clone(), self.is_mutable, self.is_initialized)
     }
 }
 
@@ -138,6 +143,19 @@ impl AstGenerator {
         self.ast_environment.get_scope_depth()
     }
 
+    pub fn start_function(
+        &mut self,
+        name: String,
+        args: Vec<FunctionArgument>,
+        return_type: ValueType
+    ) {
+        self.ast.as_mut().unwrap().start_function(name, args, return_type);
+    }
+
+    pub fn end_function(&mut self) {
+        self.ast.as_mut().unwrap().end_function();
+    }
+
     pub fn start_scope(&mut self) {
         self.ast_environment.start_scope();
         self.ast.as_mut().unwrap().start_scope();
@@ -166,6 +184,13 @@ impl AstGenerator {
 
     pub fn emit_identifier_lookup(&mut self, variable: AstIdentifier) {
         self.exprs.push(Expr::IdentifierLookup(variable));
+    }
+
+    pub fn emit_type_definition(
+        &mut self,
+        type_def: TypeDefStmt
+    ) -> Result<(), (String, Vec<TokenMetadata>)> {
+        self.push_stmt(Stmt::TypeDefStmt(type_def))
     }
 
     pub fn emit_variable_assignment(

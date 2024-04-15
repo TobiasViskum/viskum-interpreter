@@ -1,7 +1,14 @@
-pub const TOKEN_TYPES_AND_PARSE_RULES: [&str; 23] = [
+pub const TOKEN_TYPES_AND_PARSE_RULES: [&str; 26] = [
     // Single-character tokens
     "LeftParen              = { grouping,      None,   PrecNone       }",
     "RightParen             = { None,          None,   PrecNone       }",
+    "LeftCurlyBrace         = { None,          None,   PrecNone       }",
+    "RightCurlyBrace        = { None,          None,   PrecNone       }",
+    "LeftSquareBracket      = { None,          None,   PrecNone       }",
+    "RightSquareBracket     = { None,          None,   PrecNone       }",
+    "Semicolon              = { None,          None,   PrecNone       }",
+    "Bang                   = { unary,         None,   PrecNone       }",
+    "Assign                 = { None,          None,   PrecNone       }",
 
     // Arithmetic operators
     "Minus                  = { unary,         binary, PrecTerm       }",
@@ -20,19 +27,13 @@ pub const TOKEN_TYPES_AND_PARSE_RULES: [&str; 23] = [
     "Int32                  = { skip,          None,   PrecNone       }",
     "Bool                   = { skip,          None,   PrecNone       }",
 
-    // Single-character tokens
-    "Semicolon              = { None,          None,   PrecNone       }",
-    "Bang                   = { unary,         None,   PrecNone       }",
-    "Assign                 = { None,          None,   PrecNone       }",
-    "LeftCurlyBrace         = { None,          None,   PrecNone       }",
-    "RightCurlyBrace        = { None,          None,   PrecNone       }",
-
     // Double-character tokens
     "Define                 = { None,          None,   PrecNone       }",
 
     // Keywords
     "Mutable                = { skip,          None,   PrecNone       }",
-    "Function               = { skip,          None,   PrecNone       }",
+    "Function               = { function,      None,   PrecNone       }",
+    "Typing                 = { typing,        None,   PrecNone       }",
     "Print                  = { None,          None,   PrecNone       }",
 
     "Error                  = { error,         None,   PrecNone       }",

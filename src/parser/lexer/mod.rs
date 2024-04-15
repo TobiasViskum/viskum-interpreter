@@ -29,27 +29,16 @@ impl<'a> Lexer<'a> {
         self.line = 1;
     }
 
-    fn skip_whitespace(&mut self) {
-        while let Some(c) = self.peek(0) {
-            if self.is_at_end() {
-                break;
-            }
-            match c {
-                ' ' | '\r' | '\t' => self.advance(),
-                '\n' => {
-                    self.line += 1;
-                    self.advance();
-                }
-                _ => {
-                    break;
-                }
-            }
-        }
-    }
-
     #[profiler::function_tracker]
     pub fn scan_token(&mut self) -> Option<Token> {
         self.skip_whitespace();
+
+        match self.skip_comment() {
+            Some(token) => {
+                return Some(token);
+            }
+            None => {}
+        }
 
         if self.current == self.source.len() {
             return self.make_eof_token();
@@ -68,6 +57,8 @@ impl<'a> Lexer<'a> {
             ')' => self.make_token(TokenType::TokenRightParen),
             '{' => self.make_token(TokenType::TokenLeftCurlyBrace),
             '}' => self.make_token(TokenType::TokenRightCurlyBrace),
+            '[' => self.make_token(TokenType::TokenLeftSquareBracket),
+            ']' => self.make_token(TokenType::TokenRightSquareBracket),
             '+' => self.make_token(TokenType::TokenPlus),
             '-' => self.make_token(TokenType::TokenMinus),
             '*' => self.make_token(TokenType::TokenStar),

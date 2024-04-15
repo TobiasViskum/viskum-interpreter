@@ -1,4 +1,8 @@
-use crate::parser::token::{ token_type::TokenType, Token };
+use crate::{
+    ast::stmt::FunctionArgument,
+    parser::token::{ token_type::TokenType, Token },
+    value_v2::ValueType,
+};
 
 use super::{ parse_rule::{ ParseRule, PARSE_RULES }, token::TokenMetadata, Parser };
 
@@ -240,6 +244,19 @@ impl<'a> Parser<'a> {
 
     pub(super) fn end_scope(&mut self) {
         self.ast_generator.end_scope();
+    }
+
+    pub(super) fn start_function(
+        &mut self,
+        name: String,
+        args: Vec<FunctionArgument>,
+        return_type: ValueType
+    ) {
+        self.ast_generator.start_function(name, args, return_type);
+    }
+
+    pub(super) fn end_function(&mut self) {
+        self.ast_generator.end_function();
     }
 
     pub(super) fn report_compile_error(&mut self, message: String, token: Vec<TokenMetadata>) {

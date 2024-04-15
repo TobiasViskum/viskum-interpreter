@@ -11,10 +11,11 @@ mod parser;
 mod vm;
 mod compiler;
 mod ast;
-mod value;
+// mod value;
 mod constants;
 mod operations;
 mod util;
+mod value_v2;
 
 /*
 MUL R0 2 3
