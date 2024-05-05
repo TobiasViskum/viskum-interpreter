@@ -1,4 +1,4 @@
-use crate::{ operations::{ BinaryOp, UnaryOp }, value_v2::Value };
+use crate::{ operations::{ BinaryOp, UnaryOp }, value::Value };
 
 #[derive(Debug, Clone, Copy)]
 pub struct InstructionRegister {
@@ -77,11 +77,16 @@ pub enum Instruction {
         dest: InstructionRegister,
         src: InstructionSrc,
     },
+    Function {
+        dest: InstructionRegister,
+        instructions_count: u16,
+    },
 }
 
 impl Instruction {
     pub fn dissassemble(&self) -> String {
         match self {
+            Self::Function { dest, instructions_count } => panic!("DISSASSEMBLE NOT IMPLEMENTED"),
             Self::Halt => { "HALT".to_string() }
             Self::StartScope => { "STARTSCOPE".to_string() }
             Self::EndScope => { "ENDSCOPE".to_string() }

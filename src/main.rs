@@ -15,7 +15,7 @@ mod ast;
 mod constants;
 mod operations;
 mod util;
-mod value_v2;
+mod value;
 
 /*
 MUL R0 2 3

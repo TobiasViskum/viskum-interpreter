@@ -27,7 +27,7 @@ impl Ast {
 
         cfg.add_node(CFGNode::ProgramStart(get_next_node_id()));
 
-        for stmt in &self.main_scope.stmts {
+        for stmt in &self.main_scope.cf_stmts {
             self.generate_cfg_node(stmt, &mut cfg, &get_next_node_id);
         }
 
@@ -109,7 +109,7 @@ impl Ast {
             Stmt::ScopeStmt(scope_stmt) => {
                 cfg.add_node(CFGNode::ScopeStart(get_next_node_id()));
 
-                for stmt in &scope_stmt.stmts {
+                for stmt in &scope_stmt.cf_stmts {
                     self.generate_cfg_node(stmt, cfg, get_next_node_id);
                 }
 

@@ -7,14 +7,16 @@ pub struct TokenMetadata {
     start: usize,
     length: usize,
     line: usize,
+    token_type: TokenType,
 }
 
 impl TokenMetadata {
-    pub fn new(start: usize, length: usize, line: usize) -> Self {
+    pub fn new(start: usize, length: usize, line: usize, token_type: TokenType) -> Self {
         Self {
             start,
             length,
             line,
+            token_type,
         }
     }
 
@@ -27,6 +29,10 @@ impl TokenMetadata {
     pub fn get_line(&self) -> usize {
         self.line
     }
+    pub fn get_ttype(&self) -> TokenType {
+        self.token_type
+    }
+
     pub fn increment_length(&mut self) {
         self.length += 1;
     }
@@ -62,6 +68,7 @@ impl Token {
             start: self.start,
             length: self.length,
             line: self.line,
+            token_type: self.token_type,
         }
     }
 

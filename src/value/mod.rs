@@ -9,6 +9,10 @@ pub enum ValueType {
     Void,
 }
 impl ValueType {
+    pub fn is(&self, other: &ValueType) -> bool {
+        self == other
+    }
+
     pub fn to_type_string(&self) -> String {
         match self {
             ValueType::Int32 => "i32".to_string(),

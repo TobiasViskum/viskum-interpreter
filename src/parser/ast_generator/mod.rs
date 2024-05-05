@@ -14,7 +14,7 @@ use crate::{
         Ast,
     },
     operations::{ BinaryOp, UnaryOp },
-    value_v2::ValueType,
+    value::ValueType,
 };
 use super::token::{ token_type::TokenType, Token, TokenMetadata };
 
@@ -147,7 +147,7 @@ impl AstGenerator {
         &mut self,
         name: String,
         args: Vec<FunctionArgument>,
-        return_type: ValueType
+        return_type: Option<ValueType>
     ) {
         self.ast.as_mut().unwrap().start_function(name, args, return_type);
     }
@@ -218,22 +218,22 @@ impl AstGenerator {
     pub fn emit_variable_definition(
         &mut self,
         lexeme: String,
-        identifier_token: Token,
+        identifier_metadata: TokenMetadata,
         value_type: Option<ValueType>,
         is_mutable: bool,
-        last_token_in_definition: Token
+        last_token_in_definition: TokenMetadata
     ) -> Result<(), (String, Vec<TokenMetadata>)> {
         let value = self.exprs.pop();
 
         if
             !matches!(
-                identifier_token.get_ttype(),
+                identifier_metadata.get_ttype(),
                 TokenType::TokenIdentifier | TokenType::TokenInt32 | TokenType::TokenBool
             )
         {
             return Err((
                 format!("Invalid variable definition target: '{}'", lexeme),
-                vec![identifier_token.get_metadata()],
+                vec![identifier_metadata],
             ));
         }
 
@@ -243,7 +243,7 @@ impl AstGenerator {
                 value_type,
                 is_mutable,
                 value,
-                last_token_in_definition.get_metadata()
+                last_token_in_definition
             )
         );
 

@@ -2,7 +2,7 @@ use crate::{
     compiler::cfg::dag::{ DAGNode, DAGOp, DAG },
     operations::{ BinaryOp, UnaryOp },
     parser::{ ast_generator::AstEnvironment, token::TokenMetadata },
-    value_v2::{ Value, ValueHolder, ValueType },
+    value::{ Value, ValueType },
 };
 
 #[derive(Debug)]
@@ -41,7 +41,7 @@ impl Expr {
         match self {
             Expr::BinaryExpr(expr) => expr.type_check(ast_environemtn, token_vec),
             Expr::UnaryExpr(expr) => expr.type_check(ast_environemtn, token_vec),
-            Expr::Literal(ast_value) => Ok(ast_value.value.value_type.clone()),
+            Expr::Literal(ast_value) => Ok(ast_value.value.to_value_type()),
             Expr::IdentifierLookup(ast_identifier) => {
                 if let Some((value_type, _, _)) = ast_environemtn.get(&ast_identifier.lexeme) {
                     Ok(value_type)
@@ -153,20 +153,20 @@ impl UnaryExpr {
 
 #[derive(Debug, Clone)]
 pub struct AstValue {
-    pub value: ValueHolder,
+    pub value: Value,
     pub token_metadata: TokenMetadata,
 }
 
 impl AstValue {
     pub fn compile_to_dag_node(&self, dag: &mut DAG) -> usize {
-        let op = DAGOp::Const(self.value.value.clone());
+        let op = DAGOp::Const(self.value.clone());
 
         let mut dag_node = DAGNode::new(op, None);
 
         dag.add_node(dag_node)
     }
 
-    pub fn new(value: ValueHolder, token_metadata: TokenMetadata) -> Self {
+    pub fn new(value: Value, token_metadata: TokenMetadata) -> Self {
         Self {
             value,
             token_metadata,
@@ -174,7 +174,7 @@ impl AstValue {
     }
 
     pub fn get_value(&self) -> Value {
-        self.value.value.clone()
+        self.value.clone()
     }
 
     pub fn get_token_metadata(&self) -> TokenMetadata {

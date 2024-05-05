@@ -1,6 +1,6 @@
 use ahash::AHashMap;
 
-use crate::{ constants::REGISTERS, value_v2::Value, vm::instructions::Instruction };
+use crate::{ constants::REGISTERS, value::Value, vm::instructions::Instruction };
 
 use self::cfg_node::CFGProcessNode;
 pub mod cfg_node;

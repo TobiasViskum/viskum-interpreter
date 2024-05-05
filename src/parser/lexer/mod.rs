@@ -64,6 +64,7 @@ impl<'a> Lexer<'a> {
             '*' => self.make_token(TokenType::TokenStar),
             '/' => self.make_token(TokenType::TokenSlash),
             ';' => self.make_token(TokenType::TokenSemicolon),
+            ',' => self.make_token(TokenType::TokenComma),
             '=' => {
                 // if self.peek(0).unwrap() == '=' {
                 //     self.advance();

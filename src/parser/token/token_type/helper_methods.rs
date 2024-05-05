@@ -7,4 +7,8 @@ impl TokenType {
             _ => false,
         }
     }
+
+    pub fn is(&self, other: &TokenType) -> bool {
+        self == other
+    }
 }

@@ -2,7 +2,7 @@ use ahash::AHashMap;
 
 use crate::{
     operations::{ BinaryOp, UnaryOp },
-    value_v2::Value,
+    value::Value,
     vm::instructions::{ Instruction, InstructionRegister, InstructionSrc },
 };
 
@@ -356,7 +356,7 @@ impl DAG {
                         Some(evaluated)
                     }
                     UnaryOp::Truthy => {
-                        let evaluated = rhs.not().unwrap();
+                        let evaluated = rhs.not();
                         self.remove_node(operand);
                         self.add_node_at(
                             DAGNode::new(DAGOp::Const(evaluated.clone()), None),
