@@ -1,43 +1,45 @@
-pub const TOKEN_TYPES_AND_PARSE_RULES: [&str; 26] = [
+pub const TOKEN_TYPES_AND_PARSE_RULES: [&str; 28] = [
     // Single-character tokens
-    "LeftParen              = { grouping,      None,   PrecNone       }",
-    "RightParen             = { None,          None,   PrecNone       }",
-    "LeftCurlyBrace         = { None,          None,   PrecNone       }",
-    "RightCurlyBrace        = { None,          None,   PrecNone       }",
-    "LeftSquareBracket      = { None,          None,   PrecNone       }",
-    "RightSquareBracket     = { None,          None,   PrecNone       }",
-    "Semicolon              = { None,          None,   PrecNone       }",
-    "Bang                   = { unary,         None,   PrecNone       }",
-    "Assign                 = { None,          None,   PrecNone       }",
+    "LeftParen              = { grouping,           None,               PrecNone       }",
+    "RightParen             = { None,               None,               PrecNone       }",
+    "LeftCurlyBrace         = { block,              None,               PrecNone       }",
+    "RightCurlyBrace        = { None,               None,               PrecNone       }",
+    "LeftSquareBracket      = { None,               None,               PrecNone       }",
+    "RightSquareBracket     = { None,               None,               PrecNone       }",
+    "Semicolon              = { None,               None,               PrecNone       }",
+    "Bang                   = { unary,              None,               PrecNone       }",
+    "Assign                 = { None,               None,               PrecNone       }",
+    "Comma                  = { None,               None,               PrecNone       }",
 
     // Arithmetic operators
-    "Minus                  = { unary,         binary, PrecTerm       }",
-    "Plus                   = { None,          binary, PrecTerm       }",
-    "Slash                  = { None,          binary, PrecFactor     }",
-    "Star                   = { None,          binary, PrecFactor     }",
+    "Minus                  = { unary,              binary,             PrecTerm       }",
+    "Plus                   = { None,               binary,             PrecTerm       }",
+    "Slash                  = { None,               binary,             PrecFactor     }",
+    "Star                   = { None,               binary,             PrecFactor     }",
     // "Power                  = { None,          binary, PrecFactor     }",
 
     // Literals
-    "Number                 = { number,        None,   PrecNone       }",
-    "Identifier             = { identifier,    None,   PrecNone       }",
+    "Number                 = { number,             None,               PrecNone       }",
+    "Identifier             = { identifier,         None,               PrecNone       }",
 
     // Types
-    "True                   = { literal,       None,   PrecNone       }",
-    "False                  = { literal,       None,   PrecNone       }",
-    "Int32                  = { skip,          None,   PrecNone       }",
-    "Bool                   = { skip,          None,   PrecNone       }",
+    "True                   = { literal,            None,               PrecNone       }",
+    "False                  = { literal,            None,               PrecNone       }",
+    "Int32                  = { None,               None,               PrecNone       }",
+    "Bool                   = { None,               None,               PrecNone       }",
 
     // Double-character tokens
-    "Define                 = { None,          None,   PrecNone       }",
+    "Define                 = { None,               None,               PrecNone       }",
 
     // Keywords
-    "Mutable                = { skip,          None,   PrecNone       }",
-    "Function               = { function,      None,   PrecNone       }",
-    "Typing                 = { typing,        None,   PrecNone       }",
-    "Print                  = { None,          None,   PrecNone       }",
+    "Mutable                = { mut_var_def,        None,               PrecNone       }",
+    "Function               = { function,           None,               PrecNone       }",
+    "Typing                 = { typing,             None,               PrecNone       }",
+    "Print                  = { None,               None,               PrecNone       }",
+    "Return                 = { None,               None,               PrecNone       }",
 
-    "Error                  = { error,         None,   PrecNone       }",
-    "EOF                    = { None,          None,   PrecNone       }",
+    "Error                  = { error,              None,               PrecNone       }",
+    "EOF                    = { None,               None,               PrecNone       }",
 ];
 
 pub const PRECEDENCE: [&str; 11] = [

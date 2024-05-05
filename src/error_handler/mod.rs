@@ -50,7 +50,8 @@ impl ErrorHandler {
                 let combined_metadata = TokenMetadata::new(
                     first.get_start(),
                     last.get_start() - first.get_start() + last.get_len(),
-                    last.get_line()
+                    last.get_line(),
+                    last.get_ttype()
                 );
 
                 eprintln!("[line {}] {}", combined_metadata.get_line(), error.message);

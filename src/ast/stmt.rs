@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::{ parser::{ self, token::{ Token, TokenMetadata } }, value_v2::ValueType };
+use crate::{ parser::{ self, token::{ Token, TokenMetadata } }, value::ValueType };
 
 use super::{ expr::{ AstIdentifier, Expr }, type_check::{ AstEnvironment, SymbolTypeDef } };
 
@@ -221,13 +221,15 @@ impl VariableDefinitionStmt {
 
 #[derive(Debug)]
 pub struct ScopeStmt {
-    pub stmts: Vec<Stmt>,
+    pub cf_stmts: Vec<Stmt>,
+    pub forwards_declarations: Vec<Stmt>, // TypeDefStmt, FnStmt, (ClassStmt)
 }
 
 impl ScopeStmt {
     pub fn new() -> Self {
         Self {
-            stmts: Vec::new(),
+            cf_stmts: Vec::new(),
+            forwards_declarations: Vec::new(),
         }
     }
 
@@ -242,7 +244,7 @@ impl ScopeStmt {
     // }
 
     pub fn forward_declare(&self, ast_environment: &mut AstEnvironment) {
-        for stmt in &self.stmts {
+        for stmt in &self.cf_stmts {
             match stmt {
                 Stmt::TypeDefStmt(type_def_stmt) => {
                     let type_name = type_def_stmt.type_name.clone();
@@ -264,7 +266,11 @@ impl ScopeStmt {
     }
 
     pub fn push_stmt(&mut self, stmt: Stmt) {
-        self.stmts.push(stmt);
+        self.cf_stmts.push(stmt);
+    }
+
+    pub fn push_forward_stmt(&mut self, stmt: Stmt) {
+        self.forwards_declarations.push(stmt)
     }
 }
 
@@ -278,15 +284,22 @@ pub struct FunctionArgument {
 #[derive(Debug)]
 pub struct FunctionStmt {
     pub name: String,
-    pub parameters: Vec<FunctionArgument>,
+    pub args: Vec<FunctionArgument>,
+    pub return_type: Option<ValueType>,
     pub body: ScopeStmt,
 }
 
 impl FunctionStmt {
-    pub fn new(name: String, parameters: Vec<FunctionArgument>, body: ScopeStmt) -> Self {
+    pub fn new(
+        name: String,
+        args: Vec<FunctionArgument>,
+        return_type: Option<ValueType>,
+        body: ScopeStmt
+    ) -> Self {
         Self {
             name,
-            parameters,
+            args,
+            return_type,
             body,
         }
     }
@@ -335,7 +348,7 @@ impl Typing {
 
     pub fn new_int32(token_metadata: TokenMetadata) -> Self {
         Self {
-            typing_value: TypingValue::ValueType(ValueType::new_int32()),
+            typing_value: TypingValue::ValueType(ValueType::Int32),
             token_metadata,
             type_args: None,
         }
@@ -343,7 +356,7 @@ impl Typing {
 
     pub fn new_bool(token_metadata: TokenMetadata) -> Self {
         Self {
-            typing_value: TypingValue::ValueType(ValueType::new_bool()),
+            typing_value: TypingValue::ValueType(ValueType::Bool),
             token_metadata,
             type_args: None,
         }

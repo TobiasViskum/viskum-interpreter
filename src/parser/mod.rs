@@ -10,7 +10,14 @@ mod lexer;
 
 use crate::{ ast::Ast, error_handler::ErrorHandler, parser::{ lexer::Lexer, token::Token } };
 
-use self::ast_generator::AstGenerator;
+use self::{ ast_generator::AstGenerator, precedence::Precedence };
+
+#[derive(Debug, PartialEq)]
+pub enum RuleArg {
+    None,
+    MutVar,
+    Precedence(Precedence),
+}
 
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
@@ -31,7 +38,7 @@ impl<'a> Parser<'a> {
             source,
             next: None,
             current: None,
-            previous_tokens: Vec::with_capacity(source.len() / 2),
+            previous_tokens: Vec::with_capacity(64), // implement function to clear when: consume_expr_end
             had_error: false,
             panic_mode: false,
             ast_generator: AstGenerator::new(),
@@ -40,7 +47,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn free(&mut self) {
-        self.previous_tokens = Vec::new();
+        self.previous_tokens.clear();
         self.current = None;
         self.had_error = false;
         self.panic_mode = false;
@@ -61,14 +68,11 @@ impl<'a> Parser<'a> {
             }
         }
 
-        // match self.ast_generator.push_and_end_scope() {
-        //     Ok(_) => {}
-        //     Err((msg, tokens_metadata)) => {
-        //         self.error_handler.report_compile_error(msg, tokens_metadata);
-        //     }
-        // }
-
         let ast = self.ast_generator.get_ast();
+
+        //println!("Ast from generator: {:#?}", ast);
+        //
+        //println!("Ast from parser: {:#?}", self.ast.as_ref().unwrap());
 
         self.free();
         ast

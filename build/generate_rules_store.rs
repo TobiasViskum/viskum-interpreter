@@ -33,7 +33,7 @@ pub fn generate_rules_store() -> io::Result<()> {
 
     writeln!(file, "extern crate lazy_static;")?;
     writeln!(file, "use lazy_static::lazy_static;")?;
-    writeln!(file, "use crate::parser::precedence::Precedence;")?;
+    writeln!(file, "use crate::parser::{{RuleArg, precedence::Precedence}};")?;
     writeln!(file, "use super::ParseRule;")?;
 
     writeln!(file, "lazy_static! {{")?;
@@ -55,7 +55,7 @@ pub fn generate_rules_store() -> io::Result<()> {
             ("None".to_string(), None)
         } else {
             (
-                format!("Some(|c| c.{}())", arg1),
+                format!("Some(|c, arg| c.{}(arg))", arg1),
                 Some(format!("Some(ParsingRuleMethod::{})", format_enum_name(arg1))),
             )
         };
@@ -65,7 +65,7 @@ pub fn generate_rules_store() -> io::Result<()> {
             ("None".to_string(), None)
         } else {
             (
-                format!("Some(|c| c.{}())", arg2),
+                format!("Some(|c, arg| c.{}(arg))", arg2),
                 Some(format!("Some(ParsingRuleMethod::{})", format_enum_name(arg2))),
             )
         };

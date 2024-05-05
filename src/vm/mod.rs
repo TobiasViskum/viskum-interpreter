@@ -1,4 +1,4 @@
-use crate::{ constants::REGISTERS, value_v2::Value };
+use crate::{ constants::REGISTERS, value::Value };
 
 pub mod instructions;
 mod helper_methods;
@@ -57,6 +57,12 @@ impl Registers {
     }
 }
 
+pub struct VMFunction {
+    registers: Registers,
+    instructions: Vec<Instruction>,
+    ip: usize,
+}
+
 pub struct VM {
     registers: Registers,
     program: Vec<Instruction>,
@@ -93,6 +99,7 @@ impl VM {
         while self.pc < self.program.len() {
             let instruction = self.get_instruction();
             match instruction {
+                Instruction::Function { dest, instructions_count } => panic!("NOT IMPLEMENTED"),
                 Instruction::Halt => {
                     // #[cfg(debug_assertions)]
                     // {
@@ -204,7 +211,7 @@ impl VM {
                         InstructionSrc::Constant(value) => value,
                     };
 
-                    *self.get_register_mut(*dest) = src.not().unwrap();
+                    *self.get_register_mut(*dest) = src.not();
                 }
             }
             self.pc += 1;

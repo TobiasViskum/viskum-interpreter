@@ -1,7 +1,7 @@
 use crate::{
     operations::{ BinaryOp, UnaryOp },
     parser::{ ast_generator::AstEnvironment, token::TokenMetadata },
-    value_v2::ValueType,
+    value::ValueType,
 };
 
 use self::{ expr::Expr, stmt::{ FunctionArgument, FunctionStmt, ScopeStmt, Stmt } };
@@ -9,6 +9,7 @@ use self::{ expr::Expr, stmt::{ FunctionArgument, FunctionStmt, ScopeStmt, Stmt 
 mod generate_cfg;
 pub mod expr;
 pub mod stmt;
+mod symbol_table;
 mod type_check;
 
 #[derive(Debug)]
@@ -38,10 +39,52 @@ impl Ast {
         &mut self,
         name: String,
         args: Vec<FunctionArgument>,
-        return_type: ValueType
-    ) {}
+        return_type: Option<ValueType>
+    ) {
+        if self.current_scope_ptr.is_none() {
+            self.current_scope_ptr = Some(&mut self.main_scope);
+        }
 
-    pub fn end_function(&mut self) {}
+        let current_scope = self.current_scope_ptr.unwrap();
+
+        unsafe {
+            self.path_to_parent_scope.push(current_scope);
+            let new_index = (*current_scope).forwards_declarations.len();
+            (*current_scope).forwards_declarations.push(
+                Stmt::FunctionStmt(FunctionStmt {
+                    name,
+                    args,
+                    return_type,
+                    body: ScopeStmt::new(),
+                })
+            );
+
+            let new_scope = match &mut (*current_scope).forwards_declarations[new_index] {
+                Stmt::FunctionStmt(FunctionStmt { ref mut body, .. }) => { body }
+
+                _ =>
+                    panic!(
+                        "Expected scope stmt: {:?}",
+                        (*current_scope).forwards_declarations[new_index]
+                    ),
+            };
+            self.current_scope_ptr = Some(new_scope);
+        }
+    }
+
+    pub fn end_function(&mut self) {
+        if self.current_scope_ptr.is_none() {
+            println!("No scope to end, so must be main scope");
+        } else {
+            if let Some(parent_scope) = self.path_to_parent_scope.pop() {
+                self.current_scope_ptr = Some(parent_scope);
+            } else {
+                self.current_scope_ptr = None;
+            }
+        }
+
+        println!("{:#?}", self)
+    }
 
     pub fn start_scope(&mut self) {
         if self.current_scope_ptr.is_none() {
@@ -50,12 +93,12 @@ impl Ast {
             let current_scope = self.current_scope_ptr.unwrap();
             unsafe {
                 self.path_to_parent_scope.push(current_scope);
-                let new_index = (*current_scope).stmts.len();
-                (*current_scope).stmts.push(Stmt::ScopeStmt(ScopeStmt::new()));
+                let new_index = (*current_scope).cf_stmts.len();
+                (*current_scope).cf_stmts.push(Stmt::ScopeStmt(ScopeStmt::new()));
 
-                let new_scope = match (*current_scope).stmts[new_index] {
+                let new_scope = match (*current_scope).cf_stmts[new_index] {
                     Stmt::ScopeStmt(ref mut scope) => scope,
-                    _ => panic!("Expected scope stmt: {:?}", (*current_scope).stmts[new_index]),
+                    _ => panic!("Expected scope stmt: {:?}", (*current_scope).cf_stmts[new_index]),
                 };
                 self.current_scope_ptr = Some(new_scope);
             }

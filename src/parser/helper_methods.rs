@@ -1,7 +1,7 @@
 use crate::{
-    ast::stmt::FunctionArgument,
+    ast::{ stmt::FunctionArgument, Ast },
     parser::token::{ token_type::TokenType, Token },
-    value_v2::ValueType,
+    value::ValueType,
 };
 
 use super::{ parse_rule::{ ParseRule, PARSE_RULES }, token::TokenMetadata, Parser };
@@ -250,7 +250,7 @@ impl<'a> Parser<'a> {
         &mut self,
         name: String,
         args: Vec<FunctionArgument>,
-        return_type: ValueType
+        return_type: Option<ValueType>
     ) {
         self.ast_generator.start_function(name, args, return_type);
     }
