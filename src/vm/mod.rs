@@ -96,9 +96,36 @@ impl VM {
 
     #[profiler::function_tracker("vm-execution")]
     pub fn run(&mut self) {
+        let mut cmp_operands: [Option<InstructionSrc>; 2] = [None, None];
+
         while self.pc < self.program.len() {
             let instruction = self.get_instruction();
             match instruction {
+                Instruction::Cmp { src1, src2 } => {
+                    cmp_operands = [Some(src1.clone()), Some(src2.clone())];
+                }
+
+                Instruction::JE { true_pos, false_pos } => {
+                    let left_operand = match cmp_operands[0].take().unwrap() {
+                        InstructionSrc::Constant(v) => v,
+                        InstructionSrc::Register(reg) => { *self.get_register(reg) }
+                    };
+                    let right_operand = match cmp_operands[1].take().unwrap() {
+                        InstructionSrc::Constant(v) => v,
+                        InstructionSrc::Register(reg) => { *self.get_register(reg) }
+                    };
+
+                    if left_operand.cmp_g(&right_operand).unwrap() {
+                        self.pc = *true_pos;
+                    } else {
+                        self.pc = *false_pos;
+                    }
+                    continue;
+                }
+                Instruction::Jmp { pos } => {
+                    self.pc = *pos - 1;
+                    continue;
+                }
                 Instruction::Function { dest, instructions_count } => panic!("NOT IMPLEMENTED"),
                 Instruction::Halt => {
                     // #[cfg(debug_assertions)]
@@ -145,11 +172,11 @@ impl VM {
                     *self.get_register_mut(*dest) = src1.add(&src2).unwrap();
                 }
                 Instruction::Define { dest, src } => {
-                    let src = match src {
-                        InstructionSrc::Register(register) => self.get_register(*register),
-                        InstructionSrc::Constant(value) => value,
-                    };
-                    *self.get_register_mut(*dest) = src.clone();
+                    let mut src = Some(match src {
+                        InstructionSrc::Register(register) => *self.get_register(*register),
+                        InstructionSrc::Constant(value) => *value,
+                    });
+                    *self.get_register_mut(*dest) = src.take().unwrap();
                 }
                 Instruction::Assign { dest, src } => {
                     let src = match src {

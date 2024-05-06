@@ -193,6 +193,9 @@ impl DAG {
                             src1: left,
                             src2: right,
                         },
+
+                    BinaryOp::Equal => Instruction::JE { true_pos: 0, false_pos: 0 },
+                    _ => panic!("ONLY EQ IS IMPLEMENTED"),
                 };
 
                 bytecode.push(instruction);
@@ -419,6 +422,66 @@ impl DAG {
                     }
                     BinaryOp::Div => {
                         let evaluated = lhs.div(&rhs).unwrap();
+                        self.remove_node(operands[0]);
+                        self.remove_node(operands[1]);
+                        self.add_node_at(
+                            DAGNode::new(DAGOp::Const(evaluated.clone()), None),
+                            node_id
+                        );
+                        Some(evaluated)
+                    }
+                    BinaryOp::Equal => {
+                        let evaluated = Value::Bool(lhs.cmp_e(&rhs).unwrap());
+                        self.remove_node(operands[0]);
+                        self.remove_node(operands[1]);
+                        self.add_node_at(
+                            DAGNode::new(DAGOp::Const(evaluated.clone()), None),
+                            node_id
+                        );
+                        Some(evaluated)
+                    }
+                    BinaryOp::NotEqual => {
+                        let evaluated = Value::Bool(lhs.cmp_ne(&rhs).unwrap());
+                        self.remove_node(operands[0]);
+                        self.remove_node(operands[1]);
+                        self.add_node_at(
+                            DAGNode::new(DAGOp::Const(evaluated.clone()), None),
+                            node_id
+                        );
+                        Some(evaluated)
+                    }
+                    BinaryOp::Greater => {
+                        let evaluated = Value::Bool(lhs.cmp_g(&rhs).unwrap());
+                        self.remove_node(operands[0]);
+                        self.remove_node(operands[1]);
+                        self.add_node_at(
+                            DAGNode::new(DAGOp::Const(evaluated.clone()), None),
+                            node_id
+                        );
+                        Some(evaluated)
+                    }
+                    BinaryOp::GreaterEqual => {
+                        let evaluated = Value::Bool(lhs.cmp_ge(&rhs).unwrap());
+                        self.remove_node(operands[0]);
+                        self.remove_node(operands[1]);
+                        self.add_node_at(
+                            DAGNode::new(DAGOp::Const(evaluated.clone()), None),
+                            node_id
+                        );
+                        Some(evaluated)
+                    }
+                    BinaryOp::Less => {
+                        let evaluated = Value::Bool(lhs.cmp_l(&rhs).unwrap());
+                        self.remove_node(operands[0]);
+                        self.remove_node(operands[1]);
+                        self.add_node_at(
+                            DAGNode::new(DAGOp::Const(evaluated.clone()), None),
+                            node_id
+                        );
+                        Some(evaluated)
+                    }
+                    BinaryOp::LessEqual => {
+                        let evaluated = Value::Bool(lhs.cmp_le(&rhs).unwrap());
                         self.remove_node(operands[0]);
                         self.remove_node(operands[1]);
                         self.add_node_at(

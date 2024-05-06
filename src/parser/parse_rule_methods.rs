@@ -63,6 +63,7 @@ impl<'a> Parser<'a> {
             self.statement();
         }
         self.consume(TokenType::TokenRightCurlyBrace, "Expected '}' at the end of block");
+
         self.end_scope()
     }
 
@@ -106,6 +107,16 @@ impl<'a> Parser<'a> {
                 ),
             _ => {}
         }
+    }
+
+    pub fn if_statement(&mut self, rule_arg: RuleArg) {
+        self.expression_statement();
+
+        self.statement();
+
+        println!("{:#?}", self.ast_generator);
+
+        panic!("OH NO, IF IS NOT IMPL YET")
     }
 
     pub fn function(&mut self, rule_arg: RuleArg) {
@@ -154,11 +165,21 @@ impl<'a> Parser<'a> {
 
         self.parse_precedence(PrecUnary, None);
 
-        let result = match operator_type {
-            TokenMinus => self.ast_generator.emit_unary_op(UnaryOp::Neg),
-            TokenBang => self.ast_generator.emit_unary_op(UnaryOp::Truthy),
-            _ => Ok(()),
+        let unary_op = match operator_type.parse_unary() {
+            Ok(op) => op,
+            Err(_) => {
+                self.report_compile_error(
+                    format!(
+                        "Token '{}' is not a valid unary operator",
+                        self.get_previous().get_lexeme(self.source)
+                    ),
+                    vec![self.get_previous().get_metadata()]
+                );
+                return;
+            }
         };
+
+        let result = self.ast_generator.emit_unary_op(unary_op);
 
         if let Err((message, token)) = result {
             self.report_compile_error(message, token);
@@ -172,13 +193,21 @@ impl<'a> Parser<'a> {
 
         self.parse_precedence(parse_rule.get_precedence().get_next(), None);
 
-        let result = match operator_type {
-            TokenPlus => self.ast_generator.emit_binary_op(BinaryOp::Add),
-            TokenMinus => self.ast_generator.emit_binary_op(BinaryOp::Sub),
-            TokenStar => self.ast_generator.emit_binary_op(BinaryOp::Mul),
-            TokenSlash => self.ast_generator.emit_binary_op(BinaryOp::Div),
-            _ => Ok(()),
+        let binary_op = match operator_type.parse_binary() {
+            Ok(op) => op,
+            Err(_) => {
+                self.report_compile_error(
+                    format!(
+                        "Token '{}' is not a valid binary operator",
+                        self.get_previous().get_lexeme(self.source)
+                    ),
+                    vec![self.get_previous().get_metadata()]
+                );
+                return;
+            }
         };
+
+        let result = self.ast_generator.emit_binary_op(binary_op);
 
         if let Err((message, token)) = result {
             self.report_compile_error(message, token);

@@ -4,7 +4,7 @@ use crate::parser::{RuleArg, precedence::Precedence};
 use super::ParseRule;
 lazy_static! {
     pub static ref PARSE_RULES: Vec<ParseRule> = {
-        let mut parse_rules_vec = Vec::with_capacity(28);
+        let mut parse_rules_vec = Vec::with_capacity(35);
         parse_rules_vec.push(ParseRule {
             prefix: (Some(|c, arg| c.grouping(arg))),
             infix: (None),
@@ -76,6 +76,36 @@ lazy_static! {
             precedence: Precedence::PrecFactor,
         });
         parse_rules_vec.push(ParseRule {
+            prefix: (None),
+            infix: (Some(|c, arg| c.binary(arg))),
+            precedence: Precedence::PrecEquality,
+        });
+        parse_rules_vec.push(ParseRule {
+            prefix: (None),
+            infix: (Some(|c, arg| c.binary(arg))),
+            precedence: Precedence::PrecEquality,
+        });
+        parse_rules_vec.push(ParseRule {
+            prefix: (None),
+            infix: (Some(|c, arg| c.binary(arg))),
+            precedence: Precedence::PrecComparison,
+        });
+        parse_rules_vec.push(ParseRule {
+            prefix: (None),
+            infix: (Some(|c, arg| c.binary(arg))),
+            precedence: Precedence::PrecComparison,
+        });
+        parse_rules_vec.push(ParseRule {
+            prefix: (None),
+            infix: (Some(|c, arg| c.binary(arg))),
+            precedence: Precedence::PrecComparison,
+        });
+        parse_rules_vec.push(ParseRule {
+            prefix: (None),
+            infix: (Some(|c, arg| c.binary(arg))),
+            precedence: Precedence::PrecComparison,
+        });
+        parse_rules_vec.push(ParseRule {
             prefix: (Some(|c, arg| c.number(arg))),
             infix: (None),
             precedence: Precedence::PrecNone,
@@ -132,6 +162,11 @@ lazy_static! {
         });
         parse_rules_vec.push(ParseRule {
             prefix: (None),
+            infix: (None),
+            precedence: Precedence::PrecNone,
+        });
+        parse_rules_vec.push(ParseRule {
+            prefix: (Some(|c, arg| c.if_statement(arg))),
             infix: (None),
             precedence: Precedence::PrecNone,
         });

@@ -65,13 +65,14 @@ impl<'a> Lexer<'a> {
             '/' => self.make_token(TokenType::TokenSlash),
             ';' => self.make_token(TokenType::TokenSemicolon),
             ',' => self.make_token(TokenType::TokenComma),
+
             '=' => {
-                // if self.peek(0).unwrap() == '=' {
-                //     self.advance();
-                //     self.make_token(TokenType::TokenEqualEqual)
-                // } else {
-                self.make_token(TokenType::TokenAssign)
-                // }
+                if self.is(0, '=') {
+                    self.advance();
+                    self.make_token(TokenType::TokenEqualEqual)
+                } else {
+                    self.make_token(TokenType::TokenAssign)
+                }
             }
             ':' => {
                 if self.is(0, '=') {

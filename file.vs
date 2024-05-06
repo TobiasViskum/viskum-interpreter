@@ -1,25 +1,14 @@
 // type Hello = i32
 
 
-mut a := 2
-a + 5 // 7
-a = 0
-a + 5 // 5
+mut a := false
 
-fn hello(x mut i32, y mut i32) i32 {
-    2 + 1
+if 2 == 2 {
+    a = true
+    2 * 4 + 4
 }
 
-a + 2
-
-a i32 := (2 * (2 + 2))
-
-{
-    a := true
-    a := 3
-}
-
-
+a
 
 /*
 

@@ -77,6 +77,17 @@ pub enum Instruction {
         dest: InstructionRegister,
         src: InstructionSrc,
     },
+    Cmp {
+        src1: InstructionSrc,
+        src2: InstructionSrc,
+    },
+    Jmp {
+        pos: usize,
+    },
+    JE {
+        true_pos: usize,
+        false_pos: usize,
+    },
     Function {
         dest: InstructionRegister,
         instructions_count: u16,
@@ -86,6 +97,11 @@ pub enum Instruction {
 impl Instruction {
     pub fn dissassemble(&self) -> String {
         match self {
+            Self::Cmp { src1, src2 } => {
+                format!("CMP {} {}", src1.dissassemble(), src2.dissassemble())
+            }
+            Self::Jmp { pos } => { format!("JMP {}", pos) }
+            Self::JE { true_pos, false_pos } => { format!("JE {} {}", true_pos, false_pos) }
             Self::Function { dest, instructions_count } => panic!("DISSASSEMBLE NOT IMPLEMENTED"),
             Self::Halt => { "HALT".to_string() }
             Self::StartScope => { "STARTSCOPE".to_string() }
@@ -152,6 +168,7 @@ impl Instruction {
             BinaryOp::Sub => Self::Sub { dest, src1, src2 },
             BinaryOp::Mul => Self::Mul { dest, src1, src2 },
             BinaryOp::Div => Self::Div { dest, src1, src2 },
+            _ => panic!("NEW_BINARY NOT IMPLEMENTED YET"),
         }
     }
 

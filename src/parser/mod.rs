@@ -70,10 +70,6 @@ impl<'a> Parser<'a> {
 
         let ast = self.ast_generator.get_ast();
 
-        //println!("Ast from generator: {:#?}", ast);
-        //
-        //println!("Ast from parser: {:#?}", self.ast.as_ref().unwrap());
-
         self.free();
         ast
     }

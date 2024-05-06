@@ -26,7 +26,7 @@ impl<'a> Lexer<'a> {
                     TokenType::TokenIdentifier
                 }
             }
-            //'i' => self.check_keyword(1, 2, "32", TokenType::TokenInt32),
+            'i' => self.check_keyword(1, 1, "f", TokenType::TokenIf),
             'm' => self.check_keyword(1, 2, "ut", TokenType::TokenMutable),
             'r' => self.check_keyword(1, 5, "eturn", TokenType::TokenReturn),
             't' => {

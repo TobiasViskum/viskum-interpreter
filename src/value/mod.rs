@@ -29,6 +29,12 @@ impl ValueType {
             BinaryOp::Mul => self.try_mul(other),
             BinaryOp::Div => self.try_div(other),
             BinaryOp::Sub => self.try_sub(other),
+            | BinaryOp::Equal
+            | BinaryOp::NotEqual
+            | BinaryOp::Greater
+            | BinaryOp::GreaterEqual
+            | BinaryOp::Less
+            | BinaryOp::LessEqual => self.try_cmp(other, op),
         }
     }
 
@@ -39,59 +45,90 @@ impl ValueType {
         }
     }
 
+    pub fn try_cmp(&self, other: &ValueType, op: BinaryOp) -> Result<ValueType, String> {
+        match (self, other) {
+            (ValueType::Int32, ValueType::Int32) => Ok(ValueType::Bool),
+            (ValueType::Bool, ValueType::Bool) => Ok(ValueType::Bool),
+            _ => {
+                let op_lexeme = match op {
+                    BinaryOp::Equal => "==",
+                    BinaryOp::NotEqual => "!=",
+                    BinaryOp::Greater => ">",
+                    BinaryOp::GreaterEqual => ">=",
+                    BinaryOp::Less => "<",
+                    BinaryOp::LessEqual => "<=",
+                    _ => "ERROR",
+                };
+
+                Err(
+                    format!(
+                        "Comparison '{}' is not defined for {} and {}",
+                        op_lexeme,
+                        self.to_type_string(),
+                        other.to_type_string()
+                    )
+                )
+            }
+        }
+    }
+
     pub fn try_add(&self, other: &ValueType) -> Result<ValueType, String> {
         match (self, other) {
             (ValueType::Int32, ValueType::Int32) => Ok(ValueType::Int32),
-            _ =>
+            _ => {
                 Err(
                     format!(
                         "Addition is not defined for {} and {}",
                         self.to_type_string(),
                         other.to_type_string()
                     )
-                ),
+                )
+            }
         }
     }
 
     pub fn try_mul(&self, other: &ValueType) -> Result<ValueType, String> {
         match (self, other) {
             (ValueType::Int32, ValueType::Int32) => Ok(ValueType::Int32),
-            _ =>
+            _ => {
                 Err(
                     format!(
                         "Multiplication is not defined for {} and {}",
                         self.to_type_string(),
                         other.to_type_string()
                     )
-                ),
+                )
+            }
         }
     }
 
     pub fn try_div(&self, other: &ValueType) -> Result<ValueType, String> {
         match (self, other) {
             (ValueType::Int32, ValueType::Int32) => Ok(ValueType::Int32),
-            _ =>
+            _ => {
                 Err(
                     format!(
                         "Division is not defined for {} and {}",
                         self.to_type_string(),
                         other.to_type_string()
                     )
-                ),
+                )
+            }
         }
     }
 
     pub fn try_sub(&self, other: &ValueType) -> Result<ValueType, String> {
         match (self, other) {
             (ValueType::Int32, ValueType::Int32) => Ok(ValueType::Int32),
-            _ =>
+            _ => {
                 Err(
                     format!(
                         "Subtraction is not defined for {} and {}",
                         self.to_type_string(),
                         other.to_type_string()
                     )
-                ),
+                )
+            }
         }
     }
 
@@ -125,6 +162,96 @@ impl Value {
             Value::Int32(_) => ValueType::Int32,
             Value::Bool(_) => ValueType::Bool,
             Value::Empty => ValueType::Empty,
+        }
+    }
+
+    pub fn cmp_e(&self, other: &Value) -> Result<bool, String> {
+        match (self, other) {
+            (Value::Int32(lhs), Value::Int32(rhs)) => Ok(lhs == rhs),
+            (Value::Bool(lhs), Value::Bool(rhs)) => Ok(lhs == rhs),
+            _ =>
+                Err(
+                    format!(
+                        "Comparison '==' is not defined for {} and {}",
+                        self.to_value_type().to_type_string(),
+                        other.to_value_type().to_type_string()
+                    )
+                ),
+        }
+    }
+
+    pub fn cmp_ne(&self, other: &Value) -> Result<bool, String> {
+        match (self, other) {
+            (Value::Int32(lhs), Value::Int32(rhs)) => Ok(lhs != rhs),
+            (Value::Bool(lhs), Value::Bool(rhs)) => Ok(lhs != rhs),
+            _ =>
+                Err(
+                    format!(
+                        "Comparison '!=' is not defined for {} and {}",
+                        self.to_value_type().to_type_string(),
+                        other.to_value_type().to_type_string()
+                    )
+                ),
+        }
+    }
+
+    pub fn cmp_g(&self, other: &Value) -> Result<bool, String> {
+        match (self, other) {
+            (Value::Int32(lhs), Value::Int32(rhs)) => Ok(lhs > rhs),
+            (Value::Bool(lhs), Value::Bool(rhs)) => Ok(lhs > rhs),
+            _ =>
+                Err(
+                    format!(
+                        "Comparison '>' is not defined for {} and {}",
+                        self.to_value_type().to_type_string(),
+                        other.to_value_type().to_type_string()
+                    )
+                ),
+        }
+    }
+
+    pub fn cmp_ge(&self, other: &Value) -> Result<bool, String> {
+        match (self, other) {
+            (Value::Int32(lhs), Value::Int32(rhs)) => Ok(lhs >= rhs),
+            (Value::Bool(lhs), Value::Bool(rhs)) => Ok(lhs >= rhs),
+            _ =>
+                Err(
+                    format!(
+                        "Comparison '>=' is not defined for {} and {}",
+                        self.to_value_type().to_type_string(),
+                        other.to_value_type().to_type_string()
+                    )
+                ),
+        }
+    }
+
+    pub fn cmp_l(&self, other: &Value) -> Result<bool, String> {
+        match (self, other) {
+            (Value::Int32(lhs), Value::Int32(rhs)) => Ok(lhs < rhs),
+            (Value::Bool(lhs), Value::Bool(rhs)) => Ok(lhs < rhs),
+            _ =>
+                Err(
+                    format!(
+                        "Comparison '<' is not defined for {} and {}",
+                        self.to_value_type().to_type_string(),
+                        other.to_value_type().to_type_string()
+                    )
+                ),
+        }
+    }
+
+    pub fn cmp_le(&self, other: &Value) -> Result<bool, String> {
+        match (self, other) {
+            (Value::Int32(lhs), Value::Int32(rhs)) => Ok(lhs <= rhs),
+            (Value::Bool(lhs), Value::Bool(rhs)) => Ok(lhs <= rhs),
+            _ =>
+                Err(
+                    format!(
+                        "Comparison '<=' is not defined for {} and {}",
+                        self.to_value_type().to_type_string(),
+                        other.to_value_type().to_type_string()
+                    )
+                ),
         }
     }
 

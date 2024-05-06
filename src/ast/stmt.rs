@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use crate::{ parser::{ self, token::{ Token, TokenMetadata } }, value::ValueType };
 
 use super::{ expr::{ AstIdentifier, Expr }, type_check::{ AstEnvironment, SymbolTypeDef } };
@@ -11,6 +9,7 @@ pub enum Stmt {
     VariableAssignment(VariableAssignmentStmt),
     ScopeStmt(ScopeStmt),
     FunctionStmt(FunctionStmt),
+    IfStmt(IfStmt),
     TypeDefStmt(TypeDefStmt),
 }
 
@@ -21,6 +20,7 @@ impl Stmt {
         token_vec: &mut Vec<TokenMetadata>
     ) -> Result<(), String> {
         match self {
+            Stmt::IfStmt(_) => panic!("type_check in stmt.rs"),
             Stmt::TypeDefStmt(_) => { Ok(()) }
             Stmt::FunctionStmt(_) => {
                 // let mut function_environment = AstEnvironment::new();
@@ -215,6 +215,23 @@ impl VariableDefinitionStmt {
             is_mutable,
             value,
             token_metadata,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct IfStmt {
+    condition: Expr,
+    true_block: ScopeStmt,
+    false_block: Option<Box<IfStmt>>,
+}
+
+impl IfStmt {
+    pub fn new(condition: Expr, true_block: ScopeStmt, false_block: Option<Box<IfStmt>>) -> Self {
+        Self {
+            condition,
+            true_block,
+            false_block,
         }
     }
 }

@@ -65,6 +65,7 @@ impl AstScope {
     }
 }
 
+#[derive(Debug)]
 pub struct AstEnvironment {
     scopes: Vec<AstScope>,
     scope_depth: usize,
@@ -120,6 +121,7 @@ impl AstEnvironment {
     }
 }
 
+#[derive(Debug)]
 pub struct AstGenerator {
     ast: Option<Ast>,
     stmts: Vec<Stmt>,

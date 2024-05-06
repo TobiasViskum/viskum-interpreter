@@ -15,18 +15,15 @@ pub enum BinaryOp {
     Sub,
     Mul,
     Div,
+    Equal,
+    NotEqual,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
 }
 
 impl BinaryOp {
-    pub fn _get_op_len(&self) -> usize {
-        match self {
-            BinaryOp::Add => 1,
-            BinaryOp::Sub => 1,
-            BinaryOp::Mul => 1,
-            BinaryOp::Div => 1,
-        }
-    }
-
     pub fn to_op_string(&self) -> String {
         (
             match self {
@@ -34,6 +31,12 @@ impl BinaryOp {
                 Self::Sub => "Subtraction",
                 Self::Mul => "Multiplication",
                 Self::Div => "Division",
+                Self::Equal => "Equal",
+                Self::NotEqual => "NotEqual",
+                Self::Greater => "Greater",
+                Self::GreaterEqual => "GreaterEqual",
+                Self::Less => "Less",
+                Self::LessEqual => "LessEqual",
             }
         ).to_string()
     }
@@ -72,6 +75,12 @@ impl Op {
                     BinaryOp::Sub => "subtraction".to_string(),
                     BinaryOp::Mul => "multiplication".to_string(),
                     BinaryOp::Div => "division".to_string(),
+                    BinaryOp::Equal => "equal".to_string(),
+                    BinaryOp::NotEqual => "not equal".to_string(),
+                    BinaryOp::Greater => "greater".to_string(),
+                    BinaryOp::GreaterEqual => "greater equal".to_string(),
+                    BinaryOp::Less => "less".to_string(),
+                    BinaryOp::LessEqual => "less equal".to_string(),
                 }
             Op::UnaryOp(unary_op) =>
                 match unary_op {
