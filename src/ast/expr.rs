@@ -1,9 +1,72 @@
 use crate::{
     compiler::cfg::dag::{ DAGNode, DAGOp, DAG },
+    error_handler::CompileError,
     operations::{ BinaryOp, UnaryOp },
     parser::{ ast_generator::AstEnvironment, token::TokenMetadata },
     value::{ Value, ValueType },
 };
+
+use super::stmt::{ Stmt, VarAssignStmt };
+
+#[derive(Debug)]
+pub struct ExprBuilder {
+    exprs: Vec<Expr>,
+}
+
+impl ExprBuilder {
+    pub fn new() -> Self {
+        Self {
+            exprs: Vec::new(),
+        }
+    }
+
+    pub fn get_built_expr(&mut self) -> Expr {
+        self.exprs.pop().unwrap()
+    }
+
+    pub fn emit_ident_lookup(&mut self, ast_identifier: AstIdentifier) {
+        self.exprs.push(Expr::IdentifierLookup(ast_identifier))
+    }
+
+    pub fn emit_constant_literal(&mut self, ast_value: AstValue) {
+        self.exprs.push(Expr::Literal(ast_value))
+    }
+
+    pub fn emit_unary_op(&mut self, unary_op: UnaryOp) -> Result<(), CompileError> {
+        let rhs = self.exprs.pop().expect("Expected rhs of unary operation");
+
+        let unary_expr = UnaryExpr {
+            operator: unary_op,
+            right: Box::new(rhs),
+        };
+
+        self.exprs.push(Expr::UnaryExpr(unary_expr));
+
+        Ok(())
+    }
+
+    pub fn emit_binary_op(&mut self, binary_op: BinaryOp) -> Result<(), CompileError> {
+        let popped_left = self.exprs.pop();
+        let popped_right = self.exprs.pop();
+
+        let (lhs, rhs) = match (popped_left, popped_right) {
+            (Some(lhs), Some(rhs)) => (lhs, rhs),
+            (Some(lsh), None) => panic!("Missing right hand side of binary operation"),
+            (lhs, rhs) =>
+                panic!("Error in emit_binary_op: ExprBuilder: lhs: {:?}, rhs: {:?}", lhs, rhs),
+        };
+
+        let binary_expr = BinaryExpr {
+            left: Box::new(lhs),
+            operator: binary_op,
+            right: Box::new(rhs),
+        };
+
+        self.exprs.push(Expr::BinaryExpr(binary_expr));
+
+        Ok(())
+    }
+}
 
 #[derive(Debug)]
 pub enum Expr {

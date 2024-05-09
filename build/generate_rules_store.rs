@@ -33,7 +33,7 @@ pub fn generate_rules_store() -> io::Result<()> {
 
     writeln!(file, "extern crate lazy_static;")?;
     writeln!(file, "use lazy_static::lazy_static;")?;
-    writeln!(file, "use crate::parser::{{RuleArg, precedence::Precedence}};")?;
+    writeln!(file, "use crate::parser::precedence::Precedence;")?;
     writeln!(file, "use super::ParseRule;")?;
 
     writeln!(file, "lazy_static! {{")?;
@@ -51,30 +51,24 @@ pub fn generate_rules_store() -> io::Result<()> {
 
         let arg1 = args[0].trim();
 
-        let (prefix, _prefix_enum_name) = if arg1 == "None" {
-            ("None".to_string(), None)
+        let prefix = if arg1 == "None" {
+            "None".to_string()
         } else {
-            (
-                format!("Some(|c, arg| c.{}(arg))", arg1),
-                Some(format!("Some(ParsingRuleMethod::{})", format_enum_name(arg1))),
-            )
+            format!("Some(|c, arg| c.{}(arg))", arg1)
         };
 
         let arg2 = args[1].trim();
-        let (infix, _infix_enum_name) = if arg2 == "None" {
-            ("None".to_string(), None)
+        let infix = if arg2 == "None" {
+            "None".to_string()
         } else {
-            (
-                format!("Some(|c, arg| c.{}(arg))", arg2),
-                Some(format!("Some(ParsingRuleMethod::{})", format_enum_name(arg2))),
-            )
+            format!("Some(|c, arg| c.{}(arg))", arg2)
         };
 
         let precedence = format!("Precedence::{}", args[2].trim());
 
         writeln!(file, "        parse_rules_vec.push(ParseRule {{")?;
-        writeln!(file, "            prefix: ({}),", prefix)?;
-        writeln!(file, "            infix: ({}),", infix)?;
+        writeln!(file, "            prefix: {},", prefix)?;
+        writeln!(file, "            infix: {},", infix)?;
 
         writeln!(file, "            precedence: {},", precedence)?;
         writeln!(file, "        }});")?;

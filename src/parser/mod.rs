@@ -8,7 +8,12 @@ mod parse_rule_methods;
 pub mod ast_generator;
 mod lexer;
 
-use crate::{ ast::Ast, error_handler::ErrorHandler, parser::{ lexer::Lexer, token::Token } };
+use crate::{
+    ast::Ast,
+    error_handler::ErrorHandler,
+    operations::{ BinaryOp, UnaryOp },
+    parser::{ lexer::Lexer, token::Token },
+};
 
 use self::{ ast_generator::AstGenerator, precedence::Precedence };
 
@@ -16,7 +21,18 @@ use self::{ ast_generator::AstGenerator, precedence::Precedence };
 pub enum RuleArg {
     None,
     MutVar,
-    Precedence(Precedence),
+    ParseMethod(ParseMethod),
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ParseMethod {
+    MethodBinary(BinaryOp),
+    MethodUnary(UnaryOp),
+    MethodGrouping,
+    MethodLiteral,
+    MethodIdentifier,
+    MethodNumber,
+    MethodError,
 }
 
 pub struct Parser<'a> {

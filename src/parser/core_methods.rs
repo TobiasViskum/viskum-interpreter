@@ -1,17 +1,30 @@
-use crate::{ ast::{ expr::AstIdentifier, stmt::{ FunctionArgument, Typing } }, value::ValueType };
+use crate::{
+    ast::{
+        expr::{ AstIdentifier, Expr, ExprBuilder },
+        stmt::{ FunctionArgument, Stmt, Typing, VarAssignStmt, VarDefStmt },
+    },
+    error_handler::CompileError,
+    value::ValueType,
+};
 
 use super::{
     precedence::Precedence,
     token::{ token_type::TokenType, Token, TokenMetadata },
+    ParseMethod,
     Parser,
     RuleArg,
 };
 
 impl<'a> Parser<'a> {
-    pub(super) fn statement(&mut self) {
+    pub(super) fn statement(&mut self) -> Stmt {
         let current = self.get_current().get_ttype();
 
         match current {
+            TokenType::TokenLeftCurlyBrace => { self.block(RuleArg::None) }
+            TokenType::TokenMutable => { self.mut_var_def(RuleArg::None) }
+            TokenType::TokenFunction => { self.function(RuleArg::None) }
+            TokenType::TokenIf => { self.if_statement(RuleArg::None) }
+            // TokenType::TokenTyping => {}
             _ => self.expression_statement(),
         }
 
@@ -120,48 +133,34 @@ impl<'a> Parser<'a> {
         */
     }
 
-    pub(super) fn var_assign(&mut self) {
+    pub(super) fn var_assign(&mut self) -> Result<Stmt, CompileError> {
         let (lexeme, token_metadata) = {
             let token = self.get_previous();
             (token.get_lexeme(self.source), token.get_metadata())
         };
 
-        self.ast_generator.emit_identifier_lookup(AstIdentifier::new(lexeme, token_metadata));
+        let ident_lookup = AstIdentifier::new(lexeme, token_metadata);
 
-        if !self.is_at_expr_end() {
-            if
-                self.consume(
-                    TokenType::TokenAssign,
-                    format!(
-                        "Expected '=' in variable assignment but got '{}'",
-                        self.get_current().get_lexeme(self.source)
-                    ).as_str()
-                )
-            {
-                if !self.is_at_expr_end() {
-                    self.parse_precedence(Precedence::PrecAssignment.get_next(), None);
-                    self.consume_expr_end();
-                } else {
-                    self.report_compile_error(
-                        "Missing right hand side of variable assignment".to_string(),
-                        vec![self.get_previous().get_metadata()]
-                    );
-                }
-            }
-        }
+        self.consume(
+            TokenType::TokenAssign,
+            format!(
+                "Expected '=' in variable assignment but got '{}'",
+                self.get_current().get_lexeme(self.source)
+            ).as_str()
+        )?;
 
-        let result = self.ast_generator.emit_variable_assignment(token_metadata);
+        let value = self.parse_precedence(Precedence::PrecAssignment.get_next(), None)?;
 
-        if let Err((message, token)) = result {
-            self.report_compile_error(message, token);
-        }
+        Ok(Stmt::VarAssignStmt(VarAssignStmt { field: ident_lookup, target_expr: None, value }))
     }
 
-    pub(super) fn var_def(&mut self, rule_arg: RuleArg) {
+    pub(super) fn var_def(&mut self, rule_arg: RuleArg) -> Result<Stmt, CompileError> {
         let is_mutable = rule_arg == RuleArg::MutVar;
 
-        let lexeme = self.get_previous().get_lexeme(&self.source);
-        let identifier_metadata = self.get_previous().get_metadata();
+        let (lexeme, token_metadata) = {
+            let token = self.get_previous();
+            (token.get_lexeme(self.source), token.get_metadata())
+        };
 
         let found_type = match self.resolve_type() {
             Ok(found_type) => found_type,
@@ -222,10 +221,14 @@ impl<'a> Parser<'a> {
         found_type
     }
 
-    pub(super) fn expression_statement(&mut self) {
-        self.expression();
+    pub(super) fn expression_statement(&mut self) -> Result<Stmt, CompileError> {
+        let expr = self.expression()?;
+
         self.consume_expr_end();
 
+        Ok(Stmt::ExprStmt(expr))
+
+        /*
         match self.ast_generator.push_expr() {
             Ok(_) => {}
             Err((message, token)) => {
@@ -233,13 +236,20 @@ impl<'a> Parser<'a> {
                 self.synchronize()
             }
         }
+        */
     }
 
-    pub(super) fn expression(&mut self) {
-        self.parse_precedence(Precedence::PrecAssignment, None);
+    pub(super) fn expression(&mut self) -> Result<Expr, CompileError> {
+        self.parse_precedence(Precedence::PrecAssignment, None)
     }
 
-    pub(super) fn parse_precedence(&mut self, precedence: Precedence, msg: Option<&str>) {
+    pub(super) fn parse_precedence(
+        &mut self,
+        precedence: Precedence,
+        msg: Option<&str>
+    ) -> Result<Expr, CompileError> {
+        let mut expr_builder = ExprBuilder::new();
+
         self.advance();
 
         let parse_rule = self.get_parse_rule(self.get_previous().get_ttype());
@@ -247,7 +257,7 @@ impl<'a> Parser<'a> {
         let prefix_rule = parse_rule.get_prefix();
 
         if let Some(prefix_rule) = prefix_rule {
-            prefix_rule(self, RuleArg::Precedence(precedence));
+            let parse_method = prefix_rule(self, &mut expr_builder)?;
 
             loop {
                 let current_ttype = self.get_current().get_ttype();
@@ -266,28 +276,37 @@ impl<'a> Parser<'a> {
                 let infix_rule = self.get_parse_rule(self.get_previous().get_ttype()).get_infix();
 
                 if let Some(infix_rule) = infix_rule {
-                    infix_rule(self, RuleArg::Precedence(precedence));
+                    infix_rule(self, &mut expr_builder);
                 }
             }
         } else {
-            self.report_compile_error(
-                format!(
-                    "Unexpected token: '{}' (no prefix rule)",
-                    self.get_previous().get_lexeme(self.source)
-                ),
-                vec![self.get_previous().get_metadata()]
-            )
+            return Err(
+                CompileError::new(
+                    format!(
+                        "Unexpected token: '{}' (no prefix rule)",
+                        self.get_previous().get_lexeme(self.source)
+                    ),
+                    vec![self.get_previous().get_metadata()]
+                )
+            );
         }
+
+        Ok(expr_builder.get_built_expr())
     }
 
-    pub(super) fn ident_lookup(&mut self) {
+    pub(super) fn ident_lookup(
+        &mut self,
+        expr_builder: &mut ExprBuilder
+    ) -> Result<(), CompileError> {
         let token = self.get_previous();
         let lexeme = token.get_lexeme(self.source);
 
-        self.ast_generator.emit_identifier_lookup(AstIdentifier::new(lexeme, token.get_metadata()));
+        expr_builder.emit_ident_lookup(AstIdentifier::new(lexeme, token.get_metadata()));
+
+        Ok(())
     }
 
-    pub(super) fn resolve_function_args(&mut self) -> Result<Vec<FunctionArgument>, ()> {
+    pub(super) fn resolve_function_args(&mut self) -> Result<Vec<FunctionArgument>, CompileError> {
         let mut args = vec![];
 
         self.consume(TokenType::TokenLeftParen, "Expected '(' after function identifier");
@@ -300,16 +319,13 @@ impl<'a> Parser<'a> {
                 break;
             }
 
-            let is_ok = self.consume(
+            self.consume(
                 TokenType::TokenIdentifier,
                 format!(
                     "Expected identifer but got '{}' Syntax: <identifier> <type>",
                     self.get_current().get_lexeme(self.source)
                 ).as_str()
-            );
-            if !is_ok {
-                return Err(());
-            }
+            )?;
 
             let ident_lexeme = self.get_previous().get_lexeme(&self.source);
 
@@ -328,8 +344,7 @@ impl<'a> Parser<'a> {
                         None => panic!("Custom types not yet supported"),
                     }
                 Err(error_tokens) => {
-                    self.report_compile_error("Invalid type".to_string(), error_tokens);
-                    return Err(());
+                    return Err(CompileError::new("Invalid type".to_string(), error_tokens));
                 }
             };
 

@@ -1,21 +1,22 @@
 use crate::ast;
-use crate::ast::expr::{ AstIdentifier, AstValue, Expr };
+use crate::ast::expr::{ AstIdentifier, AstValue, Expr, ExprBuilder };
 use crate::ast::stmt::TypeDefStmt;
+use crate::error_handler::CompileError;
 use crate::operations::{ BinaryOp, UnaryOp };
 use crate::value::Value;
 use crate::parser::token::token_type::TokenType::{ self, * };
 use super::precedence::Precedence::*;
 
-use super::{ Parser, RuleArg };
+use super::{ ParseMethod, Parser, RuleArg };
 
 impl<'a> Parser<'a> {
-    pub fn number(&mut self, rule_arg: RuleArg) {
+    pub fn number(&mut self, expr_builder: &mut ExprBuilder) -> Result<(), CompileError> {
         let token = self.get_previous();
         let lexeme = token.get_lexeme(self.source);
 
         match lexeme.parse::<i32>() {
             Ok(int_value) => {
-                self.ast_generator.emit_constant_literal(
+                expr_builder.emit_constant_literal(
                     AstValue::new(Value::Int32(int_value), token.get_metadata())
                 );
             }
@@ -23,9 +24,11 @@ impl<'a> Parser<'a> {
                 eprintln!("Could not parse i32. In c.number(RuleArg): {}", e);
             }
         }
+
+        Ok(())
     }
 
-    pub fn mut_var_def(&mut self, rule_arg: RuleArg) {
+    pub fn mut_var_def(&mut self) {
         match self.get_current().get_ttype() {
             TokenIdentifier => {
                 self.advance();
@@ -39,21 +42,23 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn identifier(&mut self, rule_arg: RuleArg) {
+    pub fn identifier(&mut self, expr_builder: &mut ExprBuilder) -> Result<(), CompileError> {
         match self.is_at_expr_end() {
-            true => self.ident_lookup(),
+            true => self.ident_lookup(expr_builder)?,
             false => {
                 match self.get_current().get_ttype() {
                     TokenAssign => self.var_assign(),
                     TokenIdentifier | TokenDefine => self.var_def(RuleArg::None),
-                    TokenLeftParen => println!("identifier: function"),
-                    _ => self.ident_lookup(),
+                    TokenLeftParen => panic!("identifier: function"),
+                    _ => self.ident_lookup(expr_builder)?,
                 }
             }
         }
+
+        Ok(())
     }
 
-    pub fn block(&mut self, rule_arg: RuleArg) {
+    pub fn block(&mut self) {
         self.start_scope();
 
         while
@@ -67,7 +72,7 @@ impl<'a> Parser<'a> {
         self.end_scope()
     }
 
-    pub fn typing(&mut self, rule_arg: RuleArg) {
+    pub fn typing(&mut self) {
         panic!("Typings not supported yet")
         /*
         self.advance();
@@ -93,23 +98,25 @@ impl<'a> Parser<'a> {
         */
     }
 
-    pub fn literal(&mut self, rule_arg: RuleArg) {
+    pub fn literal(&mut self, expr_builder: &mut ExprBuilder) -> Result<(), CompileError> {
         let token = self.get_previous();
 
         match token.get_ttype() {
             TokenFalse =>
-                self.ast_generator.emit_constant_literal(
+                expr_builder.emit_constant_literal(
                     AstValue::new(Value::Bool(false), token.get_metadata())
                 ),
             TokenTrue =>
-                self.ast_generator.emit_constant_literal(
+                expr_builder.emit_constant_literal(
                     AstValue::new(Value::Bool(true), token.get_metadata())
                 ),
             _ => {}
         }
+
+        Ok(())
     }
 
-    pub fn if_statement(&mut self, rule_arg: RuleArg) {
+    pub fn if_statement(&mut self) {
         self.expression_statement();
 
         self.statement();
@@ -119,7 +126,7 @@ impl<'a> Parser<'a> {
         panic!("OH NO, IF IS NOT IMPL YET")
     }
 
-    pub fn function(&mut self, rule_arg: RuleArg) {
+    pub fn function(&mut self) {
         self.advance();
         let lexeme = self.get_previous().get_lexeme(self.source);
 
@@ -154,13 +161,15 @@ impl<'a> Parser<'a> {
         self.end_function();
     }
 
-    pub fn grouping(&mut self, rule_arg: RuleArg) {
+    pub fn grouping(&mut self, expr_builder: &mut ExprBuilder) -> Result<(), CompileError> {
         self.expression();
 
         self.consume(TokenRightParen, "Expect ')' after expression");
+
+        Ok(())
     }
 
-    pub fn unary(&mut self, rule_arg: RuleArg) {
+    pub fn unary(&mut self, expr_builder: &mut ExprBuilder) -> Result<(), CompileError> {
         let operator_type = { *self.get_previous().get_ttype() };
 
         self.parse_precedence(PrecUnary, None);
@@ -168,25 +177,22 @@ impl<'a> Parser<'a> {
         let unary_op = match operator_type.parse_unary() {
             Ok(op) => op,
             Err(_) => {
-                self.report_compile_error(
-                    format!(
-                        "Token '{}' is not a valid unary operator",
-                        self.get_previous().get_lexeme(self.source)
-                    ),
-                    vec![self.get_previous().get_metadata()]
+                return Err(
+                    CompileError::new(
+                        format!(
+                            "Token '{}' is not a valid unary operator",
+                            self.get_previous().get_lexeme(self.source)
+                        ),
+                        vec![self.get_previous().get_metadata()]
+                    )
                 );
-                return;
             }
         };
 
-        let result = self.ast_generator.emit_unary_op(unary_op);
-
-        if let Err((message, token)) = result {
-            self.report_compile_error(message, token);
-        }
+        expr_builder.emit_unary_op(unary_op)
     }
 
-    pub fn binary(&mut self, rule_arg: RuleArg) {
+    pub fn binary(&mut self, expr_builder: &mut ExprBuilder) -> Result<(), CompileError> {
         let operator_type = { *self.get_previous().get_ttype() };
 
         let parse_rule = self.get_parse_rule(&operator_type);
@@ -196,38 +202,34 @@ impl<'a> Parser<'a> {
         let binary_op = match operator_type.parse_binary() {
             Ok(op) => op,
             Err(_) => {
-                self.report_compile_error(
-                    format!(
-                        "Token '{}' is not a valid binary operator",
-                        self.get_previous().get_lexeme(self.source)
-                    ),
-                    vec![self.get_previous().get_metadata()]
+                return Err(
+                    CompileError::new(
+                        format!(
+                            "Token '{}' is not a valid binary operator",
+                            self.get_previous().get_lexeme(self.source)
+                        ),
+                        vec![self.get_previous().get_metadata()]
+                    )
                 );
-                return;
             }
         };
 
-        let result = self.ast_generator.emit_binary_op(binary_op);
-
-        if let Err((message, token)) = result {
-            self.report_compile_error(message, token);
-        }
+        expr_builder.emit_binary_op(binary_op)
     }
 
-    pub(super) fn error(&mut self, rule_arg: RuleArg) {
+    pub(super) fn error(&mut self, expr_builder: &mut ExprBuilder) -> Result<(), CompileError> {
         let error_token = self.get_previous();
         let msg = error_token.get_message();
-        if let Some(msg) = msg {
-            self.report_compile_error(msg.to_string(), vec![error_token.get_metadata()]);
-        } else {
-            self.report_compile_error(
-                format!("Unexpected token: {}", error_token.get_lexeme(self.source)),
-                vec![error_token.get_metadata()]
-            );
-        }
-    }
 
-    pub(super) fn skip(&mut self, rule_arg: RuleArg) {
-        self.parse_precedence(PrecAssignment, None)
+        if let Some(msg) = msg {
+            Err(CompileError::new(msg.to_string(), vec![error_token.get_metadata()]))
+        } else {
+            Err(
+                CompileError::new(
+                    format!("Unexpected token: {}", error_token.get_lexeme(self.source)),
+                    vec![error_token.get_metadata()]
+                )
+            )
+        }
     }
 }

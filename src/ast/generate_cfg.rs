@@ -40,6 +40,7 @@ impl Ast {
         let temp_default_state = CFGNodeState::Alive;
 
         match stmt {
+            Stmt::IfStmt(_) => {}
             Stmt::TypeDefStmt(_) => {}
             Stmt::FunctionStmt(_) => { panic!("FunctionStmt is not supported yet") }
             Stmt::VariableDefinition(variable_definition) => {

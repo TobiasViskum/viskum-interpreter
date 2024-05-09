@@ -1,14 +1,7 @@
 // type Hello = i32
 
 
-mut a := false
-
-if 2 == 2 {
-    a = true
-    2 * 4 + 4
-}
-
-a
+mut a := 2 + 2
 
 /*
 

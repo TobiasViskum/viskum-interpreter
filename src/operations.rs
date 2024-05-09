@@ -9,7 +9,7 @@ pub enum Op {
     NoOp,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BinaryOp {
     Add,
     Sub,
@@ -42,7 +42,7 @@ impl BinaryOp {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum UnaryOp {
     Neg,
     Truthy,

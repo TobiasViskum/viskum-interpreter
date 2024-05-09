@@ -264,6 +264,8 @@ impl AstGenerator {
             (Some(left), None) => {
                 let mut metadata = match left {
                     Expr::Literal(v) => v.get_token_metadata(),
+                    Expr::IdentifierLookup(v) => v.get_token_metadata(),
+
                     _ => panic!("This is weird..."),
                 };
                 metadata.increment_length();

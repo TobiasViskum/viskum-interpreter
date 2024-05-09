@@ -5,8 +5,8 @@ use super::{ expr::{ AstIdentifier, Expr }, type_check::{ AstEnvironment, Symbol
 #[derive(Debug)]
 pub enum Stmt {
     ExprStmt(Expr),
-    VariableDefinition(VariableDefinitionStmt),
-    VariableAssignment(VariableAssignmentStmt),
+    VarDefStmt(VarDefStmt),
+    VarAssignStmt(VarAssignStmt),
     ScopeStmt(ScopeStmt),
     FunctionStmt(FunctionStmt),
     IfStmt(IfStmt),
@@ -21,28 +21,14 @@ impl Stmt {
     ) -> Result<(), String> {
         match self {
             Stmt::IfStmt(_) => panic!("type_check in stmt.rs"),
-            Stmt::TypeDefStmt(_) => { Ok(()) }
-            Stmt::FunctionStmt(_) => {
-                // let mut function_environment = AstEnvironment::new();
-                // for parameter in parameters {
-                //     function_environment.insert(
-                //         parameter.name.to_string(),
-                //         parameter.value_type,
-                //         parameter.is_mutable,
-                //         true
-                //     );
-                // }
-
-                // body.type_check(&mut function_environment, token_vec)?;
-
-                Ok(())
-            }
+            Stmt::TypeDefStmt(_) => panic!("type_check in stmt.rs"),
+            Stmt::FunctionStmt(_) => panic!("type_check in stmt.rs"),
             Stmt::ScopeStmt(_) => { Ok(()) }
             Stmt::ExprStmt(expr) => {
                 expr.type_check(ast_environment, token_vec)?;
                 Ok(())
             }
-            Stmt::VariableDefinition(variable_definition) => {
+            Stmt::VarDefStmt(variable_definition) => {
                 let resulted_value_type = match &variable_definition.value {
                     Some(value) => {
                         match value.type_check(ast_environment, token_vec) {
@@ -106,7 +92,7 @@ impl Stmt {
 
                 Ok(())
             }
-            Stmt::VariableAssignment(variable_assignment) => {
+            Stmt::VarAssignStmt(variable_assignment) => {
                 let resulted_value_type = match
                     variable_assignment.value.type_check(ast_environment, token_vec)
                 {
@@ -176,13 +162,13 @@ impl Stmt {
 }
 
 #[derive(Debug)]
-pub struct VariableAssignmentStmt {
+pub struct VarAssignStmt {
     pub target_expr: Option<Expr>,
     pub field: AstIdentifier,
     pub value: Expr,
 }
 
-impl VariableAssignmentStmt {
+impl VarAssignStmt {
     pub fn new(target_expr: Option<Expr>, field: AstIdentifier, value: Expr) -> Self {
         Self {
             target_expr,
@@ -193,7 +179,7 @@ impl VariableAssignmentStmt {
 }
 
 #[derive(Debug)]
-pub struct VariableDefinitionStmt {
+pub struct VarDefStmt {
     pub name: String,
     pub value_type: Option<ValueType>,
     pub is_mutable: bool,
@@ -201,7 +187,7 @@ pub struct VariableDefinitionStmt {
     pub token_metadata: TokenMetadata,
 }
 
-impl VariableDefinitionStmt {
+impl VarDefStmt {
     pub fn new(
         name: String,
         value_type: Option<ValueType>,

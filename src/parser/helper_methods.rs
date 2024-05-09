@@ -1,5 +1,6 @@
 use crate::{
     ast::{ stmt::FunctionArgument, Ast },
+    error_handler::CompileError,
     parser::token::{ token_type::TokenType, Token },
     value::ValueType,
 };
@@ -29,24 +30,18 @@ impl<'a> Parser<'a> {
         self.peek(-1).unwrap()
     }
 
-    pub(super) fn consume(&mut self, ttype: TokenType, message: &str) -> bool {
+    pub(super) fn consume(&mut self, ttype: TokenType, msg: &str) -> Result<(), CompileError> {
         if self.get_current().get_ttype() == &ttype {
             self.advance();
-            true
+            Ok(())
         } else {
-            if self.panic_mode {
-                false
-            } else if self.get_current().get_ttype() == &TokenType::TokenError {
+            if self.get_current().get_ttype() == &TokenType::TokenError {
                 let msg = self.get_current().get_message().unwrap().to_string();
-                self.report_compile_error(msg, vec![self.get_current().get_metadata()]);
+                let metadata = self.get_current().get_metadata();
                 self.advance();
-                false
+                Err(CompileError::new(msg, vec![metadata]))
             } else {
-                self.report_compile_error(
-                    message.to_string(),
-                    vec![self.get_current().get_metadata()]
-                );
-                false
+                Err(CompileError::new(msg.to_string(), vec![self.get_current().get_metadata()]))
             }
         }
     }
@@ -210,6 +205,8 @@ impl<'a> Parser<'a> {
                 }
             }
         }
+
+        self.previous_tokens.clear()
     }
 
     pub(super) fn peek(&self, offset: isize) -> Option<&Token> {

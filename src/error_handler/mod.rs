@@ -15,6 +15,15 @@ pub struct CompileError {
     error_metadata: Vec<TokenMetadata>,
 }
 
+impl CompileError {
+    pub fn new(message: String, error_metadata: Vec<TokenMetadata>) -> Self {
+        Self {
+            message,
+            error_metadata,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct ErrorHandler {
     _compile_warnings: Vec<CompileError>,
