@@ -15,6 +15,7 @@ impl<'a> Lexer<'a> {
     pub(super) fn make_identifier_token(&mut self) -> Option<Token> {
         let ttype = match self.get_character(self.start) {
             //'b' => self.check_keyword(1, 3, "ool", TokenType::TokenBool),
+            'e' => self.check_keyword(1, 3, "lse", TokenType::TokenElse),
             'f' => {
                 if self.current - self.start > 1 {
                     match self.get_character(self.start + 1) {
@@ -107,6 +108,12 @@ impl<'a> Lexer<'a> {
         let mut depth = 0;
 
         loop {
+            if self.is(0, '/') && self.is(1, '*') {
+                depth += 1;
+            } else if self.is(0, '*') && self.is(1, '/') {
+                depth -= 1;
+            }
+
             if self.is_at_end() {
                 if depth != 0 {
                     return self.make_error_token(
@@ -120,19 +127,7 @@ impl<'a> Lexer<'a> {
                 self.line += 1;
             }
 
-            if self.is(0, '/') && self.is(1, '*') {
-                depth += 1;
-            } else if self.is(0, '*') && self.is(1, '/') {
-                depth -= 1;
-            }
-
-            if depth == 0 {
-                self.advance();
-                self.advance();
-                break;
-            } else {
-                self.advance();
-            }
+            self.advance();
         }
 
         None

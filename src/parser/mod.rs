@@ -9,13 +9,13 @@ pub mod ast_generator;
 mod lexer;
 
 use crate::{
-    ast::Ast,
+    ast::{ stmt::{ FunctionStmt, ScopeStmt, Stmt }, Ast },
     error_handler::ErrorHandler,
     operations::{ BinaryOp, UnaryOp },
     parser::{ lexer::Lexer, token::Token },
 };
 
-use self::{ ast_generator::AstGenerator, precedence::Precedence };
+use self::{ precedence::Precedence };
 
 #[derive(Debug, PartialEq)]
 pub enum RuleArg {
@@ -38,55 +38,77 @@ pub enum ParseMethod {
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
     source: &'a Vec<char>,
+    /*
     next: Option<Token>,
     current: Option<Token>,
     previous_tokens: Vec<Token>,
+    */
     had_error: bool,
     panic_mode: bool,
-    ast_generator: AstGenerator,
     error_handler: &'a mut ErrorHandler,
+    current: usize,
+    tokens: Vec<Token>,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(source: &'a Vec<char>, error_handler: &'a mut ErrorHandler) -> Self {
+        let tokens = Lexer::new(source).get_tokens();
+
         Self {
             lexer: Lexer::new(source),
+            tokens,
             source,
+            /*
             next: None,
             current: None,
             previous_tokens: Vec::with_capacity(64), // implement function to clear when: consume_expr_end
+            */
             had_error: false,
             panic_mode: false,
-            ast_generator: AstGenerator::new(),
+            current: 0,
             error_handler,
         }
     }
 
     pub fn free(&mut self) {
+        /*
         self.previous_tokens.clear();
         self.current = None;
+        self.next = None;
+        */
         self.had_error = false;
         self.panic_mode = false;
-        self.ast_generator.free();
+
         self.lexer.free();
     }
 
     #[profiler::function_tracker]
     pub fn parse_to_ast(&mut self) -> Ast {
-        self.advance();
-        self.advance();
+        let mut main_scope = ScopeStmt::new();
 
         while !self.is_at_end() {
-            self.statement();
+            match self.statement() {
+                Ok(stmt) => {
+                    match stmt {
+                        Stmt::FunctionStmt(_) => main_scope.forwards_declarations.push(stmt),
+                        _ => main_scope.cf_stmts.push(stmt),
+                    }
+                }
+                Err(e) => {
+                    // Report by sending object instead of doing this expensive clone
+                    self.report_compile_error(e.get_msg(), e.get_error_metadata());
+                }
+            }
 
             if self.panic_mode {
                 self.synchronize();
             }
         }
 
-        let ast = self.ast_generator.get_ast();
+        // println!("main: {:#?}", main_scope);
 
         self.free();
-        ast
+
+        Ast::new(main_scope)
     }
 }

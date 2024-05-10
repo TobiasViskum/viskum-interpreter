@@ -10,17 +10,22 @@ pub enum Op {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum BinaryOp {
-    Add,
-    Sub,
-    Mul,
-    Div,
+pub enum ComparisonOp {
     Equal,
     NotEqual,
     Greater,
     GreaterEqual,
     Less,
     LessEqual,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum BinaryOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    ComparisonOp(ComparisonOp),
 }
 
 impl BinaryOp {
@@ -31,12 +36,12 @@ impl BinaryOp {
                 Self::Sub => "Subtraction",
                 Self::Mul => "Multiplication",
                 Self::Div => "Division",
-                Self::Equal => "Equal",
-                Self::NotEqual => "NotEqual",
-                Self::Greater => "Greater",
-                Self::GreaterEqual => "GreaterEqual",
-                Self::Less => "Less",
-                Self::LessEqual => "LessEqual",
+                Self::ComparisonOp(ComparisonOp::Equal) => "Equal",
+                Self::ComparisonOp(ComparisonOp::NotEqual) => "NotEqual",
+                Self::ComparisonOp(ComparisonOp::Greater) => "Greater",
+                Self::ComparisonOp(ComparisonOp::GreaterEqual) => "GreaterEqual",
+                Self::ComparisonOp(ComparisonOp::Less) => "Less",
+                Self::ComparisonOp(ComparisonOp::LessEqual) => "LessEqual",
             }
         ).to_string()
     }
@@ -75,12 +80,13 @@ impl Op {
                     BinaryOp::Sub => "subtraction".to_string(),
                     BinaryOp::Mul => "multiplication".to_string(),
                     BinaryOp::Div => "division".to_string(),
-                    BinaryOp::Equal => "equal".to_string(),
-                    BinaryOp::NotEqual => "not equal".to_string(),
-                    BinaryOp::Greater => "greater".to_string(),
-                    BinaryOp::GreaterEqual => "greater equal".to_string(),
-                    BinaryOp::Less => "less".to_string(),
-                    BinaryOp::LessEqual => "less equal".to_string(),
+                    BinaryOp::ComparisonOp(ComparisonOp::Equal) => "equal".to_string(),
+                    BinaryOp::ComparisonOp(ComparisonOp::NotEqual) => "not equal".to_string(),
+                    BinaryOp::ComparisonOp(ComparisonOp::Greater) => "greater".to_string(),
+                    BinaryOp::ComparisonOp(ComparisonOp::GreaterEqual) =>
+                        "greater equal".to_string(),
+                    BinaryOp::ComparisonOp(ComparisonOp::Less) => "less".to_string(),
+                    BinaryOp::ComparisonOp(ComparisonOp::LessEqual) => "less equal".to_string(),
                 }
             Op::UnaryOp(unary_op) =>
                 match unary_op {

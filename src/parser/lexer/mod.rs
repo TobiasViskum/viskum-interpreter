@@ -1,3 +1,5 @@
+use core::panic;
+
 use crate::parser::token::{ token_type::TokenType, Token };
 
 mod core_methods;
@@ -27,6 +29,22 @@ impl<'a> Lexer<'a> {
         self.start = 0;
         self.current = 0;
         self.line = 1;
+    }
+
+    #[profiler::function_tracker]
+    pub fn get_tokens(&mut self) -> Vec<Token> {
+        let mut tokens = Vec::with_capacity(256);
+
+        while !self.is_at_end() {
+            match self.scan_token() {
+                Some(token) => tokens.push(token),
+                None => {
+                    break;
+                }
+            }
+        }
+
+        tokens
     }
 
     #[profiler::function_tracker]
@@ -65,7 +83,22 @@ impl<'a> Lexer<'a> {
             '/' => self.make_token(TokenType::TokenSlash),
             ';' => self.make_token(TokenType::TokenSemicolon),
             ',' => self.make_token(TokenType::TokenComma),
-
+            '<' => {
+                if self.is(0, '=') {
+                    self.advance();
+                    self.make_token(TokenType::TokenLessEqual)
+                } else {
+                    self.make_token(TokenType::TokenLess)
+                }
+            }
+            '>' => {
+                if self.is(0, '=') {
+                    self.advance();
+                    self.make_token(TokenType::TokenGreaterEqual)
+                } else {
+                    self.make_token(TokenType::TokenGreater)
+                }
+            }
             '=' => {
                 if self.is(0, '=') {
                     self.advance();
@@ -83,12 +116,12 @@ impl<'a> Lexer<'a> {
                 }
             }
             '!' => {
-                // if self.peek(0).unwrap() == '=' {
-                //     self.advance();
-                //     self.make_token(TokenType::TokenBangEqual)
-                // } else {
-                self.make_token(TokenType::TokenBang)
-                // }
+                if self.is(0, '=') {
+                    self.advance();
+                    self.make_token(TokenType::TokenBangEqual)
+                } else {
+                    self.make_token(TokenType::TokenBang)
+                }
             }
             c => {
                 if is_digit(Some(c)) {

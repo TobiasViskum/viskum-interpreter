@@ -1,6 +1,8 @@
+use std::fmt::format;
+
 use crate::ast;
 use crate::ast::expr::{ AstIdentifier, AstValue, Expr, ExprBuilder };
-use crate::ast::stmt::TypeDefStmt;
+use crate::ast::stmt::{ IfStmt, ScopeStmt, Stmt, TypeDefStmt };
 use crate::error_handler::CompileError;
 use crate::operations::{ BinaryOp, UnaryOp };
 use crate::value::Value;
@@ -28,13 +30,11 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    pub fn mut_var_def(&mut self) {
-        match self.get_current().get_ttype() {
-            TokenIdentifier => {
-                self.advance();
+    pub fn mut_var_def(&mut self) -> Result<Stmt, CompileError> {
+        self.advance();
 
-                self.var_def(RuleArg::MutVar);
-            }
+        match self.get_current().get_ttype() {
+            TokenIdentifier => { self.var_def(true) }
             TokenFunction => {
                 panic!("Functions cannot be mutable");
             }
@@ -43,33 +43,40 @@ impl<'a> Parser<'a> {
     }
 
     pub fn identifier(&mut self, expr_builder: &mut ExprBuilder) -> Result<(), CompileError> {
-        match self.is_at_expr_end() {
-            true => self.ident_lookup(expr_builder)?,
-            false => {
-                match self.get_current().get_ttype() {
-                    TokenAssign => self.var_assign(),
-                    TokenIdentifier | TokenDefine => self.var_def(RuleArg::None),
-                    TokenLeftParen => panic!("identifier: function"),
-                    _ => self.ident_lookup(expr_builder)?,
-                }
-            }
-        }
+        self.ident_lookup(expr_builder)?;
 
         Ok(())
     }
 
-    pub fn block(&mut self) {
-        self.start_scope();
+    pub fn block(&mut self) -> Result<ScopeStmt, CompileError> /* Only error if no '}' */ {
+        self.consume(
+            TokenType::TokenLeftCurlyBrace,
+            format!(
+                "Expected '{{' but got: {}",
+                self.get_current().get_lexeme(self.source)
+            ).as_str()
+        )?;
+
+        let mut scope_stmt = ScopeStmt::new();
 
         while
             !self.is_at_end() &&
             !matches!(self.get_current().get_ttype(), &TokenType::TokenRightCurlyBrace)
         {
-            self.statement();
+            match self.statement() {
+                Ok(stmt) =>
+                    match stmt {
+                        Stmt::FunctionStmt(_) => scope_stmt.forwards_declarations.push(stmt),
+                        _ => scope_stmt.cf_stmts.push(stmt),
+                    }
+                Err(e) => {
+                    // RCE
+                }
+            }
         }
-        self.consume(TokenType::TokenRightCurlyBrace, "Expected '}' at the end of block");
+        self.consume(TokenType::TokenRightCurlyBrace, "Expected '}' at the end of block")?;
 
-        self.end_scope()
+        Ok(scope_stmt)
     }
 
     pub fn typing(&mut self) {
@@ -110,23 +117,45 @@ impl<'a> Parser<'a> {
                 expr_builder.emit_constant_literal(
                     AstValue::new(Value::Bool(true), token.get_metadata())
                 ),
-            _ => {}
+            _ => {
+                return Err(
+                    CompileError::new(
+                        format!("Unexpected literal: '{}'", token.get_lexeme(self.source)),
+                        vec![token.get_metadata()]
+                    )
+                );
+            }
         }
 
         Ok(())
     }
 
-    pub fn if_statement(&mut self) {
-        self.expression_statement();
+    pub fn if_statement(&mut self) -> Result<IfStmt, CompileError> {
+        self.advance();
 
-        self.statement();
+        let condition = self.expression(PrecAssignment)?;
 
-        println!("{:#?}", self.ast_generator);
+        let true_block = self.block()?;
 
-        panic!("OH NO, IF IS NOT IMPL YET")
+        let false_block = if self.get_current().get_ttype().is(&TokenType::TokenElse) {
+            self.advance();
+            if self.get_current().get_ttype().is(&TokenType::TokenIf) {
+                Some(Box::new(self.if_statement()?))
+            } else {
+                let true_block = self.block()?;
+                Some(Box::new(IfStmt::new(None, true_block, None)))
+            }
+        } else {
+            None
+        };
+
+        Ok(IfStmt::new(Some(condition), true_block, false_block))
     }
 
-    pub fn function(&mut self) {
+    pub fn function(&mut self) -> Result<Stmt, CompileError> {
+        panic!("Functions not implemented yet!")
+
+        /*
         self.advance();
         let lexeme = self.get_previous().get_lexeme(self.source);
 
@@ -159,20 +188,21 @@ impl<'a> Parser<'a> {
         self.consume(TokenRightCurlyBrace, "Expected '}' after function body");
 
         self.end_function();
+        */
     }
 
     pub fn grouping(&mut self, expr_builder: &mut ExprBuilder) -> Result<(), CompileError> {
-        self.expression();
+        self.parse_precedence(PrecAssignment.get_next(), expr_builder)?;
 
-        self.consume(TokenRightParen, "Expect ')' after expression");
+        self.consume(TokenRightParen, "Expect ')' after expression")?;
 
         Ok(())
     }
 
     pub fn unary(&mut self, expr_builder: &mut ExprBuilder) -> Result<(), CompileError> {
-        let operator_type = { *self.get_previous().get_ttype() };
+        let operator_type = *self.get_previous().get_ttype();
 
-        self.parse_precedence(PrecUnary, None);
+        self.parse_precedence(PrecAssignment.get_next(), expr_builder)?;
 
         let unary_op = match operator_type.parse_unary() {
             Ok(op) => op,
@@ -193,11 +223,12 @@ impl<'a> Parser<'a> {
     }
 
     pub fn binary(&mut self, expr_builder: &mut ExprBuilder) -> Result<(), CompileError> {
-        let operator_type = { *self.get_previous().get_ttype() };
+        let operator_type = *self.get_previous().get_ttype();
 
-        let parse_rule = self.get_parse_rule(&operator_type);
-
-        self.parse_precedence(parse_rule.get_precedence().get_next(), None);
+        self.parse_precedence(
+            self.get_parse_rule(&operator_type).get_precedence().get_next(),
+            expr_builder
+        )?;
 
         let binary_op = match operator_type.parse_binary() {
             Ok(op) => op,

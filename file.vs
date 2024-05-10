@@ -1,12 +1,44 @@
 // type Hello = i32
 
 
-mut a := 2 + 2
+a := 2 + 2 * 8 
+cd := 4 
+
+if (1 + 1) * 2 == cd { 
+    if 2 == 3 { 
+        a = 3 
+    } else { 
+        if 1 == 19 {
+            a = 8
+        } else if 8 == 2 {
+            a = 16
+        } else {
+            a = 9
+        }
+    } 
+} else {
+    a = -2
+}
+
+a 
+cd 
+
 
 /*
 
-pub fn add(x i32, y i32) i32 {
-    return x + y
+
+if 2 == 2 {
+    a = 3
+}
+
+pub fn add(..values i32) i32 {
+    mut summed i32
+
+    for v in values {
+        summed += v
+    }
+
+    return summed
 }
 
 pub class Calculator {
@@ -21,7 +53,7 @@ pub class Calculator {
 calculator := Calculator()
 calculator.addToValue(3)
 print(calculator.value) // 3
-calculator.AddToValue(-2)
+calculator.addToValue(-2)
 print(calculator.value)
 
 mut a := 1 * 4 + 9

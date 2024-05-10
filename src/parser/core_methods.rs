@@ -9,35 +9,43 @@ use crate::{
 
 use super::{
     precedence::Precedence,
-    token::{ token_type::TokenType, Token, TokenMetadata },
+    token::{ token_type::TokenType::{ self, * }, Token, TokenMetadata },
     ParseMethod,
     Parser,
     RuleArg,
 };
 
 impl<'a> Parser<'a> {
-    pub(super) fn statement(&mut self) -> Stmt {
-        let current = self.get_current().get_ttype();
+    pub(super) fn statement(&mut self) -> Result<Stmt, CompileError> {
+        let curr = self.get_current().get_ttype();
 
-        match current {
-            TokenType::TokenLeftCurlyBrace => { self.block(RuleArg::None) }
-            TokenType::TokenMutable => { self.mut_var_def(RuleArg::None) }
-            TokenType::TokenFunction => { self.function(RuleArg::None) }
-            TokenType::TokenIf => { self.if_statement(RuleArg::None) }
-            // TokenType::TokenTyping => {}
+        match curr {
+            TokenLeftCurlyBrace => { Ok(Stmt::ScopeStmt(self.block()?)) }
+            TokenMutable => { self.mut_var_def() }
+            TokenFunction => { self.function() }
+            TokenIf => { Ok(Stmt::IfStmt(self.if_statement()?)) }
+
+            _ if curr.is(&TokenIdentifier) && self.is_ttype_in_line(TokenAssign) => {
+                self.var_assign()
+            }
+            _ if curr.is(&TokenIdentifier) && self.is_ttype_in_line(TokenDefine) => {
+                self.var_def(false)
+            }
+
+            // TokenTyping => {}
             _ => self.expression_statement(),
         }
 
         /*
         match self.get_current().get_ttype() {
-            TokenType::TokenIdentifier => {
+            TokenIdentifier => {
                 let next = self.get_next();
-                if next.is_some() && matches!(next.unwrap().get_ttype(), &TokenType::TokenDefine) {
+                if next.is_some() && matches!(next.unwrap().get_ttype(), &TokenDefine) {
                     self.advance();
                     self.variable_definition();
                 } else if
                     next.is_some() &&
-                    matches!(next.unwrap().get_ttype(), &TokenType::TokenAssign)
+                    matches!(next.unwrap().get_ttype(), &TokenAssign)
                 {
                     self.advance();
                     self.variable_assignment()
@@ -45,11 +53,11 @@ impl<'a> Parser<'a> {
                     self.expression_statement();
                 }
             }
-            TokenType::TokenInt32 | TokenType::TokenBool => {
+            TokenInt32 | TokenBool => {
                 while !self.is_at_end() && !self.is_at_expr_end() {
                     let next = self.get_next();
                     if let Some(next) = next {
-                        if matches!(next.get_ttype(), &TokenType::TokenIdentifier) {
+                        if matches!(next.get_ttype(), &TokenIdentifier) {
                             break;
                         }
                     } else {
@@ -63,19 +71,19 @@ impl<'a> Parser<'a> {
                 self.advance();
                 self.variable_definition();
             }
-            TokenType::TokenMutable => {
+            TokenMutable => {
                 self.advance();
 
                 match self.get_current().get_ttype() {
-                    TokenType::TokenFunction => {
+                    TokenFunction => {
                         // Function tokens isn't supported in lexer yet
                         // self.function_definition();
                     }
-                    TokenType::TokenInt32 | TokenType::TokenBool => {
+                    TokenInt32 | TokenBool => {
                         while !self.is_at_end() && !self.is_at_expr_end() {
                             let next = self.get_next();
                             if let Some(next) = next {
-                                if matches!(next.get_ttype(), &TokenType::TokenIdentifier) {
+                                if matches!(next.get_ttype(), &TokenIdentifier) {
                                     break;
                                 }
                             } else {
@@ -89,12 +97,12 @@ impl<'a> Parser<'a> {
                         self.advance();
                         self.variable_definition();
                     }
-                    TokenType::TokenIdentifier => {
+                    TokenIdentifier => {
                         let next = self.get_next();
 
                         if
                             next.is_some() &&
-                            matches!(next.unwrap().get_ttype(), &TokenType::TokenDefine)
+                            matches!(next.unwrap().get_ttype(), &TokenDefine)
                         {
                             self.advance();
                             self.variable_definition();
@@ -105,27 +113,27 @@ impl<'a> Parser<'a> {
                     _ => {
                         while
                             !self.is_at_end() &&
-                            !matches!(self.get_current().get_ttype(), &TokenType::TokenDefine)
+                            !matches!(self.get_current().get_ttype(), &TokenDefine)
                         {
                             self.advance();
                         }
 
-                        if self.get_current().get_ttype() == &TokenType::TokenDefine {
+                        if self.get_current().get_ttype() == &TokenDefine {
                             self.variable_definition();
                         }
                     }
                 }
             }
-            TokenType::TokenLeftCurlyBrace => {
+            TokenLeftCurlyBrace => {
                 self.start_scope();
                 self.advance();
                 while
                     !self.is_at_end() &&
-                    !matches!(self.get_current().get_ttype(), &TokenType::TokenRightCurlyBrace)
+                    !matches!(self.get_current().get_ttype(), &TokenRightCurlyBrace)
                 {
                     self.statement();
                 }
-                self.consume(TokenType::TokenRightCurlyBrace, "Expected '}' at the end of block");
+                self.consume(TokenRightCurlyBrace, "Expected '}' at the end of block");
                 self.end_scope()
             }
             _ => { self.expression_statement() }
@@ -133,29 +141,49 @@ impl<'a> Parser<'a> {
         */
     }
 
-    pub(super) fn var_assign(&mut self) -> Result<Stmt, CompileError> {
-        let (lexeme, token_metadata) = {
-            let token = self.get_previous();
-            (token.get_lexeme(self.source), token.get_metadata())
-        };
+    pub(super) fn is_ttype_in_line(&self, token_type: TokenType) -> bool {
+        let mut i: usize = 0;
 
-        let ident_lookup = AstIdentifier::new(lexeme, token_metadata);
+        let start_line = self.get_current().get_line();
+
+        loop {
+            i += 1;
+
+            match self.peek(i as isize) {
+                Some(token) => {
+                    if token.get_line() > start_line {
+                        return false;
+                    } else if token.get_ttype() == &token_type {
+                        return true;
+                    } else {
+                        continue;
+                    }
+                }
+                None => {
+                    return false;
+                }
+            }
+        }
+    }
+
+    pub(super) fn var_assign(&mut self) -> Result<Stmt, CompileError> {
+        let target_expr = self.expression(Precedence::PrecCall)?;
 
         self.consume(
-            TokenType::TokenAssign,
+            TokenAssign,
             format!(
                 "Expected '=' in variable assignment but got '{}'",
                 self.get_current().get_lexeme(self.source)
             ).as_str()
         )?;
 
-        let value = self.parse_precedence(Precedence::PrecAssignment.get_next(), None)?;
+        let value = self.expression(Precedence::PrecAssignment.get_next())?;
 
-        Ok(Stmt::VarAssignStmt(VarAssignStmt { field: ident_lookup, target_expr: None, value }))
+        Ok(Stmt::VarAssignStmt(VarAssignStmt { target_expr, value }))
     }
 
-    pub(super) fn var_def(&mut self, rule_arg: RuleArg) -> Result<Stmt, CompileError> {
-        let is_mutable = rule_arg == RuleArg::MutVar;
+    pub(super) fn var_def(&mut self, is_mutable: bool) -> Result<Stmt, CompileError> {
+        self.advance();
 
         let (lexeme, token_metadata) = {
             let token = self.get_previous();
@@ -167,12 +195,37 @@ impl<'a> Parser<'a> {
             Err(_) => None,
         };
 
-        let last_token_ind_definition = self.get_previous().get_metadata();
+        let value = if found_type.is_none() {
+            self.consume(
+                TokenDefine,
+                format!(
+                    "Expected ':=' in variable definition but got '{}'",
+                    self.get_current().get_lexeme(self.source)
+                ).as_str()
+            )?;
 
+            if self.is_at_expr_end() {
+                return Err(
+                    CompileError::new(
+                        "Missing right hand side of variable definition".to_string(),
+                        vec![self.get_previous().get_metadata()]
+                    )
+                );
+            }
+            let value = self.expression(Precedence::PrecAssignment.get_next())?;
+
+            Some(value)
+        } else {
+            None
+        };
+
+        Ok(Stmt::VarDefStmt(VarDefStmt::new(lexeme, found_type, is_mutable, value, token_metadata)))
+
+        /*
         if !self.is_at_expr_end() {
             if
                 self.consume(
-                    TokenType::TokenDefine,
+                    TokenDefine,
                     format!(
                         "Expected ':=' in variable definition but got '{}'",
                         self.get_current().get_lexeme(self.source)
@@ -196,17 +249,18 @@ impl<'a> Parser<'a> {
             identifier_metadata,
             found_type,
             is_mutable,
-            last_token_ind_definition
+            last_token_in_definition
         );
 
         if let Err((message, token_vec)) = result {
             self.report_compile_error(message, token_vec);
         }
+        */
     }
 
     pub(super) fn resolve_type(&mut self) -> Result<Option<ValueType>, Vec<TokenMetadata>> {
         let found_type = match self.get_current().get_ttype() {
-            TokenType::TokenIdentifier => {
+            TokenIdentifier => {
                 self.advance();
                 let type_lexeme = self.get_previous().get_lexeme(&self.source);
                 match type_lexeme.as_str() {
@@ -222,9 +276,9 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn expression_statement(&mut self) -> Result<Stmt, CompileError> {
-        let expr = self.expression()?;
+        let expr = self.expression(Precedence::PrecAssignment.get_next())?;
 
-        self.consume_expr_end();
+        self.consume_expr_end()?;
 
         Ok(Stmt::ExprStmt(expr))
 
@@ -239,17 +293,19 @@ impl<'a> Parser<'a> {
         */
     }
 
-    pub(super) fn expression(&mut self) -> Result<Expr, CompileError> {
-        self.parse_precedence(Precedence::PrecAssignment, None)
+    pub(super) fn expression(&mut self, precedence: Precedence) -> Result<Expr, CompileError> {
+        let mut expr_builder = ExprBuilder::new();
+
+        self.parse_precedence(precedence, &mut expr_builder)?;
+
+        Ok(expr_builder.get_built_expr())
     }
 
     pub(super) fn parse_precedence(
         &mut self,
         precedence: Precedence,
-        msg: Option<&str>
-    ) -> Result<Expr, CompileError> {
-        let mut expr_builder = ExprBuilder::new();
-
+        mut expr_builder: &mut ExprBuilder
+    ) -> Result<(), CompileError> {
         self.advance();
 
         let parse_rule = self.get_parse_rule(self.get_previous().get_ttype());
@@ -257,13 +313,13 @@ impl<'a> Parser<'a> {
         let prefix_rule = parse_rule.get_prefix();
 
         if let Some(prefix_rule) = prefix_rule {
-            let parse_method = prefix_rule(self, &mut expr_builder)?;
+            prefix_rule(self, &mut expr_builder)?;
 
             loop {
                 let current_ttype = self.get_current().get_ttype();
                 let current_precedence = self.get_parse_rule(current_ttype).get_precedence();
 
-                if (*current_precedence as usize) < (precedence as usize) {
+                if (precedence as usize) > (*current_precedence as usize) {
                     break;
                 }
 
@@ -276,7 +332,7 @@ impl<'a> Parser<'a> {
                 let infix_rule = self.get_parse_rule(self.get_previous().get_ttype()).get_infix();
 
                 if let Some(infix_rule) = infix_rule {
-                    infix_rule(self, &mut expr_builder);
+                    infix_rule(self, &mut expr_builder)?;
                 }
             }
         } else {
@@ -291,7 +347,7 @@ impl<'a> Parser<'a> {
             );
         }
 
-        Ok(expr_builder.get_built_expr())
+        Ok(())
     }
 
     pub(super) fn ident_lookup(
@@ -309,18 +365,18 @@ impl<'a> Parser<'a> {
     pub(super) fn resolve_function_args(&mut self) -> Result<Vec<FunctionArgument>, CompileError> {
         let mut args = vec![];
 
-        self.consume(TokenType::TokenLeftParen, "Expected '(' after function identifier");
+        self.consume(TokenLeftParen, "Expected '(' after function identifier");
 
         while !self.is_at_expr_end() {
-            if self.get_current().get_ttype().is(&TokenType::TokenComma) {
+            if self.get_current().get_ttype().is(&TokenComma) {
                 self.advance();
             }
-            if self.get_current().get_ttype().is(&TokenType::TokenRightParen) {
+            if self.get_current().get_ttype().is(&TokenRightParen) {
                 break;
             }
 
             self.consume(
-                TokenType::TokenIdentifier,
+                TokenIdentifier,
                 format!(
                     "Expected identifer but got '{}' Syntax: <identifier> <type>",
                     self.get_current().get_lexeme(self.source)
@@ -329,7 +385,7 @@ impl<'a> Parser<'a> {
 
             let ident_lexeme = self.get_previous().get_lexeme(&self.source);
 
-            let is_mutable = match self.get_current().get_ttype().is(&TokenType::TokenMutable) {
+            let is_mutable = match self.get_current().get_ttype().is(&TokenMutable) {
                 true => {
                     self.advance();
                     true
@@ -355,14 +411,14 @@ impl<'a> Parser<'a> {
             });
         }
 
-        self.consume(TokenType::TokenRightParen, "Expected a closing ')' after function arguments");
+        self.consume(TokenRightParen, "Expected a closing ')' after function arguments");
 
         Ok(args)
     }
 
     // Temporary functions
     fn consume_type(&mut self, msg: &str) -> Option<&TokenType> {
-        if matches!(self.get_current().get_ttype(), TokenType::TokenInt32 | TokenType::TokenBool) {
+        if matches!(self.get_current().get_ttype(), TokenInt32 | TokenBool) {
             Some(self.get_current().get_ttype())
         } else {
             self.report_compile_error(msg.to_string(), vec![self.get_current().get_metadata()]);
@@ -371,7 +427,7 @@ impl<'a> Parser<'a> {
     }
 
     fn consume_identifier(&mut self, msg: &str) -> Option<String> {
-        if matches!(self.get_current().get_ttype(), TokenType::TokenIdentifier) {
+        if matches!(self.get_current().get_ttype(), TokenIdentifier) {
             Some(self.get_current().get_lexeme(self.source))
         } else {
             self.report_compile_error(msg.to_string(), vec![self.get_current().get_metadata()]);
@@ -379,12 +435,37 @@ impl<'a> Parser<'a> {
         }
     }
 
+    pub(super) fn emit_operand(
+        &mut self,
+        expr_builder: &mut ExprBuilder
+    ) -> Result<(), CompileError> {
+        self.advance();
+        match self.get_previous().get_ttype() {
+            TokenIdentifier => self.identifier(expr_builder)?,
+            TokenTrue | TokenFalse => self.literal(expr_builder)?,
+            TokenNumber => self.number(expr_builder)?,
+            _ => {
+                return Err(
+                    CompileError::new(
+                        format!(
+                            "Expected operand but got: '{}'",
+                            self.get_previous().get_lexeme(self.source)
+                        ),
+                        vec![self.get_previous().get_metadata()]
+                    )
+                );
+            }
+        }
+
+        Ok(())
+    }
+
     pub(super) fn resolve_function_return_type(&mut self) -> Result<Option<ValueType>, ()> {
         let return_type = match self.get_current().get_ttype() {
-            TokenType::TokenLeftCurlyBrace => {
+            TokenLeftCurlyBrace => {
                 return Ok(None);
             }
-            TokenType::TokenIdentifier =>
+            TokenIdentifier =>
                 match self.resolve_type() {
                     Ok(return_type) => return_type,
                     Err(error_tokens) => {
@@ -414,7 +495,7 @@ impl<'a> Parser<'a> {
         self.exit_panic_mode();
 
         while !self.is_at_end() {
-            if self.get_previous().get_ttype() == &TokenType::TokenSemicolon {
+            if self.get_previous().get_ttype() == &TokenSemicolon {
                 return;
             }
             if self.get_previous().get_line() < self.get_current().get_line() {
@@ -423,12 +504,7 @@ impl<'a> Parser<'a> {
             }
 
             match self.get_current().get_ttype() {
-                TokenType::TokenError => {
-                    let current = self.get_current();
-                    self.report_compile_error(
-                        current.get_message().unwrap().to_string(),
-                        vec![current.get_metadata()]
-                    );
+                TokenError => {
                     self.advance();
                 }
                 _ => self.advance(),
@@ -443,9 +519,9 @@ pub(super) fn resolve_typing(&mut self) -> Result<Typing, ()> {
         let token_metadata = current_token.get_metadata();
 
         let typing = match current_token.get_ttype() {
-            TokenType::TokenInt32 => Typing::new_int32(token_metadata),
-            TokenType::TokenBool => Typing::new_bool(token_metadata),
-            TokenType::TokenIdentifier =>
+            TokenInt32 => Typing::new_int32(token_metadata),
+            TokenBool => Typing::new_bool(token_metadata),
+            TokenIdentifier =>
                 Typing::new_custom(current_token.get_lexeme(self.source), token_metadata),
             _ => {
                 self.report_compile_error(
@@ -469,7 +545,7 @@ pub(super) fn resolve_typing(&mut self) -> Result<Typing, ()> {
         */
 
         // match current_token.get_ttype() {
-        //     TokenType::TokenIdentifier => crate::value_v2::ValueType::
+        //     TokenIdentifier => crate::value_v2::ValueType::
         // }
     }
 
@@ -482,14 +558,14 @@ pub(super) fn resolve_typing(&mut self) -> Result<Typing, ()> {
                 Some(token) => {
                     if
                         token.get_line() < line ||
-                        matches!(token.get_ttype(), TokenType::TokenEOF | TokenType::TokenSemicolon)
+                        matches!(token.get_ttype(), TokenEOF | TokenSemicolon)
                     {
                         return (None, None, search_index);
                     }
 
-                    if token.get_ttype() == &TokenType::TokenInt32 {
+                    if token.get_ttype() == &TokenInt32 {
                         return (Some(ValueType::Int32), Some(token.clone()), search_index);
-                    } else if token.get_ttype() == &TokenType::TokenBool {
+                    } else if token.get_ttype() == &TokenBool {
                         return (Some(ValueType::Bool), Some(token.clone()), search_index);
                     } else {
                         search_index -= 1;
@@ -504,7 +580,7 @@ pub(super) fn resolve_typing(&mut self) -> Result<Typing, ()> {
 
     pub(super) fn resolve_mutabiliy(&mut self, start_search_index: isize) -> (bool, isize) {
         match self.peek(start_search_index) {
-            Some(token) => (token.get_ttype() == &TokenType::TokenMutable, start_search_index),
+            Some(token) => (token.get_ttype() == &TokenMutable, start_search_index),
             None => (false, start_search_index),
         }
     }
@@ -531,7 +607,7 @@ pub(super) fn variable_definition(&mut self) {
         if !self.is_at_expr_end() {
             if
                 self.consume(
-                    TokenType::TokenDefine,
+                    TokenDefine,
                     format!(
                         "Expected ':=' in variable definition but got '{}'",
                         self.get_current().get_lexeme(self.source)

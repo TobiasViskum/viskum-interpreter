@@ -1,17 +1,22 @@
 use ahash::AHashMap;
 
-use crate::{ constants::REGISTERS, value::Value, vm::instructions::Instruction };
+use crate::{
+    constants::REGISTERS,
+    operations::{ BinaryOp, ComparisonOp },
+    value::Value,
+    vm::instructions::Instruction,
+};
 
-use self::cfg_node::CFGProcessNode;
+use self::cfg_node::{ CFGDecisionNode, CFGProcessNode };
 pub mod cfg_node;
 pub mod dag;
 
 #[derive(Debug)]
 pub enum CFGNode {
     Process(CFGProcessNode), // This is essentially a statement e.g. "mut i32 a := 8"
-    // Decision, // This is an if-statement (maybe other conditional statements as well)
+    Decision(CFGDecisionNode),
     ScopeStart(usize),
-    ScopeEnd(usize),
+    ScopeEnd(Option<usize>),
     ProgramStart(usize),
     ProgramEnd,
 }
@@ -187,19 +192,27 @@ impl CFG {
         }
     }
 
-    pub fn add_node(&mut self, node: CFGNode) {
+    pub fn add_node(&mut self, node: CFGNode) -> usize {
         self.nodes.push(node);
+        self.nodes.len() - 1
+    }
+
+    pub fn get_mut_node(&mut self, i: usize) -> Option<&mut CFGNode> {
+        self.nodes.get_mut(i)
     }
 
     // Implement iterator for CFG
-    fn for_each<F: FnMut(&mut CFGNode)>(&mut self, mut callback: F) {
-        let mut next_node_id = 0;
+    fn for_each<F: FnMut(&mut CFGNode)>(&mut self, start_node_id: usize, mut callback: F) {
+        let mut next_node_id = start_node_id;
 
         loop {
             match self.nodes.get_mut(next_node_id) {
                 Some(node) => {
                     callback(node);
                     match node {
+                        CFGNode::Decision(decision_node) => {
+                            next_node_id = decision_node.true_branch_id;
+                        }
                         CFGNode::Process(process_node) => {
                             next_node_id = process_node.next_id;
                         }
@@ -213,7 +226,12 @@ impl CFG {
                             next_node_id = *next_id;
                         }
                         CFGNode::ScopeEnd(next_id) => {
-                            next_node_id = *next_id;
+                            match next_id {
+                                Some(next_id) => {
+                                    next_node_id = *next_id;
+                                }
+                                None => {}
+                            }
                         }
                     }
                 }
@@ -224,79 +242,298 @@ impl CFG {
         }
     }
 
-    pub fn generate_bytecode(&mut self) -> Vec<Instruction> {
-        let mut registers_maps = RegistersMap::new();
-        let mut instructions: Vec<Instruction> = Vec::with_capacity(64);
+    pub fn generate_bytecode_for_if_stmt(
+        &mut self,
+        decision_node_id: usize,
+        registers_map: &mut RegistersMap,
+        all_instructions_len: usize
+    ) -> (Vec<Instruction>, usize) {
+        // Get comparison op for later (to avoid borrow rule errors)
+        let comparison_op = match self.nodes.get_mut(decision_node_id).unwrap() {
+            CFGNode::Decision(decision_node) =>
+                match &mut decision_node.condition {
+                    Some(dag) => { Some(dag.ensure_comparison_to_entry_node()) }
+                    _ => None,
+                }
+            _ => panic!("Expected decision node"),
+        };
 
-        self.for_each(|node| {
-            match node {
-                CFGNode::Process(ref mut process_node) => {
-                    let node_instructions = process_node.dag.generate_bytecode(&mut registers_maps);
-                    instructions.extend(node_instructions)
+        let (instructions, next_node_id) = match self.nodes.get_mut(decision_node_id).unwrap() {
+            CFGNode::Decision(decision_node) => {
+                let mut if_stmt_instructions: Vec<Instruction> = vec![];
+
+                let node_instructions = match &decision_node.condition {
+                    Some(dag) => { dag.generate_dag_bytecode(registers_map) }
+                    None => vec![],
+                };
+
+                let offset_len = all_instructions_len + node_instructions.len() + 1;
+
+                let (true_branch_id, false_branch_id) = (
+                    decision_node.true_branch_id,
+                    decision_node.false_branch_id,
+                );
+
+                let (true_branch_instructions, mut next_node_id) = self.generate_bytecode(
+                    true_branch_id,
+                    registers_map,
+                    offset_len
+                );
+
+                if_stmt_instructions.extend(node_instructions);
+
+                let true_pos = all_instructions_len + if_stmt_instructions.len() + 1;
+                let false_pos = true_pos + true_branch_instructions.len() + 1;
+
+                let jump_instruction = match comparison_op {
+                    Some(comparison_op) =>
+                        match comparison_op {
+                            ComparisonOp::Equal => { Instruction::JE { true_pos, false_pos } }
+                            ComparisonOp::NotEqual => { Instruction::JNE { true_pos, false_pos } }
+                            ComparisonOp::Greater => { Instruction::JG { true_pos, false_pos } }
+                            ComparisonOp::GreaterEqual => {
+                                Instruction::JGE { true_pos, false_pos }
+                            }
+                            ComparisonOp::Less => { Instruction::JL { true_pos, false_pos } }
+                            ComparisonOp::LessEqual => { Instruction::JLE { true_pos, false_pos } }
+                        }
+                    None => Instruction::Jmp { pos: true_pos },
+                };
+
+                if_stmt_instructions.push(jump_instruction);
+                if_stmt_instructions.extend(true_branch_instructions);
+
+                if let Some(false_branch_id) = false_branch_id {
+                    let (temp_instructions, new_next_node_id) = self.generate_bytecode_for_if_stmt(
+                        false_branch_id,
+                        registers_map,
+                        all_instructions_len + if_stmt_instructions.len() + 1
+                    );
+
+                    next_node_id = new_next_node_id;
+
+                    if_stmt_instructions.push(Instruction::Jmp {
+                        pos: all_instructions_len +
+                        if_stmt_instructions.len() +
+                        temp_instructions.len() +
+                        1,
+                    });
+                    if_stmt_instructions.extend(temp_instructions);
+                } else {
+                    if_stmt_instructions.push(Instruction::Jmp {
+                        pos: all_instructions_len + if_stmt_instructions.len() + 1,
+                    });
                 }
-                CFGNode::ScopeStart(_) => {
-                    registers_maps.start_scope();
-                    instructions.push(Instruction::StartScope)
+
+                (if_stmt_instructions, next_node_id)
+            }
+            _ => panic!("Expected decision node"),
+        };
+
+        (instructions, next_node_id)
+
+        // let (instructions, next_node_id) = match self.nodes.get(decision_node_id).unwrap() {
+        //     CFGNode::Decision(decision_node) => {
+        //         let mut if_stmt_instructions: Vec<Instruction> = vec![];
+
+        //         let node_instructions = match &decision_node.condition {
+        //             Some(dag) => {
+        //                 println!("entry_node_id: {:?}", dag.nodes.get(&dag.get_entry_node_id()));
+        //                 dag.generate_dag_bytecode(registers_map)
+        //             }
+        //             None => vec![],
+        //         };
+
+        //         let offset_len = all_instructions_len + node_instructions.len() + 1;
+        //         if_stmt_instructions.extend(node_instructions);
+
+        //         let (true_branch_instructions, next_node_id) = self.generate_bytecode(
+        //             decision_node.true_branch_id,
+        //             registers_map,
+        //             offset_len
+        //         );
+
+        //         let true_pos = all_instructions_len + if_stmt_instructions.len() + 1;
+        //         let false_pos = true_pos + true_branch_instructions.len() + 1;
+
+        //         let jump_instruction = match comparison_op {
+        //             Some(comparison_op) =>
+        //                 match comparison_op {
+        //                     ComparisonOp::Equal => { Instruction::JE { true_pos, false_pos } }
+        //                     ComparisonOp::NotEqual => { Instruction::JNE { true_pos, false_pos } }
+        //                     ComparisonOp::Greater => { Instruction::JG { true_pos, false_pos } }
+        //                     ComparisonOp::GreaterEqual => {
+        //                         Instruction::JGE { true_pos, false_pos }
+        //                     }
+        //                     ComparisonOp::Less => { Instruction::JL { true_pos, false_pos } }
+        //                     ComparisonOp::LessEqual => { Instruction::JLE { true_pos, false_pos } }
+        //                 }
+
+        //             None => Instruction::Jmp { pos: true_pos },
+        //         };
+
+        //         if_stmt_instructions.push(jump_instruction);
+        //         if_stmt_instructions.extend(true_branch_instructions);
+
+        //         if let Some(false_branch_id) = decision_node.false_branch_id {
+        //             let (temp_instructions, new_next_node_id) = self.generate_bytecode_for_if_stmt(
+        //                 false_branch_id,
+        //                 registers_map,
+        //                 all_instructions_len + if_stmt_instructions.len() + 1
+        //             );
+
+        //             next_node_id = new_next_node_id;
+
+        //             if_stmt_instructions.push(Instruction::Jmp {
+        //                 pos: all_instructions_len +
+        //                 if_stmt_instructions.len() +
+        //                 temp_instructions.len() +
+        //                 1,
+        //             });
+        //             if_stmt_instructions.extend(temp_instructions);
+        //         } else {
+        //             if_stmt_instructions.push(Instruction::Jmp {
+        //                 pos: all_instructions_len + if_stmt_instructions.len() + 1,
+        //             });
+        //         }
+
+        //         (if_stmt_instructions, next_node_id)
+        //     }
+        //     _ => panic!("Expected decision node"),
+        // };
+
+        // (instructions, next_node_id)
+
+        // match self.nodes.get_mut(decision_node_id).unwrap() {
+        //     CFGNode::Decision(decision_node) => {
+        //         let jump_instruction = match &mut decision_node.condition {
+        //             Some(dag) => {
+        //                 println!("dag before: {:#?}", dag);
+
+        //                 let comparison_op = dag.ensure_comparison_to_entry_node();
+
+        //                 println!("dag efter: {:#?}", dag);
+
+        //                 match comparison_op {
+        //                     ComparisonOp::Equal => { Instruction::JE { true_pos, false_pos } }
+        //                     ComparisonOp::NotEqual => { Instruction::JNE { true_pos, false_pos } }
+        //                     ComparisonOp::Greater => { Instruction::JG { true_pos, false_pos } }
+        //                     ComparisonOp::GreaterEqual => {
+        //                         Instruction::JGE { true_pos, false_pos }
+        //                     }
+        //                     ComparisonOp::Less => { Instruction::JL { true_pos, false_pos } }
+        //                     ComparisonOp::LessEqual => { Instruction::JLE { true_pos, false_pos } }
+        //                 }
+        //             }
+        //             None => Instruction::Jmp { pos: true_pos },
+        //         };
+
+        //         if_stmt_instructions.push(jump_instruction);
+        //         if_stmt_instructions.extend(true_branch_instructions);
+
+        //         if let Some(false_branch_id) = decision_node.false_branch_id {
+        //             let (temp_instructions, new_next_node_id) = self.generate_bytecode_for_if_stmt(
+        //                 false_branch_id,
+        //                 registers_map,
+        //                 all_instructions_len + if_stmt_instructions.len() + 1
+        //             );
+
+        //             next_node_id = new_next_node_id;
+
+        //             if_stmt_instructions.push(Instruction::Jmp {
+        //                 pos: all_instructions_len +
+        //                 if_stmt_instructions.len() +
+        //                 temp_instructions.len() +
+        //                 1,
+        //             });
+        //             if_stmt_instructions.extend(temp_instructions);
+        //         } else {
+        //             if_stmt_instructions.push(Instruction::Jmp {
+        //                 pos: all_instructions_len + if_stmt_instructions.len() + 1,
+        //             });
+        //         }
+        //     }
+        //     _ => panic!("Expected decision node"),
+        // }
+    }
+
+    pub fn generate_bytecode(
+        &mut self,
+        start_node_id: usize,
+        registers_map: &mut RegistersMap,
+        offset_len: usize
+    ) -> (Vec<Instruction>, usize) {
+        let mut instructions = Vec::with_capacity(64);
+        let mut next_node_id = start_node_id;
+
+        loop {
+            match self.nodes.get(next_node_id) {
+                Some(node) => {
+                    match node {
+                        CFGNode::Decision(_) => {
+                            let (temp_instructions, new_next_node_id) =
+                                self.generate_bytecode_for_if_stmt(
+                                    next_node_id,
+                                    registers_map,
+                                    instructions.len() + offset_len
+                                );
+
+                            instructions.extend(temp_instructions);
+
+                            next_node_id = new_next_node_id;
+                        }
+                        CFGNode::Process(process_node) => {
+                            next_node_id = process_node.next_id;
+
+                            let node_instructions =
+                                process_node.dag.generate_dag_bytecode(registers_map);
+                            instructions.extend(node_instructions);
+                        }
+                        CFGNode::ProgramStart(next_id) => {
+                            next_node_id = *next_id;
+                        }
+                        CFGNode::ProgramEnd => {
+                            instructions.push(Instruction::Halt);
+                            break;
+                        }
+                        CFGNode::ScopeStart(next_id) => {
+                            next_node_id = *next_id;
+
+                            registers_map.start_scope();
+                            instructions.push(Instruction::StartScope);
+                        }
+                        CFGNode::ScopeEnd(next_id) => {
+                            registers_map.end_scope();
+                            instructions.push(Instruction::EndScope);
+
+                            match next_id {
+                                Some(next_id) => {
+                                    next_node_id = *next_id;
+                                }
+                                None => {
+                                    break;
+                                }
+                            }
+                        }
+                    }
                 }
-                CFGNode::ScopeEnd(_) => {
-                    registers_maps.end_scope();
-                    instructions.push(Instruction::EndScope)
-                }
-                CFGNode::ProgramStart(_) => {}
-                CFGNode::ProgramEnd => {
-                    instructions.push(Instruction::Halt);
+                None => {
+                    panic!("Invalid next_node_id: {}", next_node_id);
                 }
             }
-        });
+        }
 
-        instructions
-
-        /*
-        MUL S0:R0 1 4
-        ADD S0:R1 S0:R0 9
-        DEFINE S0:R0 S0:R1
-        ADD S0:R1 2 2
-        STARTSCOPE
-
-            DEFINE S1:R0 2
-            ADD S1:R1 S1:R0 1
-            STARTSCOPE
-
-                ASSIGN S2:R0 3
-                ADD S2:R1 S2:R0 1
-
-            ENDSCOPE
-            LOAD S1:R2 true
-
-        ENDSCOPE
-        LOAD S0:R2 false
-        LOAD S0:R3 true
-        STARTSCOPE
-
-            ADD S1:R0 S0:R0 2
-            DEFINE S1:R1 9
-            STARTSCOPE
-
-                ADD S2:R0 S0:R0 S1:R1
-                MUL S2:R1 2 8
-                ADD S2:R2 S2:R0 S2:R1
-                DEFINE S2:R1 2
-
-            ENDSCOPE
-
-        ENDSCOPE
-        ADD S0:R4 S0:R0 2
-        HALT
-        */
+        (instructions, next_node_id + 1)
     }
 
     #[profiler::function_tracker]
     pub fn optimize_and_generate_bytecode(&mut self) -> Vec<Instruction> {
-        self.constant_folding();
+        // self.constant_folding();
 
         // self.eliminate_dead_code();
 
-        self.generate_bytecode()
+        let registers_maps = &mut RegistersMap::new();
+        self.generate_bytecode(0, registers_maps, 0).0
     }
 
     fn constant_folding(&mut self) {
@@ -304,8 +541,9 @@ impl CFG {
 
         let mut scope = 0;
 
-        self.for_each(|node| {
+        self.for_each(0, |node| {
             match node {
+                CFGNode::Decision(_) => {}
                 CFGNode::ProgramStart(_) => {
                     environment.start_scope();
                 }

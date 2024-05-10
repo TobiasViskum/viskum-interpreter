@@ -22,6 +22,14 @@ impl CompileError {
             error_metadata,
         }
     }
+
+    pub fn get_msg(&self) -> String {
+        self.message.clone()
+    }
+
+    pub fn get_error_metadata(&self) -> Vec<TokenMetadata> {
+        self.error_metadata.clone()
+    }
 }
 
 #[derive(Debug)]

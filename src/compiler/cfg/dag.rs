@@ -1,7 +1,7 @@
 use ahash::AHashMap;
 
 use crate::{
-    operations::{ BinaryOp, UnaryOp },
+    operations::{ BinaryOp, ComparisonOp, Op, UnaryOp },
     value::Value,
     vm::instructions::{ Instruction, InstructionRegister, InstructionSrc },
 };
@@ -47,6 +47,43 @@ impl DAG {
         }
     }
 
+    pub fn ensure_comparison_to_entry_node(&mut self) -> ComparisonOp {
+        let comparison_op = match self.nodes.get(&self.entry_node_id).unwrap().op {
+            DAGOp::BinaryOp(BinaryOp::ComparisonOp(op)) => Some(op),
+            _ => None,
+        };
+
+        if let Some(comparison_op) = comparison_op {
+            comparison_op
+        } else {
+            let comparison_op = ComparisonOp::Equal;
+            let falsy_node = self.add_node(
+                DAGNode::new(DAGOp::UnaryOp(UnaryOp::Truthy), Some(vec![self.entry_node_id]))
+            );
+            let false_node = self.add_node(DAGNode::new(DAGOp::Const(Value::Bool(false)), None));
+            let equal_node = self.add_node(
+                DAGNode::new(
+                    DAGOp::BinaryOp(BinaryOp::ComparisonOp(comparison_op)),
+                    Some(vec![false_node, falsy_node])
+                )
+            );
+            self.set_entry_node_id(equal_node);
+
+            comparison_op
+        }
+    }
+
+    pub fn get_entry_node_id(&self) -> usize {
+        self.entry_node_id
+    }
+
+    pub fn get_entry_node_binary_op(&self) -> Option<BinaryOp> {
+        match self.nodes.get(&self.entry_node_id).unwrap().op {
+            DAGOp::BinaryOp(op) => Some(op),
+            _ => None,
+        }
+    }
+
     pub fn set_entry_node_id(&mut self, entry_node_id: usize) {
         self.entry_node_id = entry_node_id;
     }
@@ -66,17 +103,28 @@ impl DAG {
         self.nodes.remove(&node_id);
     }
 
-    pub fn generate_bytecode(&self, registers_maps: &mut RegistersMap) -> Vec<Instruction> {
+    pub fn generate_dag_bytecode(&self, registers_maps: &mut RegistersMap) -> Vec<Instruction> {
         let mut bytecode = vec![];
 
         match self.generate_node_bytecode(self.entry_node_id, registers_maps, &mut bytecode) {
             InstructionSrc::Constant(value) => {
                 if bytecode.len() == 0 {
-                    let (register, scope) = registers_maps.assign_register();
+                    let (temp_register, scope) = registers_maps.assign_register();
                     bytecode.push(Instruction::Load {
-                        reg: InstructionRegister::new(register, scope, false),
+                        reg: InstructionRegister::new(temp_register, scope, false),
                         src: InstructionSrc::Constant(value),
                     });
+                    registers_maps.free_register(temp_register, scope);
+                }
+            }
+            InstructionSrc::Register(register) => {
+                if bytecode.len() == 0 {
+                    let (temp_register, scope) = registers_maps.assign_register();
+                    bytecode.push(Instruction::Load {
+                        reg: InstructionRegister::new(temp_register, scope, false),
+                        src: InstructionSrc::Register(register),
+                    });
+                    registers_maps.free_register(temp_register, scope);
                 }
             }
             _ => {}
@@ -194,8 +242,13 @@ impl DAG {
                             src2: right,
                         },
 
-                    BinaryOp::Equal => Instruction::JE { true_pos: 0, false_pos: 0 },
-                    _ => panic!("ONLY EQ IS IMPLEMENTED"),
+                    | BinaryOp::ComparisonOp(ComparisonOp::Equal)
+                    | BinaryOp::ComparisonOp(ComparisonOp::NotEqual)
+                    | BinaryOp::ComparisonOp(ComparisonOp::Greater)
+                    | BinaryOp::ComparisonOp(ComparisonOp::GreaterEqual)
+                    | BinaryOp::ComparisonOp(ComparisonOp::Less)
+                    | BinaryOp::ComparisonOp(ComparisonOp::LessEqual) =>
+                        Instruction::Cmp { src1: left, src2: right },
                 };
 
                 bytecode.push(instruction);
@@ -276,14 +329,15 @@ impl DAG {
             DAGOp::Identifier(lexeme) => {
                 let (value, changed_state, _) = match environment.get(lexeme) {
                     Some(value) => value,
-                    None => panic!("Variable not found"),
+                    None => panic!("Variable not found: {}", lexeme),
                 };
 
-                if changed_state == &ChangedState::Unchanged {
-                    return value.clone();
-                } else {
-                    return None;
-                }
+                println!("{:?} {:?}", value, changed_state);
+                // if changed_state == &ChangedState::Unchanged {
+                return value.clone();
+                // } else {
+                //     return None;
+                // }
             }
             DAGOp::BinaryOp(op) => {
                 if let Some(operands) = &node.operands {
@@ -430,7 +484,7 @@ impl DAG {
                         );
                         Some(evaluated)
                     }
-                    BinaryOp::Equal => {
+                    BinaryOp::ComparisonOp(ComparisonOp::Equal) => {
                         let evaluated = Value::Bool(lhs.cmp_e(&rhs).unwrap());
                         self.remove_node(operands[0]);
                         self.remove_node(operands[1]);
@@ -440,7 +494,7 @@ impl DAG {
                         );
                         Some(evaluated)
                     }
-                    BinaryOp::NotEqual => {
+                    BinaryOp::ComparisonOp(ComparisonOp::NotEqual) => {
                         let evaluated = Value::Bool(lhs.cmp_ne(&rhs).unwrap());
                         self.remove_node(operands[0]);
                         self.remove_node(operands[1]);
@@ -450,7 +504,7 @@ impl DAG {
                         );
                         Some(evaluated)
                     }
-                    BinaryOp::Greater => {
+                    BinaryOp::ComparisonOp(ComparisonOp::Greater) => {
                         let evaluated = Value::Bool(lhs.cmp_g(&rhs).unwrap());
                         self.remove_node(operands[0]);
                         self.remove_node(operands[1]);
@@ -460,7 +514,7 @@ impl DAG {
                         );
                         Some(evaluated)
                     }
-                    BinaryOp::GreaterEqual => {
+                    BinaryOp::ComparisonOp(ComparisonOp::GreaterEqual) => {
                         let evaluated = Value::Bool(lhs.cmp_ge(&rhs).unwrap());
                         self.remove_node(operands[0]);
                         self.remove_node(operands[1]);
@@ -470,7 +524,7 @@ impl DAG {
                         );
                         Some(evaluated)
                     }
-                    BinaryOp::Less => {
+                    BinaryOp::ComparisonOp(ComparisonOp::Less) => {
                         let evaluated = Value::Bool(lhs.cmp_l(&rhs).unwrap());
                         self.remove_node(operands[0]);
                         self.remove_node(operands[1]);
@@ -480,7 +534,7 @@ impl DAG {
                         );
                         Some(evaluated)
                     }
-                    BinaryOp::LessEqual => {
+                    BinaryOp::ComparisonOp(ComparisonOp::LessEqual) => {
                         let evaluated = Value::Bool(lhs.cmp_le(&rhs).unwrap());
                         self.remove_node(operands[0]);
                         self.remove_node(operands[1]);

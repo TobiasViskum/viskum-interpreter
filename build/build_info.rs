@@ -1,40 +1,40 @@
-pub const TOKEN_TYPES_AND_PARSE_RULES: [&str; 35] = [
+pub const TOKEN_TYPES_AND_PARSE_RULES: [&str; 38] = [
     // Single-character tokens
-    "LeftParen          = { grouping,           None,                                       PrecNone        }",
+    "LeftParen          = { grouping,                           None,                                       PrecNone        }",
     "RightParen         = { None,                               None,                                       PrecNone        }",
     "LeftCurlyBrace     = { None,                               None,                                       PrecNone        }",
     "RightCurlyBrace    = { None,                               None,                                       PrecNone        }",
     "LeftSquareBracket  = { None,                               None,                                       PrecNone        }",
     "RightSquareBracket = { None,                               None,                                       PrecNone        }",
     "Semicolon          = { None,                               None,                                       PrecNone        }",
-    "Bang               = { unary,   None,                                       PrecNone        }",
+    "Bang               = { unary,                              None,                                       PrecNone        }",
     "Assign             = { None,                               None,                                       PrecNone        }",
     "Comma              = { None,                               None,                                       PrecNone        }",
 
     // Arithmetic operators
-    "Minus              = { unary,   binary,        PrecTerm        }",
-    "Plus               = { None,                               binary,        PrecTerm        }",
-    "Slash              = { None,                               binary,        PrecFactor      }",
-    "Star               = { None,                               binary,        PrecFactor      }",
+    "Minus              = { unary,                              binary,                                     PrecTerm        }",
+    "Plus               = { None,                               binary,                                     PrecTerm        }",
+    "Slash              = { None,                               binary,                                     PrecFactor      }",
+    "Star               = { None,                               binary,                                     PrecFactor      }",
     // "Power                  = { None,          binary, PrecFactor     }",
 
     // Equality
-    "EqualEqual         = { None,                               binary,        PrecEquality    }",
-    "BangEqual          = { None,                               binary,        PrecEquality    }",
+    "EqualEqual         = { None,                               binary,                                     PrecEquality    }",
+    "BangEqual          = { None,                               binary,                                     PrecEquality    }",
 
     // Comparison
-    "Greater            = { None,                               binary,        PrecComparison  }",
-    "GreaterEqual       = { None,                               binary,        PrecComparison  }",
-    "Less               = { None,                               binary,        PrecComparison  }",
-    "LessEqual          = { None,                               binary,        PrecComparison  }",
+    "Greater            = { None,                               binary,                                     PrecComparison  }",
+    "GreaterEqual       = { None,                               binary,                                     PrecComparison  }",
+    "Less               = { None,                               binary,                                     PrecComparison  }",
+    "LessEqual          = { None,                               binary,                                     PrecComparison  }",
 
     // Literals
-    "Number             = { number,               None,                                       PrecNone        }",
-    "Identifier         = { identifier,       None,                                       PrecNone        }",
+    "Number             = { number,                             None,                                       PrecNone        }",
+    "Identifier         = { identifier,                         None,                                       PrecNone        }",
 
     // Types
-    "True               = { literal,             None,                                       PrecNone        }",
-    "False              = { literal,             None,                                       PrecNone        }",
+    "True               = { literal,                            None,                                       PrecNone        }",
+    "False              = { literal,                            None,                                       PrecNone        }",
     "Int32              = { None,                               None,                                       PrecNone        }",
     "Bool               = { None,                               None,                                       PrecNone        }",
 
@@ -48,18 +48,26 @@ pub const TOKEN_TYPES_AND_PARSE_RULES: [&str; 35] = [
     "Print              = { None,                               None,                                       PrecNone        }",
     "Return             = { None,                               None,                                       PrecNone        }",
     "If                 = { None,                               None,                                       PrecNone        }",
+    "Else               = { None,                               None,                                       PrecNone        }",
+    "Break              = { None,                               None,                                       PrecNone        }",
+    "Loop               = { None,                               None,                                       PrecNone        }",
 
-    "Error              = { error,                 None,                                       PrecNone        }",
+    "Error              = { error,                              None,                                       PrecNone        }",
     "EOF                = { None,                               None,                                       PrecNone        }",
 ];
 
 pub const PRECEDENCE: [&str; 11] = [
     "PrecNone",
+
     "PrecAssignment",
+
     "PrecOr",
+
     "PrecAnd",
+
     "PrecEquality",
     "PrecComparison",
+
     "PrecTerm",
     "PrecFactor",
     "PrecUnary",

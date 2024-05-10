@@ -95,6 +95,7 @@ impl Token {
     #[profiler::function_tracker]
     pub fn get_lexeme(&self, source: &Vec<char>) -> String {
         let mut lexeme = String::new();
+
         for i in self.start..self.start + self.length {
             lexeme.push(*source.get(i).unwrap());
         }

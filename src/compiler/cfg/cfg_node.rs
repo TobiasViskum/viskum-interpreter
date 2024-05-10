@@ -26,8 +26,24 @@ impl CFGProcessNode {
 
 #[derive(Debug)]
 pub struct CFGDecisionNode {
-    pub condition: usize,
+    pub condition: Option<DAG>,
     pub true_branch_id: usize,
-    pub false_branch_id: usize,
+    pub false_branch_id: Option<usize>,
     pub state: CFGNodeState,
+}
+
+impl CFGDecisionNode {
+    pub fn new(
+        condition: Option<DAG>,
+        true_branch_id: usize,
+        false_branch_id: Option<usize>,
+        state: CFGNodeState
+    ) -> Self {
+        Self {
+            condition,
+            true_branch_id,
+            false_branch_id,
+            state,
+        }
+    }
 }

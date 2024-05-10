@@ -1,4 +1,4 @@
-use crate::operations::{ BinaryOp, UnaryOp };
+use crate::operations::{ BinaryOp, ComparisonOp, UnaryOp };
 
 use super::TokenType;
 
@@ -20,12 +20,12 @@ impl TokenType {
             Self::TokenMinus => Ok(BinaryOp::Sub),
             Self::TokenSlash => Ok(BinaryOp::Div),
             Self::TokenStar => Ok(BinaryOp::Mul),
-            Self::TokenEqualEqual => Ok(BinaryOp::Equal),
-            Self::TokenBangEqual => Ok(BinaryOp::NotEqual),
-            Self::TokenGreater => Ok(BinaryOp::Greater),
-            Self::TokenGreaterEqual => Ok(BinaryOp::GreaterEqual),
-            Self::TokenLess => Ok(BinaryOp::Less),
-            Self::TokenLessEqual => Ok(BinaryOp::LessEqual),
+            Self::TokenEqualEqual => Ok(BinaryOp::ComparisonOp(ComparisonOp::Equal)),
+            Self::TokenBangEqual => Ok(BinaryOp::ComparisonOp(ComparisonOp::NotEqual)),
+            Self::TokenGreater => Ok(BinaryOp::ComparisonOp(ComparisonOp::Greater)),
+            Self::TokenGreaterEqual => Ok(BinaryOp::ComparisonOp(ComparisonOp::GreaterEqual)),
+            Self::TokenLess => Ok(BinaryOp::ComparisonOp(ComparisonOp::Less)),
+            Self::TokenLessEqual => Ok(BinaryOp::ComparisonOp(ComparisonOp::LessEqual)),
             _ => Err(()),
         }
     }

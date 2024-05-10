@@ -95,8 +95,6 @@ impl Ast {
             }
         }
 
-        println!("{:#?}", ast_environment.scopes);
-
         ast_environment.end_main_scope();
     }
 }

@@ -94,28 +94,87 @@ impl VM {
         self.registers.end_scope();
     }
 
+    fn get_cmp_values(&self) -> (Value, Value) {
+        match self.program.get(self.pc - 1).unwrap() {
+            Instruction::Cmp { src1, src2 } => {
+                let lhs = match src1 {
+                    InstructionSrc::Constant(v) => *v,
+                    InstructionSrc::Register(reg) => { *self.get_register(*reg) }
+                };
+                let rhs = match src2 {
+                    InstructionSrc::Constant(v) => *v,
+                    InstructionSrc::Register(reg) => { *self.get_register(*reg) }
+                };
+
+                (lhs, rhs)
+            }
+            _ => panic!("sdf"),
+        }
+    }
+
     #[profiler::function_tracker("vm-execution")]
     pub fn run(&mut self) {
-        let mut cmp_operands: [Option<InstructionSrc>; 2] = [None, None];
-
         while self.pc < self.program.len() {
             let instruction = self.get_instruction();
             match instruction {
-                Instruction::Cmp { src1, src2 } => {
-                    cmp_operands = [Some(src1.clone()), Some(src2.clone())];
+                Instruction::Cmp { .. } => {
+                    self.pc += 1;
+                    continue;
                 }
-
                 Instruction::JE { true_pos, false_pos } => {
-                    let left_operand = match cmp_operands[0].take().unwrap() {
-                        InstructionSrc::Constant(v) => v,
-                        InstructionSrc::Register(reg) => { *self.get_register(reg) }
-                    };
-                    let right_operand = match cmp_operands[1].take().unwrap() {
-                        InstructionSrc::Constant(v) => v,
-                        InstructionSrc::Register(reg) => { *self.get_register(reg) }
-                    };
+                    let (lhs, rhs) = self.get_cmp_values();
 
-                    if left_operand.cmp_g(&right_operand).unwrap() {
+                    if lhs.cmp_e(&rhs).unwrap() {
+                        self.pc = *true_pos;
+                    } else {
+                        self.pc = *false_pos;
+                    }
+                    continue;
+                }
+                Instruction::JNE { true_pos, false_pos } => {
+                    let (lhs, rhs) = self.get_cmp_values();
+
+                    if lhs.cmp_ne(&rhs).unwrap() {
+                        self.pc = *true_pos;
+                    } else {
+                        self.pc = *false_pos;
+                    }
+                    continue;
+                }
+                Instruction::JG { true_pos, false_pos } => {
+                    let (lhs, rhs) = self.get_cmp_values();
+
+                    if lhs.cmp_g(&rhs).unwrap() {
+                        self.pc = *true_pos;
+                    } else {
+                        self.pc = *false_pos;
+                    }
+                    continue;
+                }
+                Instruction::JGE { true_pos, false_pos } => {
+                    let (lhs, rhs) = self.get_cmp_values();
+
+                    if lhs.cmp_ge(&rhs).unwrap() {
+                        self.pc = *true_pos;
+                    } else {
+                        self.pc = *false_pos;
+                    }
+                    continue;
+                }
+                Instruction::JL { true_pos, false_pos } => {
+                    let (lhs, rhs) = self.get_cmp_values();
+
+                    if lhs.cmp_l(&rhs).unwrap() {
+                        self.pc = *true_pos;
+                    } else {
+                        self.pc = *false_pos;
+                    }
+                    continue;
+                }
+                Instruction::JLE { true_pos, false_pos } => {
+                    let (lhs, rhs) = self.get_cmp_values();
+
+                    if lhs.cmp_le(&rhs).unwrap() {
                         self.pc = *true_pos;
                     } else {
                         self.pc = *false_pos;
@@ -123,25 +182,18 @@ impl VM {
                     continue;
                 }
                 Instruction::Jmp { pos } => {
-                    self.pc = *pos - 1;
+                    self.pc = *pos;
                     continue;
                 }
                 Instruction::Function { dest, instructions_count } => panic!("NOT IMPLEMENTED"),
                 Instruction::Halt => {
-                    // #[cfg(debug_assertions)]
-                    // {
-                    //     for scope in &self.registers.registers {
-                    //         for register in scope {
-                    //             if let Value::Int32(value) = register {
-                    //                 if value != &0 {
-                    //                     println!("{}", value);
-                    //                 }
-                    //             } else {
-                    //                 println!("{}", register.to_string());
-                    //             }
-                    //         }
-                    //     }
-                    // }
+                    #[cfg(debug_assertions)]
+                    {
+                        println!(
+                            "R1:S0 = {:?}",
+                            self.get_register(InstructionRegister::new(1, 0, true))
+                        )
+                    }
                     break;
                 }
                 Instruction::StartScope => {

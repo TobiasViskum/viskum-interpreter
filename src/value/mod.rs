@@ -1,4 +1,6 @@
-use crate::operations::{ BinaryOp, UnaryOp };
+use std::rc::Rc;
+
+use crate::operations::{ BinaryOp, ComparisonOp, UnaryOp };
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum ValueType {
@@ -29,12 +31,12 @@ impl ValueType {
             BinaryOp::Mul => self.try_mul(other),
             BinaryOp::Div => self.try_div(other),
             BinaryOp::Sub => self.try_sub(other),
-            | BinaryOp::Equal
-            | BinaryOp::NotEqual
-            | BinaryOp::Greater
-            | BinaryOp::GreaterEqual
-            | BinaryOp::Less
-            | BinaryOp::LessEqual => self.try_cmp(other, op),
+            | BinaryOp::ComparisonOp(ComparisonOp::Equal)
+            | BinaryOp::ComparisonOp(ComparisonOp::NotEqual)
+            | BinaryOp::ComparisonOp(ComparisonOp::Greater)
+            | BinaryOp::ComparisonOp(ComparisonOp::GreaterEqual)
+            | BinaryOp::ComparisonOp(ComparisonOp::Less)
+            | BinaryOp::ComparisonOp(ComparisonOp::LessEqual) => self.try_cmp(other, op),
         }
     }
 
@@ -51,12 +53,12 @@ impl ValueType {
             (ValueType::Bool, ValueType::Bool) => Ok(ValueType::Bool),
             _ => {
                 let op_lexeme = match op {
-                    BinaryOp::Equal => "==",
-                    BinaryOp::NotEqual => "!=",
-                    BinaryOp::Greater => ">",
-                    BinaryOp::GreaterEqual => ">=",
-                    BinaryOp::Less => "<",
-                    BinaryOp::LessEqual => "<=",
+                    BinaryOp::ComparisonOp(ComparisonOp::Equal) => "==",
+                    BinaryOp::ComparisonOp(ComparisonOp::NotEqual) => "!=",
+                    BinaryOp::ComparisonOp(ComparisonOp::Greater) => ">",
+                    BinaryOp::ComparisonOp(ComparisonOp::GreaterEqual) => ">=",
+                    BinaryOp::ComparisonOp(ComparisonOp::Less) => "<",
+                    BinaryOp::ComparisonOp(ComparisonOp::LessEqual) => "<=",
                     _ => "ERROR",
                 };
 
@@ -321,7 +323,7 @@ impl Value {
     pub fn not(&self) -> Self {
         match self {
             Value::Bool(bool) => Value::Bool(!*bool),
-            Value::Int32(int32) => Value::Bool(!*int32 != 0),
+            Value::Int32(int32) => Value::Bool(!(*int32 != 0)),
             Value::Empty => Value::Empty,
         }
     }

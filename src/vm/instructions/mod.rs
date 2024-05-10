@@ -88,6 +88,26 @@ pub enum Instruction {
         true_pos: usize,
         false_pos: usize,
     },
+    JNE {
+        true_pos: usize,
+        false_pos: usize,
+    },
+    JG {
+        true_pos: usize,
+        false_pos: usize,
+    },
+    JGE {
+        true_pos: usize,
+        false_pos: usize,
+    },
+    JL {
+        true_pos: usize,
+        false_pos: usize,
+    },
+    JLE {
+        true_pos: usize,
+        false_pos: usize,
+    },
     Function {
         dest: InstructionRegister,
         instructions_count: u16,
@@ -102,6 +122,11 @@ impl Instruction {
             }
             Self::Jmp { pos } => { format!("JMP {}", pos) }
             Self::JE { true_pos, false_pos } => { format!("JE {} {}", true_pos, false_pos) }
+            Self::JNE { true_pos, false_pos } => { format!("JNE {} {}", true_pos, false_pos) }
+            Self::JG { true_pos, false_pos } => { format!("JG {} {}", true_pos, false_pos) }
+            Self::JGE { true_pos, false_pos } => { format!("JGE {} {}", true_pos, false_pos) }
+            Self::JL { true_pos, false_pos } => { format!("JL {} {}", true_pos, false_pos) }
+            Self::JLE { true_pos, false_pos } => { format!("JLE {} {}", true_pos, false_pos) }
             Self::Function { dest, instructions_count } => panic!("DISSASSEMBLE NOT IMPLEMENTED"),
             Self::Halt => { "HALT".to_string() }
             Self::StartScope => { "STARTSCOPE".to_string() }

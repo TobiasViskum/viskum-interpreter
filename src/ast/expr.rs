@@ -46,6 +46,8 @@ impl ExprBuilder {
     }
 
     pub fn emit_binary_op(&mut self, binary_op: BinaryOp) -> Result<(), CompileError> {
+    
+
         let popped_left = self.exprs.pop();
         let popped_right = self.exprs.pop();
 

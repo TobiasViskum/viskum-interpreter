@@ -102,39 +102,37 @@ impl Stmt {
                     }
                 };
 
-                let variable = ast_environment.get(&variable_assignment.field.get_lexeme());
+                let variable = ast_environment.get(&variable_assignment.temp_get_lexeme());
 
                 if let Some((value_type, is_mutable, is_initialized)) = variable {
                     if !is_initialized {
                         println!(
                             "Found non-initialized variable: '{}'.\nTODO: Implement checks when conditional blocks are implemented.",
-                            variable_assignment.field.get_lexeme()
+                            variable_assignment.temp_get_lexeme()
                         );
                     }
                     if !is_mutable && is_initialized {
                         variable_assignment.value.push_to_token_vec(token_vec);
-                        variable_assignment.field.push_to_token_vec(token_vec);
 
                         return Err(
                             format!(
                                 "Cannot mutate immutable variable '{}'",
-                                variable_assignment.field.lexeme
+                                variable_assignment.temp_get_lexeme()
                             )
                         );
                     } else {
                         if !&resulted_value_type.is(&value_type) {
                             variable_assignment.value.push_to_token_vec(token_vec);
-                            variable_assignment.field.push_to_token_vec(token_vec);
 
                             let error_message = if value_type.is(&ValueType::Unkown) {
                                 format!(
                                     "The tye of variable '{}' is unknown and cannot be assigned to",
-                                    variable_assignment.field.lexeme
+                                    variable_assignment.temp_get_lexeme()
                                 )
                             } else {
                                 format!(
                                     "Variable '{}' is of type {} but the assignment value is of type {}",
-                                    variable_assignment.field.lexeme,
+                                    variable_assignment.temp_get_lexeme(),
                                     value_type.to_type_string(),
                                     resulted_value_type.to_type_string()
                                 )
@@ -145,12 +143,11 @@ impl Stmt {
                     }
                 } else {
                     variable_assignment.value.push_to_token_vec(token_vec);
-                    variable_assignment.field.push_to_token_vec(token_vec);
 
                     return Err(
                         format!(
                             "Cannot assign to undefined variable: '{}'",
-                            variable_assignment.field.lexeme
+                            variable_assignment.temp_get_lexeme()
                         )
                     );
                 }
@@ -163,17 +160,22 @@ impl Stmt {
 
 #[derive(Debug)]
 pub struct VarAssignStmt {
-    pub target_expr: Option<Expr>,
-    pub field: AstIdentifier,
+    pub target_expr: Expr,
     pub value: Expr,
 }
 
 impl VarAssignStmt {
-    pub fn new(target_expr: Option<Expr>, field: AstIdentifier, value: Expr) -> Self {
+    pub fn new(target_expr: Expr, value: Expr) -> Self {
         Self {
             target_expr,
-            field,
             value,
+        }
+    }
+
+    pub fn temp_get_lexeme(&self) -> String {
+        match &self.target_expr {
+            Expr::IdentifierLookup(ident) => ident.get_lexeme(),
+            _ => panic!("temp_get_lexeme"),
         }
     }
 }
@@ -207,13 +209,17 @@ impl VarDefStmt {
 
 #[derive(Debug)]
 pub struct IfStmt {
-    condition: Expr,
-    true_block: ScopeStmt,
-    false_block: Option<Box<IfStmt>>,
+    pub condition: Option<Expr>,
+    pub true_block: ScopeStmt,
+    pub false_block: Option<Box<IfStmt>>,
 }
 
 impl IfStmt {
-    pub fn new(condition: Expr, true_block: ScopeStmt, false_block: Option<Box<IfStmt>>) -> Self {
+    pub fn new(
+        condition: Option<Expr>,
+        true_block: ScopeStmt,
+        false_block: Option<Box<IfStmt>>
+    ) -> Self {
         Self {
             condition,
             true_block,
