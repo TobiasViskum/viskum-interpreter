@@ -3,7 +3,7 @@ use crate::{ constants::REGISTERS, value::Value };
 pub mod instructions;
 mod helper_methods;
 
-use self::instructions::{ InstructionRegister, Instruction, InstructionSrc };
+use self::instructions::{ Instruction, InstructionSrc };
 
 pub struct Registers {
     registers: Vec<Vec<Value>>,
@@ -57,14 +57,16 @@ impl Registers {
     }
 }
 
-pub struct VMFunction {
-    registers: Registers,
-    instructions: Vec<Instruction>,
+pub struct StackFrame {
     ip: usize,
+    instructions: Vec<Instruction>,
+    slots: usize,
 }
 
 pub struct VM {
-    registers: Registers,
+    stack_frames: Vec<StackFrame>,
+    registers: [Option<Value>; REGISTERS],
+    stack: Vec<Value>,
     program: Vec<Instruction>,
     pc: usize,
 }
@@ -72,26 +74,32 @@ pub struct VM {
 impl VM {
     pub fn new(program: Vec<Instruction>) -> VM {
         VM {
-            registers: Registers::new(),
+            stack_frames: Vec::with_capacity(64),
+            registers: [None; REGISTERS],
+            stack: Vec::with_capacity(64),
             program,
             pc: 0,
         }
     }
 
-    fn get_register(&self, instruction_register: InstructionRegister) -> &Value {
-        self.registers.get(instruction_register.register, instruction_register.scope)
+    fn get_from_stack(&self, stack_pos: usize) -> &Value {
+        self.stack.get(stack_pos).unwrap()
     }
 
-    fn get_register_mut(&mut self, instruction_register: InstructionRegister) -> &mut Value {
-        self.registers.get_mut(instruction_register.register, instruction_register.scope)
+    fn push_to_stack(&mut self, value: Value) {
+        self.stack.push(value);
     }
 
-    fn start_scope(&mut self) {
-        self.registers.start_scope();
+    fn get_from_stack_mut(&mut self, stack_pos: usize) -> &mut Value {
+        self.stack.get_mut(stack_pos).unwrap()
     }
 
-    fn end_scope(&mut self) {
-        self.registers.end_scope();
+    fn get_register(&self, instruction_register: usize) -> &Value {
+        self.registers.get(instruction_register).unwrap().as_ref().unwrap()
+    }
+
+    fn get_register_mut(&mut self, instruction_register: usize) -> &mut Option<Value> {
+        self.registers.get_mut(instruction_register).unwrap()
     }
 
     fn get_cmp_values(&self) -> (Value, Value) {
@@ -100,15 +108,17 @@ impl VM {
                 let lhs = match src1 {
                     InstructionSrc::Constant(v) => *v,
                     InstructionSrc::Register(reg) => { *self.get_register(*reg) }
+                    InstructionSrc::Stack(stack_pos) => { *self.get_from_stack(*stack_pos) }
                 };
                 let rhs = match src2 {
                     InstructionSrc::Constant(v) => *v,
                     InstructionSrc::Register(reg) => { *self.get_register(*reg) }
+                    InstructionSrc::Stack(stack_pos) => { *self.get_from_stack(*stack_pos) }
                 };
 
                 (lhs, rhs)
             }
-            _ => panic!("sdf"),
+            _ => panic!("Expected CMP instruction"),
         }
     }
 
@@ -116,7 +126,17 @@ impl VM {
     pub fn run(&mut self) {
         while self.pc < self.program.len() {
             let instruction = self.get_instruction();
+
             match instruction {
+                Instruction::JmpPop { pos, amount } => {
+                    let pos = *pos;
+                    self.stack.truncate(self.stack.len() - amount);
+                    self.pc = pos;
+                    continue;
+                }
+                Instruction::Pop { amount } => {
+                    self.stack.truncate(self.stack.len() - amount);
+                }
                 Instruction::Cmp { .. } => {
                     self.pc += 1;
                     continue;
@@ -185,112 +205,108 @@ impl VM {
                     self.pc = *pos;
                     continue;
                 }
-                Instruction::Function { dest, instructions_count } => panic!("NOT IMPLEMENTED"),
                 Instruction::Halt => {
                     #[cfg(debug_assertions)]
                     {
-                        println!(
-                            "R1:S0 = {:?}",
-                            self.get_register(InstructionRegister::new(1, 0, true))
-                        )
+                        println!("Stack: {:?}", self.stack)
                     }
                     break;
                 }
-                Instruction::StartScope => {
-                    self.start_scope();
-                }
-                Instruction::EndScope => {
-                    self.end_scope();
-                }
-                Instruction::Load { reg, src } => {
+
+                Instruction::Define { stack_pos, src } => {
                     let src = match src {
-                        InstructionSrc::Register(_) => self.get_register(*reg),
-                        InstructionSrc::Constant(value) => value,
-                    };
-
-                    *self.get_register_mut(*reg) = src.clone();
-                }
-                Instruction::Add { dest, src1, src2 } => {
-                    let src1 = match src1 {
-                        InstructionSrc::Register(register) => self.get_register(*register),
-                        InstructionSrc::Constant(value) => value,
-                    };
-
-                    let src2 = match src2 {
-                        InstructionSrc::Register(register) => self.get_register(*register),
-                        InstructionSrc::Constant(value) => value,
-                    };
-
-                    *self.get_register_mut(*dest) = src1.add(&src2).unwrap();
-                }
-                Instruction::Define { dest, src } => {
-                    let mut src = Some(match src {
                         InstructionSrc::Register(register) => *self.get_register(*register),
                         InstructionSrc::Constant(value) => *value,
-                    });
-                    *self.get_register_mut(*dest) = src.take().unwrap();
+                        InstructionSrc::Stack(pos) => *self.get_from_stack(*pos),
+                    };
+
+                    self.push_to_stack(src);
                 }
-                Instruction::Assign { dest, src } => {
+                Instruction::Assign { stack_pos, src } => {
                     let src = match src {
                         InstructionSrc::Register(register) => self.get_register(*register),
                         InstructionSrc::Constant(value) => value,
+                        InstructionSrc::Stack(stack_pos) => self.get_from_stack(*stack_pos),
                     };
-                    *self.get_register_mut(*dest) = src.clone();
+                    *self.get_from_stack_mut(*stack_pos) = src.clone();
                 }
-                Instruction::Sub { dest, src1, src2 } => {
+                Instruction::Add { reg, src1, src2 } => {
                     let src1 = match src1 {
                         InstructionSrc::Register(register) => self.get_register(*register),
                         InstructionSrc::Constant(value) => value,
+                        InstructionSrc::Stack(pos) => self.get_from_stack(*pos),
                     };
 
                     let src2 = match src2 {
                         InstructionSrc::Register(register) => self.get_register(*register),
                         InstructionSrc::Constant(value) => value,
+                        InstructionSrc::Stack(pos) => self.get_from_stack(*pos),
                     };
 
-                    *self.get_register_mut(*dest) = src1.sub(&src2).unwrap();
+                    *self.get_register_mut(*reg) = Some(src1.add(&src2).unwrap());
                 }
-                Instruction::Mul { dest, src1, src2 } => {
+                Instruction::Sub { reg, src1, src2 } => {
                     let src1 = match src1 {
                         InstructionSrc::Register(register) => self.get_register(*register),
                         InstructionSrc::Constant(value) => value,
+                        InstructionSrc::Stack(stack_pos) => self.get_from_stack(*stack_pos),
                     };
 
                     let src2 = match src2 {
                         InstructionSrc::Register(register) => self.get_register(*register),
                         InstructionSrc::Constant(value) => value,
+                        InstructionSrc::Stack(stack_pos) => self.get_from_stack(*stack_pos),
                     };
 
-                    *self.get_register_mut(*dest) = src1.mul(&src2).unwrap();
+                    *self.get_register_mut(*reg) = Some(src1.sub(&src2).unwrap());
                 }
-                Instruction::Div { dest, src1, src2 } => {
+                Instruction::Mul { reg, src1, src2 } => {
                     let src1 = match src1 {
                         InstructionSrc::Register(register) => self.get_register(*register),
                         InstructionSrc::Constant(value) => value,
+                        InstructionSrc::Stack(stack_pos) => self.get_from_stack(*stack_pos),
                     };
 
                     let src2 = match src2 {
                         InstructionSrc::Register(register) => self.get_register(*register),
                         InstructionSrc::Constant(value) => value,
+                        InstructionSrc::Stack(stack_pos) => self.get_from_stack(*stack_pos),
                     };
 
-                    *self.get_register_mut(*dest) = src1.div(&src2).unwrap();
+                    *self.get_register_mut(*reg) = Some(src1.mul(&src2).unwrap());
                 }
-                Instruction::Neg { dest, src } => {
+                Instruction::Div { reg, src1, src2 } => {
+                    let src1 = match src1 {
+                        InstructionSrc::Register(register) => self.get_register(*register),
+                        InstructionSrc::Constant(value) => value,
+                        InstructionSrc::Stack(stack_pos) => self.get_from_stack(*stack_pos),
+                    };
+
+                    let src2 = match src2 {
+                        InstructionSrc::Register(register) => self.get_register(*register),
+                        InstructionSrc::Constant(value) => value,
+                        InstructionSrc::Stack(stack_pos) => self.get_from_stack(*stack_pos),
+                    };
+
+                    *self.get_register_mut(*reg) = Some(src1.div(&src2).unwrap());
+                }
+                Instruction::Neg { reg, src } => {
                     let src = match src {
                         InstructionSrc::Register(register) => self.get_register(*register),
                         InstructionSrc::Constant(value) => value,
+                        InstructionSrc::Stack(stack_pos) => self.get_from_stack(*stack_pos),
                     };
 
-                    *self.get_register_mut(*dest) = src.neg().unwrap();
+                    *self.get_register_mut(*reg) = Some(src.neg().unwrap());
                 }
-                Instruction::Truthy { dest, src } => {
+                Instruction::Truthy { reg, src } => {
                     let src = match src {
                         InstructionSrc::Register(register) => self.get_register(*register),
                         InstructionSrc::Constant(value) => value,
+                        InstructionSrc::Stack(stack_pos) => self.get_from_stack(*stack_pos),
                     };
 
-                    *self.get_register_mut(*dest) = src.not();
+                    *self.get_register_mut(*reg) = Some(src.not());
                 }
             }
             self.pc += 1;

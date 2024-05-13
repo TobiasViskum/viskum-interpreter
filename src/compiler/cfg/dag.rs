@@ -3,10 +3,10 @@ use ahash::AHashMap;
 use crate::{
     operations::{ BinaryOp, ComparisonOp, Op, UnaryOp },
     value::Value,
-    vm::instructions::{ Instruction, InstructionRegister, InstructionSrc },
+    vm::{ self, instructions::{ Instruction, InstructionPos, InstructionSrc } },
 };
 
-use super::{ ChangedState, DefinitionState, IREnvironment, RegistersMap };
+use super::{ ChangedState, DefinitionState, RegistersMap, VMSymbolTable };
 
 #[derive(Debug, Clone)]
 pub enum DAGOp {
@@ -14,6 +14,7 @@ pub enum DAGOp {
     UnaryOp(UnaryOp),
     Define,
     Assign,
+
     Const(Value),
     Identifier(String),
 }
@@ -44,6 +45,13 @@ impl DAG {
         Self {
             nodes: AHashMap::default(),
             entry_node_id: 0,
+        }
+    }
+
+    pub fn get_comparison_op(&self) -> ComparisonOp {
+        match self.nodes.get(&self.entry_node_id).unwrap().op {
+            DAGOp::BinaryOp(BinaryOp::ComparisonOp(op)) => op,
+            _ => panic!("Expected comparison op"),
         }
     }
 
@@ -103,32 +111,10 @@ impl DAG {
         self.nodes.remove(&node_id);
     }
 
-    pub fn generate_dag_bytecode(&self, registers_maps: &mut RegistersMap) -> Vec<Instruction> {
+    pub fn generate_dag_bytecode(&self, vm_symbol_table: &mut VMSymbolTable) -> Vec<Instruction> {
         let mut bytecode = vec![];
 
-        match self.generate_node_bytecode(self.entry_node_id, registers_maps, &mut bytecode) {
-            InstructionSrc::Constant(value) => {
-                if bytecode.len() == 0 {
-                    let (temp_register, scope) = registers_maps.assign_register();
-                    bytecode.push(Instruction::Load {
-                        reg: InstructionRegister::new(temp_register, scope, false),
-                        src: InstructionSrc::Constant(value),
-                    });
-                    registers_maps.free_register(temp_register, scope);
-                }
-            }
-            InstructionSrc::Register(register) => {
-                if bytecode.len() == 0 {
-                    let (temp_register, scope) = registers_maps.assign_register();
-                    bytecode.push(Instruction::Load {
-                        reg: InstructionRegister::new(temp_register, scope, false),
-                        src: InstructionSrc::Register(register),
-                    });
-                    registers_maps.free_register(temp_register, scope);
-                }
-            }
-            _ => {}
-        }
+        self.generate_node_bytecode(self.entry_node_id, vm_symbol_table, &mut bytecode);
 
         bytecode
     }
@@ -136,7 +122,7 @@ impl DAG {
     fn generate_node_bytecode(
         &self,
         node_id: usize,
-        registers_maps: &mut RegistersMap,
+        vm_symbol_table: &mut VMSymbolTable,
         bytecode: &mut Vec<Instruction>
     ) -> InstructionSrc {
         let node = self.nodes.get(&node_id).cloned().unwrap();
@@ -144,100 +130,72 @@ impl DAG {
         match &node.op {
             DAGOp::Const(value) => { InstructionSrc::Constant(value.clone()) }
             DAGOp::Identifier(lexeme) => {
-                let (register, scope) = registers_maps.get_register(lexeme).unwrap();
-                InstructionSrc::Register(InstructionRegister::new(register, scope, true))
+                let stack_pos = vm_symbol_table.get_variable_stack_pos(lexeme);
+
+                InstructionSrc::Stack(stack_pos)
             }
             DAGOp::UnaryOp(unary_op) => {
                 let operand = node.operands.unwrap()[0];
-                let right = self.generate_node_bytecode(operand, registers_maps, bytecode);
+                let right = self.generate_node_bytecode(operand, vm_symbol_table, bytecode);
 
-                match &right {
-                    InstructionSrc::Register(right_register) => {
-                        if !right_register.is_variable {
-                            registers_maps.free_register(
-                                right_register.register,
-                                right_register.scope
-                            );
-                        }
-                    }
-                    _ => {}
+                let register = vm_symbol_table.assign_register();
+
+                if let InstructionSrc::Register(reg) = &right {
+                    vm_symbol_table.free_register(*reg);
                 }
-
-                let (register, scope) = registers_maps.assign_register();
-
-                let dest = InstructionRegister::new(register, scope, false);
 
                 let instruction = match unary_op {
                     UnaryOp::Neg =>
                         Instruction::Neg {
-                            dest,
+                            reg: register,
                             src: right,
                         },
                     UnaryOp::Truthy =>
                         Instruction::Truthy {
-                            dest,
+                            reg: register,
                             src: right,
                         },
                 };
 
                 bytecode.push(instruction);
-                InstructionSrc::Register(dest)
+                InstructionSrc::Register(register)
             }
             DAGOp::BinaryOp(binary_op) => {
                 let operands = node.operands.unwrap();
-                let left = self.generate_node_bytecode(operands[0], registers_maps, bytecode);
-                let right = self.generate_node_bytecode(operands[1], registers_maps, bytecode);
+                let right = self.generate_node_bytecode(operands[0], vm_symbol_table, bytecode);
+                let left = self.generate_node_bytecode(operands[1], vm_symbol_table, bytecode);
 
-                match &left {
-                    InstructionSrc::Register(left_register) => {
-                        if !left_register.is_variable {
-                            registers_maps.free_register(
-                                left_register.register,
-                                left_register.scope
-                            );
-                        }
-                    }
-                    _ => {}
+                let register = vm_symbol_table.assign_register();
+
+                if let InstructionSrc::Register(reg) = &left {
+                    vm_symbol_table.free_register(*reg);
                 }
-
-                match &right {
-                    InstructionSrc::Register(right_register) => {
-                        if !right_register.is_variable {
-                            registers_maps.free_register(
-                                right_register.register,
-                                right_register.scope
-                            );
-                        }
-                    }
-                    _ => {}
+                if let InstructionSrc::Register(reg) = &right {
+                    vm_symbol_table.free_register(*reg);
                 }
-
-                let (register, scope) = registers_maps.assign_register();
-
-                let dest = InstructionRegister::new(register, scope, false);
 
                 let instruction = match binary_op {
                     BinaryOp::Add =>
                         Instruction::Add {
-                            dest,
+                            reg: register,
                             src1: left,
                             src2: right,
                         },
                     BinaryOp::Sub =>
                         Instruction::Sub {
-                            dest,
+                            reg: register,
                             src1: left,
                             src2: right,
                         },
                     BinaryOp::Mul =>
                         Instruction::Mul {
-                            dest,
+                            reg: register,
                             src1: left,
                             src2: right,
                         },
                     BinaryOp::Div =>
                         Instruction::Div {
-                            dest,
+                            reg: register,
                             src1: left,
                             src2: right,
                         },
@@ -252,7 +210,7 @@ impl DAG {
                 };
 
                 bytecode.push(instruction);
-                InstructionSrc::Register(dest)
+                InstructionSrc::Register(register)
             }
             DAGOp::Define => {
                 let operands = node.operands.unwrap();
@@ -264,21 +222,20 @@ impl DAG {
 
                 let value = match operands.get(1) {
                     Some(value_node_id) =>
-                        self.generate_node_bytecode(*value_node_id, registers_maps, bytecode),
+                        self.generate_node_bytecode(*value_node_id, vm_symbol_table, bytecode),
                     None => InstructionSrc::Constant(Value::Empty),
                 };
 
-                let (register, scope) = registers_maps.assign_variable_register(lexeme);
-
-                let dest = InstructionRegister::new(register, scope, true);
+                let stack_pos = vm_symbol_table.insert_variable(&lexeme);
 
                 let instruction = Instruction::Define {
-                    dest,
+                    stack_pos,
                     src: value,
                 };
 
                 bytecode.push(instruction);
-                InstructionSrc::Register(dest)
+
+                InstructionSrc::Stack(stack_pos)
             }
             DAGOp::Assign => {
                 let operands = node.operands.unwrap();
@@ -290,263 +247,259 @@ impl DAG {
 
                 let value = match operands.get(1) {
                     Some(value_node_id) =>
-                        self.generate_node_bytecode(*value_node_id, registers_maps, bytecode),
+                        self.generate_node_bytecode(*value_node_id, vm_symbol_table, bytecode),
                     None => InstructionSrc::Constant(Value::Empty),
                 };
 
-                let (register, scope) = registers_maps.get_register(&lexeme).unwrap();
-
-                let dest = InstructionRegister::new(register, scope, true);
+                let stack_pos = vm_symbol_table.get_variable_stack_pos(&lexeme);
 
                 let instruction = Instruction::Assign {
-                    dest,
+                    stack_pos,
                     src: value,
                 };
 
                 bytecode.push(instruction);
-                InstructionSrc::Register(dest)
+                InstructionSrc::Stack(stack_pos)
             }
-
-            _ => { panic!("Unsupported operation") }
         }
     }
 
-    pub fn constant_folding(&mut self, environment: &mut IREnvironment, scope: usize) {
-        self.eval(self.nodes.len() - 1, environment, scope);
-    }
+    // pub fn constant_folding(&mut self, environment: &mut IREnvironment, scope: usize) {
+    //     self.eval(self.nodes.len() - 1, environment, scope);
+    // }
 
-    #[profiler::function_tracker]
-    fn eval(
-        &mut self,
-        node_id: usize,
-        environment: &mut IREnvironment,
-        scope: usize
-    ) -> Option<Value> {
-        let node = self.nodes.get(&node_id).cloned().unwrap();
+    // #[profiler::function_tracker]
+    // fn eval(
+    //     &mut self,
+    //     node_id: usize,
+    //     environment: &mut IREnvironment,
+    //     scope: usize
+    // ) -> Option<Value> {
+    //     let node = self.nodes.get(&node_id).cloned().unwrap();
 
-        match &node.op {
-            DAGOp::Const(value) => { Some(value.clone()) }
-            DAGOp::Identifier(lexeme) => {
-                let (value, changed_state, _) = match environment.get(lexeme) {
-                    Some(value) => value,
-                    None => panic!("Variable not found: {}", lexeme),
-                };
+    //     match &node.op {
+    //         DAGOp::Const(value) => { Some(value.clone()) }
+    //         DAGOp::Identifier(lexeme) => {
+    //             let (value, changed_state, _) = match environment.get(lexeme) {
+    //                 Some(value) => value,
+    //                 None => panic!("Variable not found: {}", lexeme),
+    //             };
 
-                println!("{:?} {:?}", value, changed_state);
-                // if changed_state == &ChangedState::Unchanged {
-                return value.clone();
-                // } else {
-                //     return None;
-                // }
-            }
-            DAGOp::BinaryOp(op) => {
-                if let Some(operands) = &node.operands {
-                    self.evaluate_binary_op(op, operands, node_id, environment, scope)
-                } else {
-                    None
-                }
-            }
-            DAGOp::UnaryOp(op) => {
-                if let Some(operands) = &node.operands {
-                    self.evaluate_unary_op(op, operands[0], node_id, environment, scope)
-                } else {
-                    None
-                }
-            }
-            DAGOp::Define | DAGOp::Assign => {
-                if let Some(operands) = node.operands {
-                    let is_definition = match &node.op {
-                        DAGOp::Define => DefinitionState::IsDefinition,
-                        _ => DefinitionState::IsAssignment,
-                    };
+    //             println!("{:?} {:?}", value, changed_state);
+    //             // if changed_state == &ChangedState::Unchanged {
+    //             return value.clone();
+    //             // } else {
+    //             //     return None;
+    //             // }
+    //         }
+    //         DAGOp::BinaryOp(op) => {
+    //             if let Some(operands) = &node.operands {
+    //                 self.evaluate_binary_op(op, operands, node_id, environment, scope)
+    //             } else {
+    //                 None
+    //             }
+    //         }
+    //         DAGOp::UnaryOp(op) => {
+    //             if let Some(operands) = &node.operands {
+    //                 self.evaluate_unary_op(op, operands[0], node_id, environment, scope)
+    //             } else {
+    //                 None
+    //             }
+    //         }
+    //         DAGOp::Define | DAGOp::Assign => {
+    //             if let Some(operands) = node.operands {
+    //                 let is_definition = match &node.op {
+    //                     DAGOp::Define => DefinitionState::IsDefinition,
+    //                     _ => DefinitionState::IsAssignment,
+    //                 };
 
-                    let evaluated_value = match operands.get(1) {
-                        Some(value_node_id) => { self.eval(*value_node_id, environment, scope) }
-                        None => None,
-                    };
+    //                 let evaluated_value = match operands.get(1) {
+    //                     Some(value_node_id) => { self.eval(*value_node_id, environment, scope) }
+    //                     None => None,
+    //                 };
 
-                    let lexeme = match operands.get(0) {
-                        Some(lexeme_node_id) => {
-                            match &self.nodes.get(lexeme_node_id).unwrap().op {
-                                DAGOp::Identifier(lexeme) => lexeme,
-                                _ => panic!("Expected identifier"),
-                            }
-                        }
-                        None => panic!("No lexeme node found"),
-                    };
+    //                 let lexeme = match operands.get(0) {
+    //                     Some(lexeme_node_id) => {
+    //                         match &self.nodes.get(lexeme_node_id).unwrap().op {
+    //                             DAGOp::Identifier(lexeme) => lexeme,
+    //                             _ => panic!("Expected identifier"),
+    //                         }
+    //                     }
+    //                     None => panic!("No lexeme node found"),
+    //                 };
 
-                    if is_definition == DefinitionState::IsDefinition {
-                        environment.push(lexeme, evaluated_value.clone(), is_definition, scope);
-                    } else {
-                        environment.overwrite(&lexeme, evaluated_value.clone());
-                    }
+    //                 if is_definition == DefinitionState::IsDefinition {
+    //                     environment.push(lexeme, evaluated_value.clone(), is_definition, scope);
+    //                 } else {
+    //                     environment.overwrite(&lexeme, evaluated_value.clone());
+    //                 }
 
-                    evaluated_value
-                } else {
-                    None
-                }
-            }
-            _ => { panic!("Unsupported operation") }
-        }
-    }
+    //                 evaluated_value
+    //             } else {
+    //                 None
+    //             }
+    //         }
+    //         _ => { panic!("Unsupported operation") }
+    //     }
+    // }
 
-    fn evaluate_unary_op(
-        &mut self,
-        op: &UnaryOp,
-        operand: usize,
-        node_id: usize,
-        environment: &mut IREnvironment,
-        scope: usize
-    ) -> Option<Value> {
-        let right = self.eval(operand, environment, scope);
+    // fn evaluate_unary_op(
+    //     &mut self,
+    //     op: &UnaryOp,
+    //     operand: usize,
+    //     node_id: usize,
+    //     environment: &mut IREnvironment,
+    //     scope: usize
+    // ) -> Option<Value> {
+    //     let right = self.eval(operand, environment, scope);
 
-        match right {
-            Some(rhs) => {
-                match op {
-                    UnaryOp::Neg => {
-                        let evaluated = rhs.neg().unwrap();
-                        self.remove_node(operand);
-                        self.add_node_at(
-                            DAGNode::new(DAGOp::Const(evaluated.clone()), None),
-                            node_id
-                        );
-                        Some(evaluated)
-                    }
-                    UnaryOp::Truthy => {
-                        let evaluated = rhs.not();
-                        self.remove_node(operand);
-                        self.add_node_at(
-                            DAGNode::new(DAGOp::Const(evaluated.clone()), None),
-                            node_id
-                        );
-                        Some(evaluated)
-                    }
-                }
-            }
-            _ => None,
-        }
-    }
+    //     match right {
+    //         Some(rhs) => {
+    //             match op {
+    //                 UnaryOp::Neg => {
+    //                     let evaluated = rhs.neg().unwrap();
+    //                     self.remove_node(operand);
+    //                     self.add_node_at(
+    //                         DAGNode::new(DAGOp::Const(evaluated.clone()), None),
+    //                         node_id
+    //                     );
+    //                     Some(evaluated)
+    //                 }
+    //                 UnaryOp::Truthy => {
+    //                     let evaluated = rhs.not();
+    //                     self.remove_node(operand);
+    //                     self.add_node_at(
+    //                         DAGNode::new(DAGOp::Const(evaluated.clone()), None),
+    //                         node_id
+    //                     );
+    //                     Some(evaluated)
+    //                 }
+    //             }
+    //         }
+    //         _ => None,
+    //     }
+    // }
 
-    fn evaluate_binary_op(
-        &mut self,
-        op: &BinaryOp,
-        operands: &Vec<usize>,
-        node_id: usize,
-        environment: &mut IREnvironment,
-        scope: usize
-    ) -> Option<Value> {
-        let left = self.eval(operands[0], environment, scope);
-        let right = self.eval(operands[1], environment, scope);
+    // fn evaluate_binary_op(
+    //     &mut self,
+    //     op: &BinaryOp,
+    //     operands: &Vec<usize>,
+    //     node_id: usize,
+    //     environment: &mut IREnvironment,
+    //     scope: usize
+    // ) -> Option<Value> {
+    //     let left = self.eval(operands[0], environment, scope);
+    //     let right = self.eval(operands[1], environment, scope);
 
-        match (left, right) {
-            (Some(lhs), Some(rhs)) => {
-                match op {
-                    BinaryOp::Add => {
-                        let evaluated = lhs.add(&rhs).unwrap();
+    //     match (left, right) {
+    //         (Some(lhs), Some(rhs)) => {
+    //             match op {
+    //                 BinaryOp::Add => {
+    //                     let evaluated = lhs.add(&rhs).unwrap();
 
-                        self.remove_node(operands[0]);
-                        self.remove_node(operands[1]);
+    //                     self.remove_node(operands[0]);
+    //                     self.remove_node(operands[1]);
 
-                        self.add_node_at(
-                            DAGNode::new(DAGOp::Const(evaluated.clone()), None),
-                            node_id
-                        );
+    //                     self.add_node_at(
+    //                         DAGNode::new(DAGOp::Const(evaluated.clone()), None),
+    //                         node_id
+    //                     );
 
-                        Some(evaluated)
-                    }
-                    BinaryOp::Sub => {
-                        let evaluated = lhs.sub(&rhs).unwrap();
-                        self.remove_node(operands[0]);
-                        self.remove_node(operands[1]);
-                        self.add_node_at(
-                            DAGNode::new(DAGOp::Const(evaluated.clone()), None),
-                            node_id
-                        );
-                        Some(evaluated)
-                    }
-                    BinaryOp::Mul => {
-                        let evaluated = lhs.mul(&rhs).unwrap();
-                        self.remove_node(operands[0]);
-                        self.remove_node(operands[1]);
-                        self.add_node_at(
-                            DAGNode::new(DAGOp::Const(evaluated.clone()), None),
-                            node_id
-                        );
-                        Some(evaluated)
-                    }
-                    BinaryOp::Div => {
-                        let evaluated = lhs.div(&rhs).unwrap();
-                        self.remove_node(operands[0]);
-                        self.remove_node(operands[1]);
-                        self.add_node_at(
-                            DAGNode::new(DAGOp::Const(evaluated.clone()), None),
-                            node_id
-                        );
-                        Some(evaluated)
-                    }
-                    BinaryOp::ComparisonOp(ComparisonOp::Equal) => {
-                        let evaluated = Value::Bool(lhs.cmp_e(&rhs).unwrap());
-                        self.remove_node(operands[0]);
-                        self.remove_node(operands[1]);
-                        self.add_node_at(
-                            DAGNode::new(DAGOp::Const(evaluated.clone()), None),
-                            node_id
-                        );
-                        Some(evaluated)
-                    }
-                    BinaryOp::ComparisonOp(ComparisonOp::NotEqual) => {
-                        let evaluated = Value::Bool(lhs.cmp_ne(&rhs).unwrap());
-                        self.remove_node(operands[0]);
-                        self.remove_node(operands[1]);
-                        self.add_node_at(
-                            DAGNode::new(DAGOp::Const(evaluated.clone()), None),
-                            node_id
-                        );
-                        Some(evaluated)
-                    }
-                    BinaryOp::ComparisonOp(ComparisonOp::Greater) => {
-                        let evaluated = Value::Bool(lhs.cmp_g(&rhs).unwrap());
-                        self.remove_node(operands[0]);
-                        self.remove_node(operands[1]);
-                        self.add_node_at(
-                            DAGNode::new(DAGOp::Const(evaluated.clone()), None),
-                            node_id
-                        );
-                        Some(evaluated)
-                    }
-                    BinaryOp::ComparisonOp(ComparisonOp::GreaterEqual) => {
-                        let evaluated = Value::Bool(lhs.cmp_ge(&rhs).unwrap());
-                        self.remove_node(operands[0]);
-                        self.remove_node(operands[1]);
-                        self.add_node_at(
-                            DAGNode::new(DAGOp::Const(evaluated.clone()), None),
-                            node_id
-                        );
-                        Some(evaluated)
-                    }
-                    BinaryOp::ComparisonOp(ComparisonOp::Less) => {
-                        let evaluated = Value::Bool(lhs.cmp_l(&rhs).unwrap());
-                        self.remove_node(operands[0]);
-                        self.remove_node(operands[1]);
-                        self.add_node_at(
-                            DAGNode::new(DAGOp::Const(evaluated.clone()), None),
-                            node_id
-                        );
-                        Some(evaluated)
-                    }
-                    BinaryOp::ComparisonOp(ComparisonOp::LessEqual) => {
-                        let evaluated = Value::Bool(lhs.cmp_le(&rhs).unwrap());
-                        self.remove_node(operands[0]);
-                        self.remove_node(operands[1]);
-                        self.add_node_at(
-                            DAGNode::new(DAGOp::Const(evaluated.clone()), None),
-                            node_id
-                        );
-                        Some(evaluated)
-                    }
-                }
-            }
-            _ => None,
-        }
-    }
+    //                     Some(evaluated)
+    //                 }
+    //                 BinaryOp::Sub => {
+    //                     let evaluated = lhs.sub(&rhs).unwrap();
+    //                     self.remove_node(operands[0]);
+    //                     self.remove_node(operands[1]);
+    //                     self.add_node_at(
+    //                         DAGNode::new(DAGOp::Const(evaluated.clone()), None),
+    //                         node_id
+    //                     );
+    //                     Some(evaluated)
+    //                 }
+    //                 BinaryOp::Mul => {
+    //                     let evaluated = lhs.mul(&rhs).unwrap();
+    //                     self.remove_node(operands[0]);
+    //                     self.remove_node(operands[1]);
+    //                     self.add_node_at(
+    //                         DAGNode::new(DAGOp::Const(evaluated.clone()), None),
+    //                         node_id
+    //                     );
+    //                     Some(evaluated)
+    //                 }
+    //                 BinaryOp::Div => {
+    //                     let evaluated = lhs.div(&rhs).unwrap();
+    //                     self.remove_node(operands[0]);
+    //                     self.remove_node(operands[1]);
+    //                     self.add_node_at(
+    //                         DAGNode::new(DAGOp::Const(evaluated.clone()), None),
+    //                         node_id
+    //                     );
+    //                     Some(evaluated)
+    //                 }
+    //                 BinaryOp::ComparisonOp(ComparisonOp::Equal) => {
+    //                     let evaluated = Value::Bool(lhs.cmp_e(&rhs).unwrap());
+    //                     self.remove_node(operands[0]);
+    //                     self.remove_node(operands[1]);
+    //                     self.add_node_at(
+    //                         DAGNode::new(DAGOp::Const(evaluated.clone()), None),
+    //                         node_id
+    //                     );
+    //                     Some(evaluated)
+    //                 }
+    //                 BinaryOp::ComparisonOp(ComparisonOp::NotEqual) => {
+    //                     let evaluated = Value::Bool(lhs.cmp_ne(&rhs).unwrap());
+    //                     self.remove_node(operands[0]);
+    //                     self.remove_node(operands[1]);
+    //                     self.add_node_at(
+    //                         DAGNode::new(DAGOp::Const(evaluated.clone()), None),
+    //                         node_id
+    //                     );
+    //                     Some(evaluated)
+    //                 }
+    //                 BinaryOp::ComparisonOp(ComparisonOp::Greater) => {
+    //                     let evaluated = Value::Bool(lhs.cmp_g(&rhs).unwrap());
+    //                     self.remove_node(operands[0]);
+    //                     self.remove_node(operands[1]);
+    //                     self.add_node_at(
+    //                         DAGNode::new(DAGOp::Const(evaluated.clone()), None),
+    //                         node_id
+    //                     );
+    //                     Some(evaluated)
+    //                 }
+    //                 BinaryOp::ComparisonOp(ComparisonOp::GreaterEqual) => {
+    //                     let evaluated = Value::Bool(lhs.cmp_ge(&rhs).unwrap());
+    //                     self.remove_node(operands[0]);
+    //                     self.remove_node(operands[1]);
+    //                     self.add_node_at(
+    //                         DAGNode::new(DAGOp::Const(evaluated.clone()), None),
+    //                         node_id
+    //                     );
+    //                     Some(evaluated)
+    //                 }
+    //                 BinaryOp::ComparisonOp(ComparisonOp::Less) => {
+    //                     let evaluated = Value::Bool(lhs.cmp_l(&rhs).unwrap());
+    //                     self.remove_node(operands[0]);
+    //                     self.remove_node(operands[1]);
+    //                     self.add_node_at(
+    //                         DAGNode::new(DAGOp::Const(evaluated.clone()), None),
+    //                         node_id
+    //                     );
+    //                     Some(evaluated)
+    //                 }
+    //                 BinaryOp::ComparisonOp(ComparisonOp::LessEqual) => {
+    //                     let evaluated = Value::Bool(lhs.cmp_le(&rhs).unwrap());
+    //                     self.remove_node(operands[0]);
+    //                     self.remove_node(operands[1]);
+    //                     self.add_node_at(
+    //                         DAGNode::new(DAGOp::Const(evaluated.clone()), None),
+    //                         node_id
+    //                     );
+    //                     Some(evaluated)
+    //                 }
+    //             }
+    //         }
+    //         _ => None,
+    //     }
+    // }
 }

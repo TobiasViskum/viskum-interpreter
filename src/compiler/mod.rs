@@ -32,38 +32,18 @@ impl<'a> Compiler<'a> {
             if !self.error_handler.has_error() {
                 println!("Optimized instructions:");
                 println!("----------------------\n");
-                for instruction in &instructions {
-                    match instruction {
-                        Instruction::EndScope => {
-                            indentation_level -= 1;
-                        }
-                        _ => {}
-                    }
 
+                for instruction in &instructions {
                     let print_string = format!(
                         "{}{}",
+
                         " ".repeat(indentation_level * indentation_size),
                         instruction.dissassemble()
                     );
 
-                    match instruction {
-                        Instruction::StartScope => {
-                            println!("{}\n", print_string);
-                        }
-                        Instruction::EndScope => {
-                            println!("\n{}", print_string);
-                        }
-                        _ => println!("{}", print_string),
-                    }
-
-                    match instruction {
-                        Instruction::StartScope => {
-                            indentation_level += 1;
-                        }
-                        _ => {}
-                    }
+                    println!("{}", print_string);
                 }
-                println!("\n----------------------")
+                println!("\n----------------------");
             }
         }
 

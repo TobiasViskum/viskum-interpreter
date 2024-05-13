@@ -21,7 +21,4 @@
 - Fix that this: "bool i32 c := 2" is actually valid syntax. It should "emit" the types as soon as it sees one (right now it's skipping them, and then when the identifier comes it resolves the types)
   - Fix that this "i32 := 2" produces the correct error (i32 is a keyword and cannot be used as a definition target)
 
-## Rewrite IRGraph -> CFGraph (misunderstood concept)
-
-- I misunderstood a part of the concept of a CFG (created a DAG instead so not entirely useless). Each statement is its node, not each operation/constant
-- Essentially the current setup cannot be used for any optimizations... rip
+- FIX: Right now the jmp instructions in the scope is after end scope and jumps to start scope meaning new scopes are created all the time. The jump instructions should be between the StartScpe and EndScope

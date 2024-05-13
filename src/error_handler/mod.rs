@@ -10,6 +10,11 @@ enum _ErrorType {
 }
 
 #[derive(Debug)]
+pub struct InternalError {
+    message: String,
+}
+
+#[derive(Debug)]
 pub struct CompileError {
     message: String,
     error_metadata: Vec<TokenMetadata>,

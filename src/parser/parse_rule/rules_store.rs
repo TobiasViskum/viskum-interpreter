@@ -4,7 +4,7 @@ use crate::parser::precedence::Precedence;
 use super::ParseRule;
 lazy_static! {
     pub static ref PARSE_RULES: Vec<ParseRule> = {
-        let mut parse_rules_vec = Vec::with_capacity(38);
+        let mut parse_rules_vec = Vec::with_capacity(39);
         parse_rules_vec.push(ParseRule {
             prefix: Some(|c, arg| c.grouping(arg)),
             infix: None,
@@ -122,6 +122,11 @@ lazy_static! {
         });
         parse_rules_vec.push(ParseRule {
             prefix: Some(|c, arg| c.literal(arg)),
+            infix: None,
+            precedence: Precedence::PrecNone,
+        });
+        parse_rules_vec.push(ParseRule {
+            prefix: None,
             infix: None,
             precedence: Precedence::PrecNone,
         });

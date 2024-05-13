@@ -1,4 +1,4 @@
-pub const TOKEN_TYPES_AND_PARSE_RULES: [&str; 38] = [
+pub const TOKEN_TYPES_AND_PARSE_RULES: [&str; 39] = [
     // Single-character tokens
     "LeftParen          = { grouping,                           None,                                       PrecNone        }",
     "RightParen         = { None,                               None,                                       PrecNone        }",
@@ -50,6 +50,7 @@ pub const TOKEN_TYPES_AND_PARSE_RULES: [&str; 38] = [
     "If                 = { None,                               None,                                       PrecNone        }",
     "Else               = { None,                               None,                                       PrecNone        }",
     "Break              = { None,                               None,                                       PrecNone        }",
+    "Continue           = { None,                               None,                                       PrecNone        }",
     "Loop               = { None,                               None,                                       PrecNone        }",
 
     "Error              = { error,                              None,                                       PrecNone        }",

@@ -130,7 +130,7 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    pub fn if_statement(&mut self) -> Result<IfStmt, CompileError> {
+    pub fn if_stmt(&mut self) -> Result<IfStmt, CompileError> {
         self.advance();
 
         let condition = self.expression(PrecAssignment)?;
@@ -140,7 +140,7 @@ impl<'a> Parser<'a> {
         let false_block = if self.get_current().get_ttype().is(&TokenType::TokenElse) {
             self.advance();
             if self.get_current().get_ttype().is(&TokenType::TokenIf) {
-                Some(Box::new(self.if_statement()?))
+                Some(Box::new(self.if_stmt()?))
             } else {
                 let true_block = self.block()?;
                 Some(Box::new(IfStmt::new(None, true_block, None)))

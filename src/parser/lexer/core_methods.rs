@@ -14,7 +14,8 @@ impl<'a> Lexer<'a> {
 
     pub(super) fn make_identifier_token(&mut self) -> Option<Token> {
         let ttype = match self.get_character(self.start) {
-            //'b' => self.check_keyword(1, 3, "ool", TokenType::TokenBool),
+            'b' => self.check_keyword(1, 4, "reak", TokenType::TokenBreak),
+            'c' => self.check_keyword(1, 7, "ontinue", TokenType::TokenContinue),
             'e' => self.check_keyword(1, 3, "lse", TokenType::TokenElse),
             'f' => {
                 if self.current - self.start > 1 {
@@ -28,6 +29,7 @@ impl<'a> Lexer<'a> {
                 }
             }
             'i' => self.check_keyword(1, 1, "f", TokenType::TokenIf),
+            'l' => self.check_keyword(1, 3, "oop", TokenType::TokenLoop),
             'm' => self.check_keyword(1, 2, "ut", TokenType::TokenMutable),
             'r' => self.check_keyword(1, 5, "eturn", TokenType::TokenReturn),
             't' => {
@@ -41,6 +43,7 @@ impl<'a> Lexer<'a> {
                     TokenType::TokenIdentifier
                 }
             }
+            // 'w' => self.check_keyword(1, 4, "hile", TokenType::TokenWhile),
 
             _ => TokenType::TokenIdentifier,
         };

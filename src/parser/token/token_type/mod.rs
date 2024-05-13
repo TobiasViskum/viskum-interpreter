@@ -36,6 +36,7 @@ pub enum TokenType {
     TokenIf,
     TokenElse,
     TokenBreak,
+    TokenContinue,
     TokenLoop,
     TokenError,
     TokenEOF,
@@ -78,9 +79,10 @@ impl From<TokenType> for usize {
             TokenType::TokenIf => 32,
             TokenType::TokenElse => 33,
             TokenType::TokenBreak => 34,
-            TokenType::TokenLoop => 35,
-            TokenType::TokenError => 36,
-            TokenType::TokenEOF => 37,
+            TokenType::TokenContinue => 35,
+            TokenType::TokenLoop => 36,
+            TokenType::TokenError => 37,
+            TokenType::TokenEOF => 38,
         }
     }
 }

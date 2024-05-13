@@ -1,33 +1,33 @@
 use crate::{ operations::{ BinaryOp, UnaryOp }, value::Value };
 
-#[derive(Debug, Clone, Copy)]
-pub struct InstructionRegister {
-    pub register: usize,
-    pub scope: usize,
-    pub is_variable: bool,
+#[derive(Debug, Clone)]
+pub enum InstructionPos {
+    Register(usize),
+    Stack(usize),
 }
 
-impl InstructionRegister {
-    pub fn new(register: usize, scope: usize, is_variable: bool) -> Self {
-        Self { register, scope, is_variable }
-    }
-
+impl InstructionPos {
     pub fn dissassemble(&self) -> String {
-        format!("S{}:R{}", self.scope, self.register)
+        match self {
+            Self::Register(pos) => { format!("R{}", pos) }
+            Self::Stack(pos) => { format!("[{}]", pos) }
+        }
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum InstructionSrc {
-    Register(InstructionRegister),
+    Register(usize),
     Constant(Value),
+    Stack(usize),
 }
 
 impl InstructionSrc {
     pub fn dissassemble(&self) -> String {
         match self {
-            Self::Register(value) => { format!("{}", value.dissassemble()) }
-            Self::Constant(value) => { format!("{}", value.to_string()) }
+            Self::Register(pos) => { format!("R{}", pos) }
+            Self::Constant(value) => { format!("C({})", value.to_string()) }
+            Self::Stack(pos) => { format!("[{}]", pos) }
         }
     }
 }
@@ -35,46 +35,47 @@ impl InstructionSrc {
 #[derive(Debug, Clone)]
 pub enum Instruction {
     Halt,
-    StartScope,
-    EndScope,
-    Load {
-        reg: InstructionRegister,
-        src: InstructionSrc,
+    JmpPop {
+        pos: usize,
+        amount: usize,
+    },
+    Pop {
+        amount: usize,
     },
     Add {
-        dest: InstructionRegister,
+        reg: usize,
         src1: InstructionSrc,
         src2: InstructionSrc,
     },
     Sub {
-        dest: InstructionRegister,
+        reg: usize,
         src1: InstructionSrc,
         src2: InstructionSrc,
     },
     Mul {
-        dest: InstructionRegister,
+        reg: usize,
         src1: InstructionSrc,
         src2: InstructionSrc,
     },
     Div {
-        dest: InstructionRegister,
+        reg: usize,
         src1: InstructionSrc,
         src2: InstructionSrc,
     },
     Neg {
-        dest: InstructionRegister,
+        reg: usize,
         src: InstructionSrc,
     },
     Truthy {
-        dest: InstructionRegister,
+        reg: usize,
         src: InstructionSrc,
     },
     Define {
-        dest: InstructionRegister,
+        stack_pos: usize,
         src: InstructionSrc,
     },
     Assign {
-        dest: InstructionRegister,
+        stack_pos: usize,
         src: InstructionSrc,
     },
     Cmp {
@@ -108,10 +109,6 @@ pub enum Instruction {
         true_pos: usize,
         false_pos: usize,
     },
-    Function {
-        dest: InstructionRegister,
-        instructions_count: u16,
-    },
 }
 
 impl Instruction {
@@ -120,6 +117,7 @@ impl Instruction {
             Self::Cmp { src1, src2 } => {
                 format!("CMP {} {}", src1.dissassemble(), src2.dissassemble())
             }
+            Self::Pop { amount } => { format!("POP {}", amount) }
             Self::Jmp { pos } => { format!("JMP {}", pos) }
             Self::JE { true_pos, false_pos } => { format!("JE {} {}", true_pos, false_pos) }
             Self::JNE { true_pos, false_pos } => { format!("JNE {} {}", true_pos, false_pos) }
@@ -127,92 +125,28 @@ impl Instruction {
             Self::JGE { true_pos, false_pos } => { format!("JGE {} {}", true_pos, false_pos) }
             Self::JL { true_pos, false_pos } => { format!("JL {} {}", true_pos, false_pos) }
             Self::JLE { true_pos, false_pos } => { format!("JLE {} {}", true_pos, false_pos) }
-            Self::Function { dest, instructions_count } => panic!("DISSASSEMBLE NOT IMPLEMENTED"),
             Self::Halt => { "HALT".to_string() }
-            Self::StartScope => { "STARTSCOPE".to_string() }
-            Self::EndScope => { "ENDSCOPE".to_string() }
-
-            Self::Load { reg, src } => {
-                format!("LOAD {} {}", reg.dissassemble(), src.dissassemble())
+            Self::JmpPop { pos, amount } => { format!("JMP_POP {} {}", pos, amount) }
+            Self::Add { reg, src1, src2 } => {
+                format!("ADD R{} {} {}", reg, src1.dissassemble(), src2.dissassemble())
             }
-            Self::Add { dest, src1, src2 } => {
-                format!(
-                    "ADD {} {} {}",
-                    dest.dissassemble(),
-                    src1.dissassemble(),
-                    src2.dissassemble()
-                )
+            Self::Sub { reg, src1, src2 } => {
+                format!("SUB R{} {} {}", reg, src1.dissassemble(), src2.dissassemble())
             }
-            Self::Sub { dest, src1, src2 } => {
-                format!(
-                    "SUB {} {} {}",
-                    dest.dissassemble(),
-                    src1.dissassemble(),
-                    src2.dissassemble()
-                )
+            Self::Mul { reg, src1, src2 } => {
+                format!("MUL R{} {} {}", reg, src1.dissassemble(), src2.dissassemble())
             }
-            Self::Mul { dest, src1, src2 } => {
-                format!(
-                    "MUL {} {} {}",
-                    dest.dissassemble(),
-                    src1.dissassemble(),
-                    src2.dissassemble()
-                )
+            Self::Div { reg, src1, src2 } => {
+                format!("DIV R{} {} {}", reg, src1.dissassemble(), src2.dissassemble())
             }
-            Self::Div { dest, src1, src2 } => {
-                format!(
-                    "DIV {} {} {}",
-                    dest.dissassemble(),
-                    src1.dissassemble(),
-                    src2.dissassemble()
-                )
+            Self::Neg { reg, src } => { format!("NEG R{} {}", reg, src.dissassemble()) }
+            Self::Truthy { reg, src } => { format!("TRUTHY R{} {}", reg, src.dissassemble()) }
+            Self::Define { stack_pos, src } => {
+                format!("DEFINE [{}] {}", stack_pos, src.dissassemble())
             }
-            Self::Neg { dest, src } => {
-                format!("NEG {} {}", dest.dissassemble(), src.dissassemble())
-            }
-            Self::Truthy { dest, src } => {
-                format!("TRUTHY {} {}", dest.dissassemble(), src.dissassemble())
-            }
-            Self::Define { dest, src } => {
-                format!("DEFINE {} {}", dest.dissassemble(), src.dissassemble())
-            }
-            Self::Assign { dest, src } => {
-                format!("ASSIGN {} {}", dest.dissassemble(), src.dissassemble())
+            Self::Assign { stack_pos, src } => {
+                format!("ASSIGN [{}] {}", stack_pos, src.dissassemble())
             }
         }
-    }
-
-    pub fn new_binary(
-        operation: &BinaryOp,
-        dest: InstructionRegister,
-        src1: InstructionSrc,
-        src2: InstructionSrc
-    ) -> Self {
-        match operation {
-            BinaryOp::Add => Self::Add { dest, src1, src2 },
-            BinaryOp::Sub => Self::Sub { dest, src1, src2 },
-            BinaryOp::Mul => Self::Mul { dest, src1, src2 },
-            BinaryOp::Div => Self::Div { dest, src1, src2 },
-            _ => panic!("NEW_BINARY NOT IMPLEMENTED YET"),
-        }
-    }
-
-    pub fn new_define(dest: InstructionRegister, src: InstructionSrc) -> Self {
-        Self::Define { dest, src }
-    }
-
-    pub fn new_assign(dest: InstructionRegister, src: InstructionSrc) -> Self {
-        Self::Assign { dest, src }
-    }
-
-    pub fn new_unary(operation: &UnaryOp, dest: InstructionRegister, src: InstructionSrc) -> Self {
-        match operation {
-            UnaryOp::Neg => Self::Neg { dest, src },
-            UnaryOp::Truthy => Self::Truthy { dest, src },
-        }
-    }
-
-    pub fn new_load(reg: InstructionRegister, src: InstructionSrc) -> Self {
-        Self::Load { reg, src }
     }
 }

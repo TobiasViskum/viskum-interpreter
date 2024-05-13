@@ -9,7 +9,10 @@ pub enum Stmt {
     VarAssignStmt(VarAssignStmt),
     ScopeStmt(ScopeStmt),
     FunctionStmt(FunctionStmt),
+    BreakStmt(BreakStmt),
+    ContinueStmt(ContinueStmt),
     IfStmt(IfStmt),
+    LoopStmt(LoopStmt),
     TypeDefStmt(TypeDefStmt),
 }
 
@@ -20,6 +23,9 @@ impl Stmt {
         token_vec: &mut Vec<TokenMetadata>
     ) -> Result<(), String> {
         match self {
+            Stmt::ContinueStmt(_) => { Ok(()) }
+            Stmt::BreakStmt(_) => { Ok(()) }
+            Stmt::LoopStmt(_) => panic!("type_check in stmt.rs"),
             Stmt::IfStmt(_) => panic!("type_check in stmt.rs"),
             Stmt::TypeDefStmt(_) => panic!("type_check in stmt.rs"),
             Stmt::FunctionStmt(_) => panic!("type_check in stmt.rs"),
@@ -204,6 +210,36 @@ impl VarDefStmt {
             value,
             token_metadata,
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct BreakStmt;
+
+impl BreakStmt {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[derive(Debug)]
+pub struct ContinueStmt;
+
+impl ContinueStmt {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[derive(Debug)]
+pub struct LoopStmt {
+    pub condition: Option<Expr>,
+    pub body: ScopeStmt,
+}
+
+impl LoopStmt {
+    pub fn new(condition: Option<Expr>, body: ScopeStmt) -> Self {
+        Self { condition, body }
     }
 }
 

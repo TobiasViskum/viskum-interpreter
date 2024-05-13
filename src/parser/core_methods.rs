@@ -1,7 +1,16 @@
 use crate::{
     ast::{
         expr::{ AstIdentifier, Expr, ExprBuilder },
-        stmt::{ FunctionArgument, Stmt, Typing, VarAssignStmt, VarDefStmt },
+        stmt::{
+            BreakStmt,
+            ContinueStmt,
+            FunctionArgument,
+            LoopStmt,
+            Stmt,
+            Typing,
+            VarAssignStmt,
+            VarDefStmt,
+        },
     },
     error_handler::CompileError,
     value::ValueType,
@@ -23,7 +32,10 @@ impl<'a> Parser<'a> {
             TokenLeftCurlyBrace => { Ok(Stmt::ScopeStmt(self.block()?)) }
             TokenMutable => { self.mut_var_def() }
             TokenFunction => { self.function() }
-            TokenIf => { Ok(Stmt::IfStmt(self.if_statement()?)) }
+            TokenIf => { Ok(Stmt::IfStmt(self.if_stmt()?)) }
+            TokenLoop => { self.loop_stmt() }
+            TokenBreak => { self.break_stmt() }
+            TokenContinue => { self.continue_stmt() }
 
             _ if curr.is(&TokenIdentifier) && self.is_ttype_in_line(TokenAssign) => {
                 self.var_assign()
@@ -35,110 +47,28 @@ impl<'a> Parser<'a> {
             // TokenTyping => {}
             _ => self.expression_statement(),
         }
+    }
 
-        /*
-        match self.get_current().get_ttype() {
-            TokenIdentifier => {
-                let next = self.get_next();
-                if next.is_some() && matches!(next.unwrap().get_ttype(), &TokenDefine) {
-                    self.advance();
-                    self.variable_definition();
-                } else if
-                    next.is_some() &&
-                    matches!(next.unwrap().get_ttype(), &TokenAssign)
-                {
-                    self.advance();
-                    self.variable_assignment()
-                } else {
-                    self.expression_statement();
-                }
-            }
-            TokenInt32 | TokenBool => {
-                while !self.is_at_end() && !self.is_at_expr_end() {
-                    let next = self.get_next();
-                    if let Some(next) = next {
-                        if matches!(next.get_ttype(), &TokenIdentifier) {
-                            break;
-                        }
-                    } else {
-                        break;
-                    }
+    pub(super) fn continue_stmt(&mut self) -> Result<Stmt, CompileError> {
+        self.advance();
+        self.consume_expr_end()?;
 
-                    self.advance();
-                }
+        Ok(Stmt::ContinueStmt(ContinueStmt))
+    }
 
-                self.advance();
-                self.advance();
-                self.variable_definition();
-            }
-            TokenMutable => {
-                self.advance();
+    pub(super) fn break_stmt(&mut self) -> Result<Stmt, CompileError> {
+        self.advance();
+        self.consume_expr_end()?;
 
-                match self.get_current().get_ttype() {
-                    TokenFunction => {
-                        // Function tokens isn't supported in lexer yet
-                        // self.function_definition();
-                    }
-                    TokenInt32 | TokenBool => {
-                        while !self.is_at_end() && !self.is_at_expr_end() {
-                            let next = self.get_next();
-                            if let Some(next) = next {
-                                if matches!(next.get_ttype(), &TokenIdentifier) {
-                                    break;
-                                }
-                            } else {
-                                break;
-                            }
+        Ok(Stmt::BreakStmt(BreakStmt))
+    }
 
-                            self.advance();
-                        }
+    pub(super) fn loop_stmt(&mut self) -> Result<Stmt, CompileError> {
+        self.advance();
 
-                        self.advance();
-                        self.advance();
-                        self.variable_definition();
-                    }
-                    TokenIdentifier => {
-                        let next = self.get_next();
+        let body = self.block()?;
 
-                        if
-                            next.is_some() &&
-                            matches!(next.unwrap().get_ttype(), &TokenDefine)
-                        {
-                            self.advance();
-                            self.variable_definition();
-                        } else {
-                            self.expression_statement();
-                        }
-                    }
-                    _ => {
-                        while
-                            !self.is_at_end() &&
-                            !matches!(self.get_current().get_ttype(), &TokenDefine)
-                        {
-                            self.advance();
-                        }
-
-                        if self.get_current().get_ttype() == &TokenDefine {
-                            self.variable_definition();
-                        }
-                    }
-                }
-            }
-            TokenLeftCurlyBrace => {
-                self.start_scope();
-                self.advance();
-                while
-                    !self.is_at_end() &&
-                    !matches!(self.get_current().get_ttype(), &TokenRightCurlyBrace)
-                {
-                    self.statement();
-                }
-                self.consume(TokenRightCurlyBrace, "Expected '}' at the end of block");
-                self.end_scope()
-            }
-            _ => { self.expression_statement() }
-        }
-        */
+        Ok(Stmt::LoopStmt(LoopStmt::new(None, body)))
     }
 
     pub(super) fn is_ttype_in_line(&self, token_type: TokenType) -> bool {
