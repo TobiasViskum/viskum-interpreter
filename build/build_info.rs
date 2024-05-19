@@ -6,6 +6,7 @@ pub const TOKEN_TYPES_AND_PARSE_RULES: [&str; 39] = [
     "RightCurlyBrace    = { None,                               None,                                       PrecNone        }",
     "LeftSquareBracket  = { None,                               None,                                       PrecNone        }",
     "RightSquareBracket = { None,                               None,                                       PrecNone        }",
+    "DoubleQuote        = { string,                             None,                                       PrecNone        }",
     "Semicolon          = { None,                               None,                                       PrecNone        }",
     "Bang               = { unary,                              None,                                       PrecNone        }",
     "Assign             = { None,                               None,                                       PrecNone        }",
@@ -31,12 +32,11 @@ pub const TOKEN_TYPES_AND_PARSE_RULES: [&str; 39] = [
     // Literals
     "Number             = { number,                             None,                                       PrecNone        }",
     "Identifier         = { identifier,                         None,                                       PrecNone        }",
+    "String             = { None,                               None,                                       PrecNone        }",
 
     // Types
     "True               = { literal,                            None,                                       PrecNone        }",
     "False              = { literal,                            None,                                       PrecNone        }",
-    "Int32              = { None,                               None,                                       PrecNone        }",
-    "Bool               = { None,                               None,                                       PrecNone        }",
 
     // Double-character tokens
     "Define             = { None,                               None,                                       PrecNone        }",

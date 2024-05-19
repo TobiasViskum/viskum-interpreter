@@ -9,6 +9,9 @@ use super::{ parse_rule::{ ParseRule, PARSE_RULES }, token::TokenMetadata, Parse
 
 impl<'a> Parser<'a> {
     pub(super) fn advance(&mut self) {
+        if self.current == self.tokens.len() - 1 {
+            return;
+        }
         self.current += 1;
         /*
         if let Some(prev_next) = self.next.take() {
@@ -53,21 +56,15 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn is_at_expr_end(&mut self) -> bool {
+        if self.is_at_end() {
+            return true;
+        }
         let result = match self.get_current().get_ttype() {
             TokenType::TokenSemicolon | TokenType::TokenEOF => true,
             _ => {
-                let prev_line = match self.peek(-1) {
-                    Some(line) => line.get_line(),
-                    None => {
-                        return false;
-                    }
-                };
+                let prev_line = self.get_previous().get_line();
 
-                if self.get_current().get_line() < prev_line {
-                    if self.get_current().get_ttype() == &TokenType::TokenError {
-                        let msg = self.get_current().get_message().unwrap().to_string();
-                        self.report_compile_error(msg, vec![self.get_current().get_metadata()]);
-                    }
+                if self.get_current().get_line() > prev_line {
                     true
                 } else {
                     false
@@ -99,7 +96,7 @@ impl<'a> Parser<'a> {
                             CompileError::new(
                                 format!(
                                     "Unexpected end of expression. Expected new line or ';' but got {}",
-                                    self.get_current().get_lexeme(self.source)
+                                    self.get_current().get_lexeme(&self.source)
                                 ),
                                 vec![self.get_current().get_metadata()]
                             )

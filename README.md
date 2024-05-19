@@ -12,6 +12,8 @@
 
 ## TODO
 
+- Dead code analysis also have to scan for unnused variables
+
 - Remove: PrecAssignment and other useless precedences (probably the only one) because '=' or ':=' is not part of a "expresison" but more of a way to structure an assignment statement.
 
 - AST environment: Rename to Symbol Table
@@ -22,3 +24,7 @@
   - Fix that this "i32 := 2" produces the correct error (i32 is a keyword and cannot be used as a definition target)
 
 - FIX: Right now the jmp instructions in the scope is after end scope and jumps to start scope meaning new scopes are created all the time. The jump instructions should be between the StartScpe and EndScope
+
+## Machine code???
+
+- MLIR: https://github.com/raviqqe/melior

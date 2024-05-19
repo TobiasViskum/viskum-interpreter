@@ -1,4 +1,5 @@
 use core::panic;
+use std::{ marker::PhantomData, mem, time::Instant };
 
 use crate::parser::token::{ token_type::TokenType, Token };
 
@@ -13,6 +14,7 @@ pub struct Lexer<'a> {
     start: usize,
     current: usize,
     line: usize,
+    tokens: Vec<Token>,
 }
 
 impl<'a> Lexer<'a> {
@@ -22,6 +24,7 @@ impl<'a> Lexer<'a> {
             start: 0,
             current: 0,
             line: 1,
+            tokens: Vec::with_capacity(256),
         }
     }
 
@@ -33,35 +36,30 @@ impl<'a> Lexer<'a> {
 
     #[profiler::function_tracker]
     pub fn get_tokens(&mut self) -> Vec<Token> {
-        let mut tokens = Vec::with_capacity(256);
-
         while !self.is_at_end() {
-            match self.scan_token() {
-                Some(token) => tokens.push(token),
-                None => {
-                    break;
-                }
-            }
+            self.scan_token();
         }
 
-        tokens
+        mem::take(&mut self.tokens)
     }
 
     #[profiler::function_tracker]
-    pub fn scan_token(&mut self) -> Option<Token> {
+    pub fn scan_token(&mut self) {
         self.skip_whitespace();
 
         match self.skip_comment() {
             Some(token) => {
-                return Some(token);
+                self.tokens.push(token);
+                return;
             }
             None => {}
         }
 
         if self.current == self.source.len() {
-            return self.make_eof_token();
+            self.make_eof_token();
+            return;
         } else if self.current > self.source.len() {
-            return None;
+            return;
         }
 
         self.start = self.current;
@@ -83,6 +81,12 @@ impl<'a> Lexer<'a> {
             '/' => self.make_token(TokenType::TokenSlash),
             ';' => self.make_token(TokenType::TokenSemicolon),
             ',' => self.make_token(TokenType::TokenComma),
+            '"' => {
+                self.make_token(TokenType::TokenDoubleQuote);
+                self.start = self.current;
+                self.advance();
+                self.string()
+            }
             '<' => {
                 if self.is(0, '=') {
                     self.advance();

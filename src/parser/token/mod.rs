@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use self::token_type::TokenType;
 
 pub mod token_type;
@@ -93,13 +95,14 @@ impl Token {
     }
 
     #[profiler::function_tracker]
-    pub fn get_lexeme(&self, source: &Vec<char>) -> String {
+    pub fn get_lexeme(&self, source: &Vec<char>) -> Rc<str> {
         let mut lexeme = String::new();
 
         for i in self.start..self.start + self.length {
             lexeme.push(*source.get(i).unwrap());
         }
-        lexeme
+
+        lexeme.into()
     }
 
     pub fn get_line(&self) -> usize {

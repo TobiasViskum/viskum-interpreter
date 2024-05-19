@@ -1,33 +1,168 @@
-use crate::{ operations::{ BinaryOp, UnaryOp }, value::Value };
+use std::{ rc::Rc, time::{ Instant, SystemTime, UNIX_EPOCH } };
 
-#[derive(Debug, Clone)]
-pub enum InstructionPos {
-    Register(usize),
-    Stack(usize),
+use colored::Colorize;
+
+use crate::{ constants::REGISTERS, value::{ Value, ValueType } };
+
+use super::helper_structs::{ VMRegisters, VMStack };
+
+#[derive(Debug, Copy, Clone)]
+pub struct StackLocation {
+    pub stack_pos: usize,
+    pub is_relative: bool,
 }
 
-impl InstructionPos {
-    pub fn dissassemble(&self) -> String {
-        match self {
-            Self::Register(pos) => { format!("R{}", pos) }
-            Self::Stack(pos) => { format!("[{}]", pos) }
+impl StackLocation {
+    pub fn new(stack_pos: usize, is_relative: bool) -> Self {
+        Self { stack_pos, is_relative }
+    }
+
+    pub fn from_tuple((stack_pos, is_relative): (usize, bool)) -> Self {
+        Self { stack_pos, is_relative }
+    }
+
+    pub fn dissassemble(&self, stack_offset: Option<usize>) -> String {
+        if self.is_relative {
+            if let Some(stack_offset) = stack_offset {
+                format!("[{}]", self.stack_pos + stack_offset)
+            } else {
+                format!("[{} + x]", self.stack_pos)
+            }
+        } else {
+            format!("[{}]", self.stack_pos)
         }
+    }
+
+    pub fn get_stack_pos(&self, stack_offset: usize) -> usize {
+        if self.is_relative { self.stack_pos + stack_offset } else { self.stack_pos }
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum InstructionSrc {
-    Register(usize),
-    Constant(Value),
-    Stack(usize),
+    Register {
+        reg: usize,
+    },
+    Constant {
+        val: Value,
+    },
+    Stack(StackLocation),
 }
 
 impl InstructionSrc {
-    pub fn dissassemble(&self) -> String {
+    pub fn dissassemble(&self, stack_offset: Option<usize>) -> String {
         match self {
-            Self::Register(pos) => { format!("R{}", pos) }
-            Self::Constant(value) => { format!("C({})", value.to_string()) }
-            Self::Stack(pos) => { format!("[{}]", pos) }
+            Self::Register { reg } => { format!("R{}", reg) }
+            Self::Constant { val } => { format!("C({})", val) }
+            Self::Stack(stack_loc) => { stack_loc.dissassemble(stack_offset) }
+        }
+    }
+
+    pub fn get_val(
+        &self,
+        registers: &mut VMRegisters,
+        stack: &mut VMStack,
+        stack_offset: usize
+    ) -> Value {
+        match self {
+            InstructionSrc::Register { reg } => registers.get(*reg),
+            InstructionSrc::Constant { val } => val.clone(),
+            InstructionSrc::Stack(stack_loc) => { stack.get(stack_loc.get_stack_pos(stack_offset)) }
+        }
+    }
+
+    pub fn get_val_mut_ref<'a>(
+        &'a mut self,
+        registers: &'a mut VMRegisters,
+        stack: &'a mut VMStack,
+        stack_offset: usize
+    ) -> &'a mut Value {
+        match self {
+            InstructionSrc::Register { reg } => registers.get_mut_unwrap(*reg),
+            InstructionSrc::Constant { val } => val,
+            InstructionSrc::Stack(stack_loc) => {
+                stack.get_mut_ref(stack_loc.get_stack_pos(stack_offset))
+            }
+        }
+    }
+
+    pub fn get_val_ref<'a>(
+        &'a self,
+        registers: &'a VMRegisters,
+        stack: &'a VMStack,
+        stack_offset: usize
+    ) -> &'a Value {
+        match self {
+            InstructionSrc::Register { reg } => registers.get_ref(*reg),
+            InstructionSrc::Constant { val } => val,
+            InstructionSrc::Stack(stack_loc) => {
+                stack.get_ref(stack_loc.get_stack_pos(stack_offset))
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum NativeCall {
+    Print,
+    Now,
+}
+
+impl NativeCall {
+    pub fn get_native(lexeme: &Rc<str>) -> Option<Self> {
+        match lexeme.as_ref() {
+            "print" => Some(NativeCall::Print),
+            "now" => Some(NativeCall::Now),
+            _ => None,
+        }
+    }
+
+    pub fn call(&self, values: &Vec<&Value>) -> Value {
+        match self {
+            Self::Print => {
+                let mut print_string = String::new();
+                for val in values {
+                    print_string += val.to_string().as_str();
+                }
+                println!("{}", print_string);
+                Value::Void
+            }
+            Self::Now => {
+                // let now = SystemTime::now();
+                // let int = now.duration_since(UNIX_EPOCH).unwrap().as_millis() as i32
+
+                Value::Int32(0)
+            }
+        }
+    }
+
+    pub fn dissassemble(&self) -> String {
+        let str = match self {
+            Self::Print => "PRINT",
+            Self::Now => "NOW",
+        };
+        str.to_string()
+    }
+
+    pub fn get_lexeme(&self) -> String {
+        let str = match self {
+            Self::Print => "print",
+            Self::Now => "now",
+        };
+        str.to_string()
+    }
+
+    pub fn get_args_count(&self) -> (usize, usize) {
+        match self {
+            Self::Print => (0, REGISTERS),
+            Self::Now => (0, 0),
+        }
+    }
+
+    pub fn get_return_type(&self) -> ValueType {
+        match self {
+            Self::Print => ValueType::Void,
+            Self::Now => ValueType::Int32,
         }
     }
 }
@@ -38,6 +173,26 @@ pub enum Instruction {
     JmpPop {
         pos: usize,
         amount: usize,
+    },
+    NativeCall {
+        stack_loc_dest: StackLocation,
+        native_call: NativeCall,
+        args_regs: Vec<usize>,
+    },
+    Call {
+        stack_loc_dest: StackLocation,
+        stack_loc_call: StackLocation,
+    },
+    Return {
+        src: InstructionSrc,
+    },
+    ReturnPop {
+        src: InstructionSrc,
+        amount: usize,
+    },
+    Load {
+        reg: usize,
+        src: InstructionSrc,
     },
     Pop {
         amount: usize,
@@ -71,11 +226,11 @@ pub enum Instruction {
         src: InstructionSrc,
     },
     Define {
-        stack_pos: usize,
+        stack_loc: StackLocation,
         src: InstructionSrc,
     },
     Assign {
-        stack_pos: usize,
+        stack_loc: StackLocation,
         src: InstructionSrc,
     },
     Cmp {
@@ -112,10 +267,39 @@ pub enum Instruction {
 }
 
 impl Instruction {
+    pub fn trace(&self, stack_offset: usize) {
+        println!("{}", self.debug(Some(stack_offset)).as_str().blue())
+    }
+
     pub fn dissassemble(&self) -> String {
+        self.debug(None)
+    }
+
+    fn debug(&self, stack_offset: Option<usize>) -> String {
         match self {
+            Self::NativeCall { native_call, .. } => {
+                format!("NATIVE_CALL {} [...]", native_call.dissassemble())
+            }
+            Self::Call { stack_loc_dest, stack_loc_call } => {
+                format!(
+                    "CALL {} {}",
+                    stack_loc_dest.dissassemble(stack_offset),
+                    stack_loc_call.dissassemble(stack_offset)
+                )
+            }
             Self::Cmp { src1, src2 } => {
-                format!("CMP {} {}", src1.dissassemble(), src2.dissassemble())
+                format!(
+                    "CMP {} {}",
+                    src1.dissassemble(stack_offset),
+                    src2.dissassemble(stack_offset)
+                )
+            }
+            Self::Return { src } => { format!("RETURN {}", src.dissassemble(stack_offset)) }
+            Self::ReturnPop { src, amount } => {
+                format!("RETURN_POP {} {}", src.dissassemble(stack_offset), amount)
+            }
+            Self::Load { reg, src } => {
+                format!("LOAD R{} {}", reg, src.dissassemble(stack_offset))
             }
             Self::Pop { amount } => { format!("POP {}", amount) }
             Self::Jmp { pos } => { format!("JMP {}", pos) }
@@ -128,24 +312,54 @@ impl Instruction {
             Self::Halt => { "HALT".to_string() }
             Self::JmpPop { pos, amount } => { format!("JMP_POP {} {}", pos, amount) }
             Self::Add { reg, src1, src2 } => {
-                format!("ADD R{} {} {}", reg, src1.dissassemble(), src2.dissassemble())
+                format!(
+                    "ADD R{} {} {}",
+                    reg,
+                    src1.dissassemble(stack_offset),
+                    src2.dissassemble(stack_offset)
+                )
             }
             Self::Sub { reg, src1, src2 } => {
-                format!("SUB R{} {} {}", reg, src1.dissassemble(), src2.dissassemble())
+                format!(
+                    "SUB R{} {} {}",
+                    reg,
+                    src1.dissassemble(stack_offset),
+                    src2.dissassemble(stack_offset)
+                )
             }
             Self::Mul { reg, src1, src2 } => {
-                format!("MUL R{} {} {}", reg, src1.dissassemble(), src2.dissassemble())
+                format!(
+                    "MUL R{} {} {}",
+                    reg,
+                    src1.dissassemble(stack_offset),
+                    src2.dissassemble(stack_offset)
+                )
             }
             Self::Div { reg, src1, src2 } => {
-                format!("DIV R{} {} {}", reg, src1.dissassemble(), src2.dissassemble())
+                format!(
+                    "DIV R{} {} {}",
+                    reg,
+                    src1.dissassemble(stack_offset),
+                    src2.dissassemble(stack_offset)
+                )
             }
-            Self::Neg { reg, src } => { format!("NEG R{} {}", reg, src.dissassemble()) }
-            Self::Truthy { reg, src } => { format!("TRUTHY R{} {}", reg, src.dissassemble()) }
-            Self::Define { stack_pos, src } => {
-                format!("DEFINE [{}] {}", stack_pos, src.dissassemble())
+            Self::Neg { reg, src } => { format!("NEG R{} {}", reg, src.dissassemble(stack_offset)) }
+            Self::Truthy { reg, src } => {
+                format!("TRUTHY R{} {}", reg, src.dissassemble(stack_offset))
             }
-            Self::Assign { stack_pos, src } => {
-                format!("ASSIGN [{}] {}", stack_pos, src.dissassemble())
+            Self::Define { stack_loc, src } => {
+                format!(
+                    "DEFINE {} {}",
+                    stack_loc.dissassemble(stack_offset),
+                    src.dissassemble(stack_offset)
+                )
+            }
+            Self::Assign { stack_loc, src } => {
+                format!(
+                    "ASSIGN {} {}",
+                    stack_loc.dissassemble(stack_offset),
+                    src.dissassemble(stack_offset)
+                )
             }
         }
     }

@@ -1,12 +1,14 @@
+use std::rc::Rc;
+
 use ahash::AHashMap;
 
 use crate::{
-    operations::{ BinaryOp, ComparisonOp, Op, UnaryOp },
+    operations::{ BinaryOp, ComparisonOp, UnaryOp },
     value::Value,
-    vm::{ self, instructions::{ Instruction, InstructionPos, InstructionSrc } },
+    vm::{ self, instructions::{ Instruction, InstructionSrc, NativeCall, StackLocation } },
 };
 
-use super::{ ChangedState, DefinitionState, RegistersMap, VMSymbolTable };
+use super::VMSymbolTable;
 
 #[derive(Debug, Clone)]
 pub enum DAGOp {
@@ -14,9 +16,10 @@ pub enum DAGOp {
     UnaryOp(UnaryOp),
     Define,
     Assign,
-
+    FnCall(Rc<str>),
+    NativeCall(NativeCall),
     Const(Value),
-    Identifier(String),
+    Identifier(Rc<str>),
 }
 
 #[derive(Debug, Clone)]
@@ -46,6 +49,10 @@ impl DAG {
             nodes: AHashMap::default(),
             entry_node_id: 0,
         }
+    }
+
+    pub fn dissassemble(&self) {
+        println!("{:#?}", self)
     }
 
     pub fn get_comparison_op(&self) -> ComparisonOp {
@@ -111,10 +118,43 @@ impl DAG {
         self.nodes.remove(&node_id);
     }
 
+    pub fn generate_dag_bytecode_as_return(
+        &self,
+        vm_symbol_table: &mut VMSymbolTable
+    ) -> Vec<Instruction> {
+        let mut bytecode = vec![];
+
+        let result = self.generate_node_bytecode(
+            self.entry_node_id,
+            vm_symbol_table,
+            &mut bytecode
+        );
+
+        let pop_amount = vm_symbol_table.get_pop_amount_in_fn();
+
+        if pop_amount == 0 {
+            bytecode.push(Instruction::Return { src: result });
+        } else {
+            bytecode.push(Instruction::ReturnPop {
+                src: result,
+                amount: pop_amount,
+            });
+        }
+
+        bytecode
+    }
+
     pub fn generate_dag_bytecode(&self, vm_symbol_table: &mut VMSymbolTable) -> Vec<Instruction> {
         let mut bytecode = vec![];
 
-        self.generate_node_bytecode(self.entry_node_id, vm_symbol_table, &mut bytecode);
+        let result = self.generate_node_bytecode(
+            self.entry_node_id,
+            vm_symbol_table,
+            &mut bytecode
+        );
+        if let InstructionSrc::Register { reg } = &result {
+            vm_symbol_table.free_register(*reg);
+        }
 
         bytecode
     }
@@ -127,12 +167,87 @@ impl DAG {
     ) -> InstructionSrc {
         let node = self.nodes.get(&node_id).cloned().unwrap();
 
-        match &node.op {
-            DAGOp::Const(value) => { InstructionSrc::Constant(value.clone()) }
-            DAGOp::Identifier(lexeme) => {
-                let stack_pos = vm_symbol_table.get_variable_stack_pos(lexeme);
+        // self.dissassemble();
 
-                InstructionSrc::Stack(stack_pos)
+        match &node.op {
+            DAGOp::NativeCall(fn_call) => {
+                let operands_len = if let Some(operands) = node.operands {
+                    vm_symbol_table.reserve_registers(operands.len());
+
+                    let mut instruction_sources = vec![];
+
+                    for operand in &operands {
+                        let src = self.generate_node_bytecode(*operand, vm_symbol_table, bytecode);
+                        instruction_sources.push(src);
+                    }
+
+                    for src in instruction_sources {
+                        let reserved_reg = vm_symbol_table.get_reserved_register();
+                        bytecode.push(Instruction::Load {
+                            reg: reserved_reg,
+                            src,
+                        });
+                    }
+                    operands.len()
+                } else {
+                    0
+                };
+
+                let stack_loc_dest = StackLocation::from_tuple(
+                    vm_symbol_table.insert_call_result()
+                );
+
+                bytecode.push(Instruction::NativeCall {
+                    stack_loc_dest,
+                    native_call: *fn_call,
+                    args_regs: (0..operands_len).collect::<Vec<_>>(),
+                });
+
+                InstructionSrc::Stack(stack_loc_dest)
+            }
+            DAGOp::FnCall(fn_call) => {
+                let stack_loc_call = StackLocation::from_tuple(
+                    vm_symbol_table.get_variable_stack_pos(fn_call)
+                );
+
+                if let Some(operands) = node.operands {
+                    vm_symbol_table.reserve_registers(operands.len());
+
+                    let mut instruction_sources = vec![];
+
+                    for operand in &operands {
+                        let src = self.generate_node_bytecode(*operand, vm_symbol_table, bytecode);
+                        instruction_sources.push(src);
+                    }
+
+                    for src in instruction_sources {
+                        let reserved_reg = vm_symbol_table.get_reserved_register();
+                        bytecode.push(Instruction::Load {
+                            reg: reserved_reg,
+                            src,
+                        });
+                    }
+                }
+
+                let stack_loc_dest = StackLocation::from_tuple(
+                    vm_symbol_table.insert_call_result()
+                );
+
+                bytecode.push(Instruction::Call {
+                    stack_loc_dest,
+                    stack_loc_call,
+                });
+                // if let Some(operands_len) = operands_len {
+                //     bytecode.push(Instruction::Pop { amount: operands_len });
+                // }
+
+                InstructionSrc::Stack(stack_loc_dest)
+            }
+            DAGOp::Const(value) => { InstructionSrc::Constant { val: value.clone() } }
+            DAGOp::Identifier(lexeme) => {
+                let (stack_pos, is_relative) = vm_symbol_table.get_variable_stack_pos(lexeme);
+
+                InstructionSrc::Stack(StackLocation::new(stack_pos, is_relative))
             }
             DAGOp::UnaryOp(unary_op) => {
                 let operand = node.operands.unwrap()[0];
@@ -140,7 +255,7 @@ impl DAG {
 
                 let register = vm_symbol_table.assign_register();
 
-                if let InstructionSrc::Register(reg) = &right {
+                if let InstructionSrc::Register { reg } = &right {
                     vm_symbol_table.free_register(*reg);
                 }
 
@@ -158,7 +273,7 @@ impl DAG {
                 };
 
                 bytecode.push(instruction);
-                InstructionSrc::Register(register)
+                InstructionSrc::Register { reg: register }
             }
             DAGOp::BinaryOp(binary_op) => {
                 let operands = node.operands.unwrap();
@@ -167,10 +282,10 @@ impl DAG {
 
                 let register = vm_symbol_table.assign_register();
 
-                if let InstructionSrc::Register(reg) = &left {
+                if let InstructionSrc::Register { reg } = &left {
                     vm_symbol_table.free_register(*reg);
                 }
-                if let InstructionSrc::Register(reg) = &right {
+                if let InstructionSrc::Register { reg } = &right {
                     vm_symbol_table.free_register(*reg);
                 }
 
@@ -210,7 +325,7 @@ impl DAG {
                 };
 
                 bytecode.push(instruction);
-                InstructionSrc::Register(register)
+                InstructionSrc::Register { reg: register }
             }
             DAGOp::Define => {
                 let operands = node.operands.unwrap();
@@ -223,19 +338,23 @@ impl DAG {
                 let value = match operands.get(1) {
                     Some(value_node_id) =>
                         self.generate_node_bytecode(*value_node_id, vm_symbol_table, bytecode),
-                    None => InstructionSrc::Constant(Value::Empty),
+                    None => InstructionSrc::Constant { val: Value::Empty },
                 };
+                if let InstructionSrc::Register { reg } = &value {
+                    vm_symbol_table.free_register(*reg);
+                }
 
-                let stack_pos = vm_symbol_table.insert_variable(&lexeme);
+                let (stack_pos, is_relative) = vm_symbol_table.insert_variable(&lexeme);
+                let stack_loc = StackLocation::new(stack_pos, is_relative);
 
                 let instruction = Instruction::Define {
-                    stack_pos,
+                    stack_loc,
                     src: value,
                 };
 
                 bytecode.push(instruction);
 
-                InstructionSrc::Stack(stack_pos)
+                InstructionSrc::Stack(stack_loc)
             }
             DAGOp::Assign => {
                 let operands = node.operands.unwrap();
@@ -248,18 +367,23 @@ impl DAG {
                 let value = match operands.get(1) {
                     Some(value_node_id) =>
                         self.generate_node_bytecode(*value_node_id, vm_symbol_table, bytecode),
-                    None => InstructionSrc::Constant(Value::Empty),
+                    None => InstructionSrc::Constant { val: Value::Empty },
                 };
+                if let InstructionSrc::Register { reg } = &value {
+                    vm_symbol_table.free_register(*reg);
+                }
 
-                let stack_pos = vm_symbol_table.get_variable_stack_pos(&lexeme);
+                let (stack_pos, is_relative) = vm_symbol_table.get_variable_stack_pos(&lexeme);
+                let stack_loc = StackLocation::new(stack_pos, is_relative);
 
                 let instruction = Instruction::Assign {
-                    stack_pos,
+                    stack_loc,
                     src: value,
                 };
 
                 bytecode.push(instruction);
-                InstructionSrc::Stack(stack_pos)
+
+                InstructionSrc::Stack(stack_loc)
             }
         }
     }

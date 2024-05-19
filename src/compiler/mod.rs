@@ -1,8 +1,15 @@
 use std::{ collections::HashMap, fmt::format };
 
-use crate::{ ast::Ast, error_handler::ErrorHandler, vm::instructions::Instruction };
+use crate::{
+    ast::Ast,
+    error_handler::ErrorHandler,
+    vm::instructions::Instruction,
+    compiler::icfg::ICFG,
+};
 
 pub mod cfg;
+pub mod icfg;
+mod vm_symbol_table;
 // pub mod ir_graph;
 // mod ir_generator;
 // mod bytecode_generator;
@@ -13,14 +20,20 @@ pub struct Compiler<'a> {
 
 impl<'a> Compiler<'a> {
     pub fn new(error_handler: &'a mut ErrorHandler) -> Self {
-        Self {
-            error_handler,
-        }
+        Self { error_handler }
     }
 
     #[profiler::function_tracker]
     pub fn compile(&mut self, ast: Ast) -> Option<Vec<Instruction>> {
+        let mut icfg = ICFG::from_ast(ast);
+
+        return Some(icfg.optimize_and_generate_bytecode());
+
+        panic!("sdf");
+
         let mut cfg = ast.generate_cfg();
+
+        cfg.dissassemble();
 
         let instructions = cfg.optimize_and_generate_bytecode();
 
@@ -36,7 +49,6 @@ impl<'a> Compiler<'a> {
                 for instruction in &instructions {
                     let print_string = format!(
                         "{}{}",
-
                         " ".repeat(indentation_level * indentation_size),
                         instruction.dissassemble()
                     );
@@ -71,7 +83,7 @@ HALT
 */
 
 /*
-/* 
+/*
 
 
 #[derive(Debug)]

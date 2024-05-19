@@ -1,120 +1,94 @@
-use crate::{ constants::REGISTERS, value::Value };
+use std::rc::Rc;
+
+use crate::{ value::{ Value, ValueType }, vm::helper_structs::CallFrame };
 
 pub mod instructions;
-mod helper_methods;
+mod helper_structs;
 
-use self::instructions::{ Instruction, InstructionSrc };
-
-pub struct Registers {
-    registers: Vec<Vec<Value>>,
-}
-
-impl Registers {
-    pub fn new() -> Registers {
-        let mut registers = Vec::with_capacity(REGISTERS);
-        for _ in 0..REGISTERS {
-            registers.push(Value::Empty);
-        }
-
-        Registers {
-            registers: vec![registers],
-        }
-    }
-
-    pub fn get(&self, index: usize, scope_depth: usize) -> &Value {
-        self.registers[scope_depth].get(index).unwrap()
-    }
-
-    pub fn get_mut(&mut self, index: usize, scope_depth: usize) -> &mut Value {
-        self.registers[scope_depth].get_mut(index).unwrap()
-    }
-
-    pub fn start_scope(&mut self) {
-        let mut registers = Vec::with_capacity(REGISTERS);
-        for _ in 0..REGISTERS {
-            registers.push(Value::Empty);
-        }
-
-        type usize = i32;
-        let d: usize = 2;
-
-        self.registers.push(registers);
-    }
-
-    pub fn end_scope(&mut self) {
-        // for i in 0..REGISTERS {
-        //     let scope = self.registers.len() - 1;
-        //     let register = self.get(i, scope);
-        //     if let Value::Int32(value) = *register {
-        //         if value != 0 {
-        //             println!("S{}:R{}: {}", scope, i, value);
-        //         }
-        //     } else {
-        //         println!("S{}:R{}: {}", scope, i, register.to_string());
-        //     }
-        // }
-        self.registers.pop();
-    }
-}
-
-pub struct StackFrame {
-    ip: usize,
-    instructions: Vec<Instruction>,
-    slots: usize,
-}
+use self::{
+    helper_structs::{ CallFrames, VMRegisters, VMStack },
+    instructions::{ Instruction, InstructionSrc },
+};
 
 pub struct VM {
-    stack_frames: Vec<StackFrame>,
-    registers: [Option<Value>; REGISTERS],
-    stack: Vec<Value>,
-    program: Vec<Instruction>,
+    registers: VMRegisters,
+    stack: VMStack,
+    program: Instructions,
     pc: usize,
 }
-
 impl VM {
-    pub fn new(program: Vec<Instruction>) -> VM {
+    pub fn new(instructions: Vec<Instruction>) -> VM {
+        let program = Instructions::from(instructions);
+
+        #[cfg(debug_assertions)]
+        {
+            program.dissassemble();
+        }
+
         VM {
-            stack_frames: Vec::with_capacity(64),
-            registers: [None; REGISTERS],
-            stack: Vec::with_capacity(64),
+            registers: VMRegisters::new(),
+            stack: VMStack::new(),
             program,
             pc: 0,
         }
     }
 
-    fn get_from_stack(&self, stack_pos: usize) -> &Value {
-        self.stack.get(stack_pos).unwrap()
+    #[profiler::function_tracker("vm-execution")]
+    pub fn run(&mut self) {
+        self.program.execute(&mut self.pc, &mut self.stack, &mut self.registers, 0);
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Instructions {
+    pub instructions: Rc<[Instruction]>,
+}
+
+impl Instructions {
+    pub fn new() -> Self {
+        Self {
+            instructions: [].into(),
+        }
     }
 
-    fn push_to_stack(&mut self, value: Value) {
-        self.stack.push(value);
+    pub fn dissassemble(&self) {
+        let indentation_level = 0;
+        let indentation_size = 4;
+
+        // println!("Optimized instructions:");
+        println!("----------------------\n");
+
+        for i in 0..self.instructions.len() {
+            let instruction = self.get_instruction(i);
+            let print_string = format!(
+                "{}{}",
+                " ".repeat(indentation_level * indentation_size),
+                instruction.dissassemble()
+            );
+            println!("{}", print_string);
+        }
+
+        println!("\n----------------------");
     }
 
-    fn get_from_stack_mut(&mut self, stack_pos: usize) -> &mut Value {
-        self.stack.get_mut(stack_pos).unwrap()
+    pub fn from(instructions: Vec<Instruction>) -> Self {
+        Self {
+            instructions: instructions.into(),
+        }
     }
 
-    fn get_register(&self, instruction_register: usize) -> &Value {
-        self.registers.get(instruction_register).unwrap().as_ref().unwrap()
-    }
-
-    fn get_register_mut(&mut self, instruction_register: usize) -> &mut Option<Value> {
-        self.registers.get_mut(instruction_register).unwrap()
-    }
-
-    fn get_cmp_values(&self) -> (Value, Value) {
-        match self.program.get(self.pc - 1).unwrap() {
+    // #[inline(always)]
+    fn get_cmp_values(
+        &self,
+        ip: usize,
+        registers: &mut VMRegisters,
+        stack: &mut VMStack,
+        stack_offset: usize
+    ) -> (Value, Value) {
+        match self.get_instruction(ip - 1) {
             Instruction::Cmp { src1, src2 } => {
-                let lhs = match src1 {
-                    InstructionSrc::Constant(v) => *v,
-                    InstructionSrc::Register(reg) => { *self.get_register(*reg) }
-                    InstructionSrc::Stack(stack_pos) => { *self.get_from_stack(*stack_pos) }
-                };
-                let rhs = match src2 {
-                    InstructionSrc::Constant(v) => *v,
-                    InstructionSrc::Register(reg) => { *self.get_register(*reg) }
-                    InstructionSrc::Stack(stack_pos) => { *self.get_from_stack(*stack_pos) }
-                };
+                let lhs = src1.get_val(registers, stack, stack_offset);
+                let rhs = src2.get_val(registers, stack, stack_offset);
 
                 (lhs, rhs)
             }
@@ -122,194 +96,218 @@ impl VM {
         }
     }
 
-    #[profiler::function_tracker("vm-execution")]
-    pub fn run(&mut self) {
-        while self.pc < self.program.len() {
-            let instruction = self.get_instruction();
+    #[inline(always)]
+    fn get_instruction(&self, ip: usize) -> &Instruction {
+        &self.instructions[ip]
+    }
+
+    #[inline(always)]
+    fn trace(
+        &self,
+        stack: &mut VMStack,
+        registers: &mut VMRegisters,
+        instruction: &Instruction,
+        stack_offset: usize
+    ) {
+        #[cfg(trace_execution)]
+        {
+            registers.trace();
+            stack.trace();
+            instruction.trace(stack_offset);
+            print!("\n")
+        }
+    }
+
+    pub fn execute(
+        &self,
+        ip: &mut usize,
+        stack: &mut VMStack,
+        registers: &mut VMRegisters,
+        stack_offset: usize
+    ) -> Value {
+        while *ip < self.instructions.len() {
+            let instruction = self.get_instruction(*ip);
 
             match instruction {
+                Instruction::NativeCall { stack_loc_dest, args_regs, native_call } => {
+                    let args = args_regs
+                        .iter()
+                        .map(|reg| registers.get_ref(*reg))
+                        .collect::<Vec<_>>();
+
+                    let result = native_call.call(&args);
+
+                    stack.push(result, stack_loc_dest.get_stack_pos(stack_offset));
+                }
+                Instruction::ReturnPop { src, amount } => {
+                    let val = src.get_val(registers, stack, stack_offset);
+
+                    // let val = mem::take(src.get_val_mut_ref(registers, stack, stack_offset));
+
+                    stack.decrement_stack_height(*amount);
+
+                    self.trace(stack, registers, instruction, stack_offset);
+
+                    return val;
+                }
+                Instruction::Return { src } => {
+                    let val = src.get_val(registers, stack, stack_offset);
+
+                    self.trace(stack, registers, instruction, stack_offset);
+
+                    return val;
+                }
+                Instruction::Load { reg, src } => {
+                    let val = src.get_val(registers, stack, stack_offset);
+
+                    *registers.get_mut(*reg) = Some(val);
+                }
+                Instruction::Call { stack_loc_dest, stack_loc_call } => {
+                    self.trace(stack, registers, instruction, stack_offset);
+
+                    // let stack_pos = stack_loc_call.get_stack_pos(stack_offset);
+                    // let func: crate::value::Function = match stack.get(stack_pos) {
+                    //     Value::Function(func) => func,
+                    //     _ => panic!("sdf"),
+                    // };
+                    // let mut new_ip = 0;
+                    // let val = func.instructions.execute(&mut new_ip, stack, registers, stack.len());
+
+                    // let mut call_frame = CallFrame::new(stack_pos, stack.len());
+                    // let val = call_frame.execute(stack, registers);
+
+                    let func = stack.get_ptr_func(stack_loc_call.get_stack_pos(stack_offset));
+                    let val = unsafe {
+                        (*func).instructions.execute(&mut 0, stack, registers, stack.len())
+                    };
+
+                    stack.push(val, stack_loc_dest.get_stack_pos(stack_offset));
+                }
                 Instruction::JmpPop { pos, amount } => {
-                    let pos = *pos;
-                    self.stack.truncate(self.stack.len() - amount);
-                    self.pc = pos;
+                    stack.decrement_stack_height(*amount);
+                    *ip = *pos;
+
+                    self.trace(stack, registers, instruction, stack_offset);
+
                     continue;
                 }
                 Instruction::Pop { amount } => {
-                    self.stack.truncate(self.stack.len() - amount);
+                    stack.decrement_stack_height(*amount);
                 }
                 Instruction::Cmp { .. } => {
-                    self.pc += 1;
-                    continue;
-                }
-                Instruction::JE { true_pos, false_pos } => {
-                    let (lhs, rhs) = self.get_cmp_values();
+                    *ip += 1;
 
-                    if lhs.cmp_e(&rhs).unwrap() {
-                        self.pc = *true_pos;
-                    } else {
-                        self.pc = *false_pos;
-                    }
-                    continue;
-                }
-                Instruction::JNE { true_pos, false_pos } => {
-                    let (lhs, rhs) = self.get_cmp_values();
+                    self.trace(stack, registers, instruction, stack_offset);
 
-                    if lhs.cmp_ne(&rhs).unwrap() {
-                        self.pc = *true_pos;
-                    } else {
-                        self.pc = *false_pos;
-                    }
                     continue;
                 }
-                Instruction::JG { true_pos, false_pos } => {
-                    let (lhs, rhs) = self.get_cmp_values();
 
-                    if lhs.cmp_g(&rhs).unwrap() {
-                        self.pc = *true_pos;
-                    } else {
-                        self.pc = *false_pos;
-                    }
-                    continue;
-                }
-                Instruction::JGE { true_pos, false_pos } => {
-                    let (lhs, rhs) = self.get_cmp_values();
-
-                    if lhs.cmp_ge(&rhs).unwrap() {
-                        self.pc = *true_pos;
-                    } else {
-                        self.pc = *false_pos;
-                    }
-                    continue;
-                }
-                Instruction::JL { true_pos, false_pos } => {
-                    let (lhs, rhs) = self.get_cmp_values();
-
-                    if lhs.cmp_l(&rhs).unwrap() {
-                        self.pc = *true_pos;
-                    } else {
-                        self.pc = *false_pos;
-                    }
-                    continue;
-                }
-                Instruction::JLE { true_pos, false_pos } => {
-                    let (lhs, rhs) = self.get_cmp_values();
-
-                    if lhs.cmp_le(&rhs).unwrap() {
-                        self.pc = *true_pos;
-                    } else {
-                        self.pc = *false_pos;
-                    }
-                    continue;
-                }
                 Instruction::Jmp { pos } => {
-                    self.pc = *pos;
+                    *ip = *pos;
+
+                    self.trace(stack, registers, instruction, stack_offset);
+
                     continue;
                 }
                 Instruction::Halt => {
                     #[cfg(debug_assertions)]
                     {
-                        println!("Stack: {:?}", self.stack)
+                        println!("stack_len: {}", stack.len());
+                        println!("a = {:#?}", stack.get(1));
                     }
                     break;
                 }
 
-                Instruction::Define { stack_pos, src } => {
-                    let src = match src {
-                        InstructionSrc::Register(register) => *self.get_register(*register),
-                        InstructionSrc::Constant(value) => *value,
-                        InstructionSrc::Stack(pos) => *self.get_from_stack(*pos),
-                    };
+                Instruction::Define { stack_loc, src } => {
+                    let stack_pos = stack_loc.get_stack_pos(stack_offset);
 
-                    self.push_to_stack(src);
+                    let src = src.get_val(registers, stack, stack_offset);
+
+                    #[cfg(debug_assertions)]
+                    {
+                        if let Value::Function(func) = &src {
+                            func.instructions.dissassemble();
+                        }
+                    }
+
+                    stack.push(src, stack_pos);
                 }
-                Instruction::Assign { stack_pos, src } => {
-                    let src = match src {
-                        InstructionSrc::Register(register) => self.get_register(*register),
-                        InstructionSrc::Constant(value) => value,
-                        InstructionSrc::Stack(stack_pos) => self.get_from_stack(*stack_pos),
-                    };
-                    *self.get_from_stack_mut(*stack_pos) = src.clone();
+                Instruction::Assign { stack_loc, src } => {
+                    let stack_pos = stack_loc.get_stack_pos(stack_offset);
+
+                    let src = src.get_val(registers, stack, stack_offset);
+
+                    *stack.get_mut(stack_pos) = src;
                 }
-                Instruction::Add { reg, src1, src2 } => {
-                    let src1 = match src1 {
-                        InstructionSrc::Register(register) => self.get_register(*register),
-                        InstructionSrc::Constant(value) => value,
-                        InstructionSrc::Stack(pos) => self.get_from_stack(*pos),
+                | Instruction::JE { true_pos, false_pos }
+                | Instruction::JNE { true_pos, false_pos }
+                | Instruction::JG { true_pos, false_pos }
+                | Instruction::JGE { true_pos, false_pos }
+                | Instruction::JL { true_pos, false_pos }
+                | Instruction::JLE { true_pos, false_pos } => {
+                    let (lhs, rhs) = match self.get_instruction(*ip - 1) {
+                        Instruction::Cmp { src1, src2 } => {
+                            let lhs = src1.get_val_ref(registers, stack, stack_offset);
+                            let rhs = src2.get_val_ref(registers, stack, stack_offset);
+
+                            (lhs, rhs)
+                        }
+                        _ => panic!("Expected CMP instruction"),
                     };
 
-                    let src2 = match src2 {
-                        InstructionSrc::Register(register) => self.get_register(*register),
-                        InstructionSrc::Constant(value) => value,
-                        InstructionSrc::Stack(pos) => self.get_from_stack(*pos),
-                    };
+                    let condition = (
+                        match instruction {
+                            Instruction::JE { .. } => lhs.cmp_e(&rhs),
+                            Instruction::JNE { .. } => lhs.cmp_ne(&rhs),
+                            Instruction::JG { .. } => lhs.cmp_g(&rhs),
+                            Instruction::JGE { .. } => lhs.cmp_ge(&rhs),
+                            Instruction::JL { .. } => lhs.cmp_l(&rhs),
+                            Instruction::JLE { .. } => lhs.cmp_le(&rhs),
+                            _ => unreachable!(),
+                        }
+                    ).unwrap();
 
-                    *self.get_register_mut(*reg) = Some(src1.add(&src2).unwrap());
+                    *ip = if condition { *true_pos } else { *false_pos };
+
+                    self.trace(stack, registers, instruction, stack_offset);
+
+                    continue;
                 }
-                Instruction::Sub { reg, src1, src2 } => {
-                    let src1 = match src1 {
-                        InstructionSrc::Register(register) => self.get_register(*register),
-                        InstructionSrc::Constant(value) => value,
-                        InstructionSrc::Stack(stack_pos) => self.get_from_stack(*stack_pos),
+                | Instruction::Add { reg, src1, src2 }
+                | Instruction::Sub { reg, src1, src2 }
+                | Instruction::Div { reg, src1, src2 }
+                | Instruction::Mul { reg, src1, src2 } => {
+                    let src1 = src1.get_val_ref(registers, stack, stack_offset);
+                    let src2 = src2.get_val_ref(registers, stack, stack_offset);
+
+                    let value = match instruction {
+                        Instruction::Add { .. } => src1.add(&src2).unwrap(),
+                        Instruction::Sub { .. } => src1.sub(&src2).unwrap(),
+                        Instruction::Mul { .. } => src1.mul(&src2).unwrap(),
+                        Instruction::Div { .. } => src1.div(&src2).unwrap(),
+                        _ => unreachable!(),
                     };
 
-                    let src2 = match src2 {
-                        InstructionSrc::Register(register) => self.get_register(*register),
-                        InstructionSrc::Constant(value) => value,
-                        InstructionSrc::Stack(stack_pos) => self.get_from_stack(*stack_pos),
-                    };
-
-                    *self.get_register_mut(*reg) = Some(src1.sub(&src2).unwrap());
+                    *registers.get_mut(*reg) = Some(value);
                 }
-                Instruction::Mul { reg, src1, src2 } => {
-                    let src1 = match src1 {
-                        InstructionSrc::Register(register) => self.get_register(*register),
-                        InstructionSrc::Constant(value) => value,
-                        InstructionSrc::Stack(stack_pos) => self.get_from_stack(*stack_pos),
+                Instruction::Neg { reg, src } | Instruction::Truthy { reg, src } => {
+                    let src = src.get_val_ref(registers, stack, stack_offset);
+
+                    let val = match instruction {
+                        Instruction::Neg { .. } => src.neg().unwrap(),
+                        Instruction::Truthy { .. } => src.not(),
+                        _ => unreachable!(),
                     };
 
-                    let src2 = match src2 {
-                        InstructionSrc::Register(register) => self.get_register(*register),
-                        InstructionSrc::Constant(value) => value,
-                        InstructionSrc::Stack(stack_pos) => self.get_from_stack(*stack_pos),
-                    };
-
-                    *self.get_register_mut(*reg) = Some(src1.mul(&src2).unwrap());
-                }
-                Instruction::Div { reg, src1, src2 } => {
-                    let src1 = match src1 {
-                        InstructionSrc::Register(register) => self.get_register(*register),
-                        InstructionSrc::Constant(value) => value,
-                        InstructionSrc::Stack(stack_pos) => self.get_from_stack(*stack_pos),
-                    };
-
-                    let src2 = match src2 {
-                        InstructionSrc::Register(register) => self.get_register(*register),
-                        InstructionSrc::Constant(value) => value,
-                        InstructionSrc::Stack(stack_pos) => self.get_from_stack(*stack_pos),
-                    };
-
-                    *self.get_register_mut(*reg) = Some(src1.div(&src2).unwrap());
-                }
-                Instruction::Neg { reg, src } => {
-                    let src = match src {
-                        InstructionSrc::Register(register) => self.get_register(*register),
-                        InstructionSrc::Constant(value) => value,
-                        InstructionSrc::Stack(stack_pos) => self.get_from_stack(*stack_pos),
-                    };
-
-                    *self.get_register_mut(*reg) = Some(src.neg().unwrap());
-                }
-                Instruction::Truthy { reg, src } => {
-                    let src = match src {
-                        InstructionSrc::Register(register) => self.get_register(*register),
-                        InstructionSrc::Constant(value) => value,
-                        InstructionSrc::Stack(stack_pos) => self.get_from_stack(*stack_pos),
-                    };
-
-                    *self.get_register_mut(*reg) = Some(src.not());
+                    *registers.get_mut(*reg) = Some(val);
                 }
             }
-            self.pc += 1;
+
+            self.trace(stack, registers, instruction, stack_offset);
+
+            *ip += 1;
         }
+
+        Value::Void
     }
 }

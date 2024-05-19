@@ -63,8 +63,6 @@ impl Ast {
     pub fn generate_cfg(&self) -> CFG {
         let mut cfg = CFG::new();
 
-        self.type_check();
-
         let next_cfg_node_id: Rc<Cell<usize>> = Rc::new(Cell::new(1));
 
         let get_next_node_id = {
@@ -84,7 +82,7 @@ impl Ast {
         let mut cfg_helper = CFGHelper::new(&get_next_node_id, &get_current_node_id);
 
         cfg.add_node(
-            CFGNode::ProgramStart { next_id: get_next_node_id(), scope: cfg_helper.scope },
+            CFGNode::CfgStart { next_id: get_next_node_id(), scope: cfg_helper.scope },
             &get_next_node_id
         );
 
@@ -92,7 +90,7 @@ impl Ast {
             self.generate_cfg_nodes(stmt, &mut cfg, &mut cfg_helper);
         }
 
-        cfg.add_node(CFGNode::ProgramEnd { scope: cfg_helper.scope }, &get_next_node_id);
+        cfg.add_node(CFGNode::CfgEnd { scope: cfg_helper.scope }, &get_next_node_id);
 
         cfg
     }
@@ -106,10 +104,11 @@ impl Ast {
         let mut goto_node_ids = GotoNodeIds::new();
 
         match stmt {
+            Stmt::ReturnStmt(_) => panic!("Return stmt not supported yet"),
             Stmt::BreakStmt(_) => {
                 let break_node_id = cfg.add_node(
                     CFGNode::Goto {
-                        node: CFGGotoNode::new(0, None),
+                        node: CFGGotoNode::new(0),
                         scope: cfg_helper.scope,
                     },
                     cfg_helper.get_next_node_id
@@ -120,7 +119,7 @@ impl Ast {
             Stmt::ContinueStmt(_) => {
                 let break_node_id = cfg.add_node(
                     CFGNode::Goto {
-                        node: CFGGotoNode::new(0, None),
+                        node: CFGGotoNode::new(0),
                         scope: cfg_helper.scope,
                     },
                     cfg_helper.get_next_node_id
@@ -252,7 +251,7 @@ impl Ast {
 
         cfg.add_node(
             CFGNode::Goto {
-                node: CFGGotoNode::new(decision_node_id, None),
+                node: CFGGotoNode::new(decision_node_id),
                 scope: cfg_helper.scope,
             },
             cfg_helper.get_next_node_id
@@ -324,7 +323,7 @@ impl Ast {
         }
 
         let goto_node_id = cfg.add_node(
-            CFGNode::Goto { node: CFGGotoNode::new(0, None), scope: cfg_helper.scope },
+            CFGNode::Goto { node: CFGGotoNode::new(0), scope: cfg_helper.scope },
             cfg_helper.get_next_node_id
         );
 

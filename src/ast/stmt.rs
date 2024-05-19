@@ -1,6 +1,12 @@
-use crate::{ parser::{ self, token::{ Token, TokenMetadata } }, value::ValueType };
+use std::rc::Rc;
 
-use super::{ expr::{ AstIdentifier, Expr }, type_check::{ AstEnvironment, SymbolTypeDef } };
+use crate::{
+    error_handler::ErrorHandler,
+    parser::{ self, token::{ Token, TokenMetadata } },
+    value::ValueType,
+};
+
+use super::{ ast_symbol_table::{ AstSymbol, AstSymbolTable }, expr::{ AstIdentifier, Expr } };
 
 #[derive(Debug)]
 pub enum Stmt {
@@ -11,158 +17,159 @@ pub enum Stmt {
     FunctionStmt(FunctionStmt),
     BreakStmt(BreakStmt),
     ContinueStmt(ContinueStmt),
+    ReturnStmt(ReturnStmt),
     IfStmt(IfStmt),
     LoopStmt(LoopStmt),
     TypeDefStmt(TypeDefStmt),
 }
 
-impl Stmt {
-    pub fn type_check(
-        &mut self,
-        ast_environment: &mut parser::ast_generator::AstEnvironment,
-        token_vec: &mut Vec<TokenMetadata>
-    ) -> Result<(), String> {
-        match self {
-            Stmt::ContinueStmt(_) => { Ok(()) }
-            Stmt::BreakStmt(_) => { Ok(()) }
-            Stmt::LoopStmt(_) => panic!("type_check in stmt.rs"),
-            Stmt::IfStmt(_) => panic!("type_check in stmt.rs"),
-            Stmt::TypeDefStmt(_) => panic!("type_check in stmt.rs"),
-            Stmt::FunctionStmt(_) => panic!("type_check in stmt.rs"),
-            Stmt::ScopeStmt(_) => { Ok(()) }
-            Stmt::ExprStmt(expr) => {
-                expr.type_check(ast_environment, token_vec)?;
-                Ok(())
-            }
-            Stmt::VarDefStmt(variable_definition) => {
-                let resulted_value_type = match &variable_definition.value {
-                    Some(value) => {
-                        match value.type_check(ast_environment, token_vec) {
-                            Ok(v) => v,
-                            Err(e) => {
-                                ast_environment.insert(
-                                    variable_definition.name.to_string(),
-                                    ValueType::Unkown,
-                                    variable_definition.is_mutable,
-                                    true
-                                );
+// impl Stmt {
+//     pub fn type_check(
+//         &mut self,
+//         ast_environment: &mut parser::ast_generator::AstEnvironment,
+//         token_vec: &mut Vec<TokenMetadata>
+//     ) -> Result<(), String> {
+//         match self {
+//             Stmt::ContinueStmt(_) => { Ok(()) }
+//             Stmt::BreakStmt(_) => { Ok(()) }
+//             Stmt::LoopStmt(_) => panic!("type_check in stmt.rs"),
+//             Stmt::IfStmt(_) => panic!("type_check in stmt.rs"),
+//             Stmt::TypeDefStmt(_) => panic!("type_check in stmt.rs"),
+//             Stmt::FunctionStmt(_) => panic!("type_check in stmt.rs"),
+//             Stmt::ScopeStmt(_) => { Ok(()) }
+//             Stmt::ExprStmt(expr) => {
+//                 expr.type_check(ast_environment, token_vec)?;
+//                 Ok(())
+//             }
+//             Stmt::VarDefStmt(variable_definition) => {
+//                 let resulted_value_type = match &variable_definition.value {
+//                     Some(value) => {
+//                         match value.type_check(ast_environment, token_vec) {
+//                             Ok(v) => v,
+//                             Err(e) => {
+//                                 ast_environment.insert(
+//                                     variable_definition.name.to_string(),
+//                                     ValueType::Empty,
+//                                     variable_definition.is_mutable,
+//                                     true
+//                                 );
 
-                                return Err(e);
-                            }
-                        }
-                    }
-                    None => ValueType::Empty,
-                };
+//                                 return Err(e);
+//                             }
+//                         }
+//                     }
+//                     None => ValueType::Empty,
+//                 };
 
-                let value_type = match &variable_definition.value_type {
-                    Some(value_type) => {
-                        if
-                            !&resulted_value_type.is(value_type) &&
-                            !&resulted_value_type.is(&ValueType::Empty)
-                        {
-                            if let Some(value) = &variable_definition.value {
-                                value.push_to_token_vec(token_vec);
-                            }
-                            token_vec.push(variable_definition.token_metadata);
+//                 let value_type = match &variable_definition.value_type {
+//                     Some(value_type) => {
+//                         if
+//                             !&resulted_value_type.is(value_type) &&
+//                             !&resulted_value_type.is(&ValueType::Empty)
+//                         {
+//                             if let Some(value) = &variable_definition.value {
+//                                 value.push_to_token_vec(token_vec);
+//                             }
+//                             token_vec.push(variable_definition.token_metadata);
 
-                            ast_environment.insert(
-                                variable_definition.name.to_string(),
-                                value_type.clone(),
-                                variable_definition.is_mutable,
-                                true
-                            );
+//                             ast_environment.insert(
+//                                 variable_definition.name.to_string(),
+//                                 value_type.clone(),
+//                                 variable_definition.is_mutable,
+//                                 true
+//                             );
 
-                            return Err(
-                                format!(
-                                    "Variable '{}' is of type {} but the provided value is of type {}",
-                                    variable_definition.name,
-                                    value_type.to_type_string(),
-                                    resulted_value_type.to_type_string()
-                                )
-                            );
-                        } else {
-                            value_type
-                        }
-                    }
-                    None => &resulted_value_type,
-                };
+//                             return Err(
+//                                 format!(
+//                                     "Variable '{}' is of type {} but the provided value is of type {}",
+//                                     variable_definition.name,
+//                                     value_type.to_type_string(),
+//                                     resulted_value_type.to_type_string()
+//                                 )
+//                             );
+//                         } else {
+//                             value_type
+//                         }
+//                     }
+//                     None => &resulted_value_type,
+//                 };
 
-                ast_environment.insert(
-                    variable_definition.name.to_string(),
-                    value_type.clone(),
-                    variable_definition.is_mutable,
-                    !resulted_value_type.is(&ValueType::Empty) // Compare type to if is empty
-                );
+//                 ast_environment.insert(
+//                     variable_definition.name.to_string(),
+//                     value_type.clone(),
+//                     variable_definition.is_mutable,
+//                     !resulted_value_type.is(&ValueType::Empty) // Compare type to if is empty
+//                 );
 
-                variable_definition.value_type = Some(value_type.clone());
+//                 variable_definition.value_type = Some(value_type.clone());
 
-                Ok(())
-            }
-            Stmt::VarAssignStmt(variable_assignment) => {
-                let resulted_value_type = match
-                    variable_assignment.value.type_check(ast_environment, token_vec)
-                {
-                    Ok(v) => v,
-                    Err(e) => {
-                        return Err(e);
-                    }
-                };
+//                 Ok(())
+//             }
+//             Stmt::VarAssignStmt(variable_assignment) => {
+//                 let resulted_value_type = match
+//                     variable_assignment.value.type_check(ast_environment, token_vec)
+//                 {
+//                     Ok(v) => v,
+//                     Err(e) => {
+//                         return Err(e);
+//                     }
+//                 };
 
-                let variable = ast_environment.get(&variable_assignment.temp_get_lexeme());
+//                 let variable = ast_environment.get(&variable_assignment.temp_get_lexeme());
 
-                if let Some((value_type, is_mutable, is_initialized)) = variable {
-                    if !is_initialized {
-                        println!(
-                            "Found non-initialized variable: '{}'.\nTODO: Implement checks when conditional blocks are implemented.",
-                            variable_assignment.temp_get_lexeme()
-                        );
-                    }
-                    if !is_mutable && is_initialized {
-                        variable_assignment.value.push_to_token_vec(token_vec);
+//                 if let Some((value_type, is_mutable, is_initialized)) = variable {
+//                     if !is_initialized {
+//                         println!(
+//                             "Found non-initialized variable: '{}'.\nTODO: Implement checks when conditional blocks are implemented.",
+//                             variable_assignment.temp_get_lexeme()
+//                         );
+//                     }
+//                     if !is_mutable && is_initialized {
+//                         variable_assignment.value.push_to_token_vec(token_vec);
 
-                        return Err(
-                            format!(
-                                "Cannot mutate immutable variable '{}'",
-                                variable_assignment.temp_get_lexeme()
-                            )
-                        );
-                    } else {
-                        if !&resulted_value_type.is(&value_type) {
-                            variable_assignment.value.push_to_token_vec(token_vec);
+//                         return Err(
+//                             format!(
+//                                 "Cannot mutate immutable variable '{}'",
+//                                 variable_assignment.temp_get_lexeme()
+//                             )
+//                         );
+//                     } else {
+//                         // if !&resulted_value_type.is(&value_type) {
+//                         //     variable_assignment.value.push_to_token_vec(token_vec);
 
-                            let error_message = if value_type.is(&ValueType::Unkown) {
-                                format!(
-                                    "The tye of variable '{}' is unknown and cannot be assigned to",
-                                    variable_assignment.temp_get_lexeme()
-                                )
-                            } else {
-                                format!(
-                                    "Variable '{}' is of type {} but the assignment value is of type {}",
-                                    variable_assignment.temp_get_lexeme(),
-                                    value_type.to_type_string(),
-                                    resulted_value_type.to_type_string()
-                                )
-                            };
+//                         //     let error_message = if value_type.is(&ValueType::Unkown) {
+//                         //         format!(
+//                         //             "The tye of variable '{}' is unknown and cannot be assigned to",
+//                         //             variable_assignment.temp_get_lexeme()
+//                         //         )
+//                         //     } else {
+//                         //         format!(
+//                         //             "Variable '{}' is of type {} but the assignment value is of type {}",
+//                         //             variable_assignment.temp_get_lexeme(),
+//                         //             value_type.to_type_string(),
+//                         //             resulted_value_type.to_type_string()
+//                         //         )
+//                         //     };
 
-                            return Err(error_message);
-                        }
-                    }
-                } else {
-                    variable_assignment.value.push_to_token_vec(token_vec);
+//                         //     return Err(error_message);
+//                         // }
+//                     }
+//                 } else {
+//                     variable_assignment.value.push_to_token_vec(token_vec);
 
-                    return Err(
-                        format!(
-                            "Cannot assign to undefined variable: '{}'",
-                            variable_assignment.temp_get_lexeme()
-                        )
-                    );
-                }
+//                     return Err(
+//                         format!(
+//                             "Cannot assign to undefined variable: '{}'",
+//                             variable_assignment.temp_get_lexeme()
+//                         )
+//                     );
+//                 }
 
-                Ok(())
-            }
-        }
-    }
-}
+//                 Ok(())
+//             }
+//         }
+//     }
+// }
 
 #[derive(Debug)]
 pub struct VarAssignStmt {
@@ -178,7 +185,7 @@ impl VarAssignStmt {
         }
     }
 
-    pub fn temp_get_lexeme(&self) -> String {
+    pub fn temp_get_lexeme(&self) -> Rc<str> {
         match &self.target_expr {
             Expr::IdentifierLookup(ident) => ident.get_lexeme(),
             _ => panic!("temp_get_lexeme"),
@@ -188,7 +195,7 @@ impl VarAssignStmt {
 
 #[derive(Debug)]
 pub struct VarDefStmt {
-    pub name: String,
+    pub name: Rc<str>,
     pub value_type: Option<ValueType>,
     pub is_mutable: bool,
     pub value: Option<Expr>,
@@ -197,7 +204,7 @@ pub struct VarDefStmt {
 
 impl VarDefStmt {
     pub fn new(
-        name: String,
+        name: Rc<str>,
         value_type: Option<ValueType>,
         is_mutable: bool,
         value: Option<Expr>,
@@ -219,6 +226,18 @@ pub struct BreakStmt;
 impl BreakStmt {
     pub fn new() -> Self {
         Self
+    }
+}
+
+#[derive(Debug)]
+pub struct ReturnStmt {
+    pub return_expr: Option<Expr>,
+    pub metadata: TokenMetadata,
+}
+
+impl ReturnStmt {
+    pub fn new(return_expr: Option<Expr>, metadata: TokenMetadata) -> Self {
+        Self { return_expr, metadata }
     }
 }
 
@@ -262,6 +281,23 @@ impl IfStmt {
             false_block,
         }
     }
+
+    pub fn type_check(
+        &mut self,
+        ast_symbol_table: &mut AstSymbolTable,
+        error_handler: &mut ErrorHandler
+    ) {
+        if let Some(condition) = &mut self.condition {
+            let token_vec = &mut vec![];
+            let _ = condition.type_check(ast_symbol_table, token_vec);
+        }
+
+        self.true_block.type_check(ast_symbol_table, error_handler);
+
+        if let Some(false_block) = &mut self.false_block {
+            let _ = false_block.type_check(ast_symbol_table, error_handler);
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -278,34 +314,71 @@ impl ScopeStmt {
         }
     }
 
-    // pub fn type_check(&self, ast_environment: &mut AstEnvironment) {
-    //     self.forward_declare(ast_environment);
-
-    //     for stmt in &self.stmts {
-    //         match stmt {
-
-    //         }
-    //     }
-    // }
-
-    pub fn forward_declare(&self, ast_environment: &mut AstEnvironment) {
-        for stmt in &self.cf_stmts {
+    pub fn type_check(
+        &mut self,
+        ast_symbol_table: &mut AstSymbolTable,
+        error_handler: &mut ErrorHandler
+    ) {
+        for stmt in &mut self.cf_stmts {
             match stmt {
-                Stmt::TypeDefStmt(type_def_stmt) => {
-                    let type_name = type_def_stmt.type_name.clone();
-                    let typing_value = match &type_def_stmt.typing.typing_value {
-                        TypingValue::Custom(_) => { panic!("Custom types not supported yet") }
-                        TypingValue::ValueType(value_type) => { value_type.clone() }
-                    };
-
-                    ast_environment.scopes[ast_environment.scope_depth].type_definitions.insert(
-                        type_name,
-                        SymbolTypeDef {
-                            value_type: typing_value,
-                        }
-                    );
+                Stmt::VarAssignStmt(var_assign_stmt) => {
+                    ast_symbol_table.assign_variable(var_assign_stmt, error_handler);
                 }
-                _ => {}
+                Stmt::VarDefStmt(var_def_stmt) => {
+                    ast_symbol_table.declare_variable(var_def_stmt, error_handler);
+                }
+                Stmt::ScopeStmt(ref mut scope_stmt) => {
+                    ast_symbol_table.increment_scope();
+
+                    scope_stmt.type_check(ast_symbol_table, error_handler);
+
+                    ast_symbol_table.decrement_scope();
+                }
+                Stmt::FunctionStmt(function_stmt) => {
+                    ast_symbol_table.declare_function(function_stmt, error_handler);
+
+                    let mut ast_symbol_table = AstSymbolTable::new();
+                    ast_symbol_table.set_in_func(true);
+                    ast_symbol_table.declare_function(function_stmt, error_handler);
+
+                    for arg in &function_stmt.args {
+                        ast_symbol_table.insert_variable(
+                            arg.name.clone(),
+                            arg.value_type,
+                            arg.is_mutable,
+                            arg.metadata
+                        );
+                    }
+                    function_stmt.body.type_check(&mut ast_symbol_table, error_handler);
+                }
+                Stmt::ReturnStmt(return_stmt) => {
+                    if !ast_symbol_table.is_in_func() {
+                        error_handler.report_compile_error(
+                            "Return statements cannot be used outside of functions".to_string(),
+                            vec![return_stmt.metadata]
+                        );
+                    }
+
+                    if let Some(return_value) = &mut return_stmt.return_expr {
+                        let token_vec = &mut vec![];
+                        let _ = return_value.type_check(ast_symbol_table, token_vec);
+                    }
+                }
+                Stmt::ExprStmt(expr) => {
+                    let mut token_vec = vec![];
+                    match expr.type_check(ast_symbol_table, &mut token_vec) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error_handler.report_compile_error(e, token_vec);
+                        }
+                    }
+                }
+                Stmt::IfStmt(if_stmt) => {
+                    if_stmt.type_check(ast_symbol_table, error_handler);
+                }
+                c => {
+                    eprint!("type_check doesn't support given stmt: {:?}", c);
+                }
             }
         }
     }
@@ -321,43 +394,47 @@ impl ScopeStmt {
 
 #[derive(Debug, Clone)]
 pub struct FunctionArgument {
-    pub name: String,
+    pub name: Rc<str>,
     pub value_type: ValueType,
     pub is_mutable: bool,
+    pub metadata: TokenMetadata,
 }
 
 #[derive(Debug)]
 pub struct FunctionStmt {
-    pub name: String,
+    pub name: Rc<str>,
     pub args: Vec<FunctionArgument>,
     pub return_type: Option<ValueType>,
     pub body: ScopeStmt,
+    pub metadata: TokenMetadata,
 }
 
 impl FunctionStmt {
     pub fn new(
-        name: String,
+        name: Rc<str>,
         args: Vec<FunctionArgument>,
         return_type: Option<ValueType>,
-        body: ScopeStmt
+        body: ScopeStmt,
+        metadata: TokenMetadata
     ) -> Self {
         Self {
             name,
             args,
             return_type,
             body,
+            metadata,
         }
     }
 }
 
 #[derive(Debug)]
 pub struct TypeDefStmt {
-    pub type_name: String,
+    pub type_name: Rc<str>,
     pub typing: Typing,
 }
 
 impl TypeDefStmt {
-    pub fn new(type_name: String, typing: Typing) -> Self {
+    pub fn new(type_name: Rc<str>, typing: Typing) -> Self {
         Self {
             type_name,
             typing,
@@ -368,7 +445,7 @@ impl TypeDefStmt {
 #[derive(Debug)]
 pub enum TypingValue {
     ValueType(ValueType),
-    Custom(String),
+    Custom(Rc<str>),
 }
 
 #[derive(Debug)]
@@ -407,7 +484,7 @@ impl Typing {
         }
     }
 
-    pub fn new_custom(custom_name: String, token_metadata: TokenMetadata) -> Self {
+    pub fn new_custom(custom_name: Rc<str>, token_metadata: TokenMetadata) -> Self {
         Self {
             typing_value: TypingValue::Custom(custom_name),
             token_metadata,

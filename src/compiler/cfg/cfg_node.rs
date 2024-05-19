@@ -7,11 +7,26 @@ pub enum CFGNodeState {
 }
 
 #[derive(Debug)]
-pub struct CFGBreakNode;
+pub enum CFGConnectType {
+    FunctionDefiniton {
+        args: Vec<String>,
+    },
+}
 
-impl CFGBreakNode {
-    pub fn new() -> Self {
-        Self
+#[derive(Debug)]
+pub struct CFGConnectorNode {
+    pub cfg_id: usize,
+    pub next_id: usize,
+    pub state: CFGNodeState,
+}
+
+impl CFGConnectorNode {
+    pub fn new(cfg_id: usize, next_id: usize) -> Self {
+        Self {
+            cfg_id,
+            next_id,
+            state: CFGNodeState::Dead,
+        }
     }
 }
 
@@ -33,15 +48,29 @@ impl CFGProcessNode {
 }
 
 #[derive(Debug)]
-pub struct CFGGotoNode {
-    pub goto_node_id: usize,
+pub struct CFGReturnNode {
     pub return_value: Option<DAG>,
     pub state: CFGNodeState,
 }
 
+impl CFGReturnNode {
+    pub fn new(return_value: Option<DAG>) -> Self {
+        Self {
+            return_value,
+            state: CFGNodeState::Dead,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct CFGGotoNode {
+    pub goto_node_id: usize,
+    pub state: CFGNodeState,
+}
+
 impl CFGGotoNode {
-    pub fn new(goto_node_id: usize, return_value: Option<DAG>) -> Self {
-        Self { goto_node_id, return_value, state: CFGNodeState::Dead }
+    pub fn new(goto_node_id: usize) -> Self {
+        Self { goto_node_id, state: CFGNodeState::Dead }
     }
 }
 

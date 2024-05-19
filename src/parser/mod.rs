@@ -1,21 +1,23 @@
 pub mod token;
 
-mod helper_methods;
+pub mod ast_generator;
 mod core_methods;
-mod precedence;
+mod helper_methods;
+mod lexer;
 mod parse_rule;
 mod parse_rule_methods;
-pub mod ast_generator;
-mod lexer;
+mod precedence;
+
+use std::rc::Rc;
 
 use crate::{
-    ast::{ stmt::{ FunctionStmt, ScopeStmt, Stmt }, Ast },
+    ast::{ ast_symbol_table::AstSymbolTable, stmt::{ FunctionStmt, ScopeStmt, Stmt }, Ast },
     error_handler::ErrorHandler,
     operations::{ BinaryOp, UnaryOp },
     parser::{ lexer::Lexer, token::Token },
 };
 
-use self::{ precedence::Precedence };
+use self::precedence::Precedence;
 
 #[derive(Debug, PartialEq)]
 pub enum RuleArg {
@@ -36,13 +38,7 @@ pub enum ParseMethod {
 }
 
 pub struct Parser<'a> {
-    lexer: Lexer<'a>,
     source: &'a Vec<char>,
-    /*
-    next: Option<Token>,
-    current: Option<Token>,
-    previous_tokens: Vec<Token>,
-    */
     had_error: bool,
     panic_mode: bool,
     error_handler: &'a mut ErrorHandler,
@@ -55,14 +51,8 @@ impl<'a> Parser<'a> {
         let tokens = Lexer::new(source).get_tokens();
 
         Self {
-            lexer: Lexer::new(source),
             tokens,
             source,
-            /*
-            next: None,
-            current: None,
-            previous_tokens: Vec::with_capacity(64), // implement function to clear when: consume_expr_end
-            */
             had_error: false,
             panic_mode: false,
             current: 0,
@@ -78,8 +68,6 @@ impl<'a> Parser<'a> {
         */
         self.had_error = false;
         self.panic_mode = false;
-
-        self.lexer.free();
     }
 
     #[profiler::function_tracker]
@@ -88,12 +76,11 @@ impl<'a> Parser<'a> {
 
         while !self.is_at_end() {
             match self.statement() {
-                Ok(stmt) => {
+                Ok(stmt) =>
                     match stmt {
-                        Stmt::FunctionStmt(_) => main_scope.forwards_declarations.push(stmt),
+                        // Stmt::FunctionStmt(_) => main_scope.forwards_declarations.push(stmt),
                         _ => main_scope.cf_stmts.push(stmt),
                     }
-                }
                 Err(e) => {
                     // Report by sending object instead of doing this expensive clone
                     self.report_compile_error(e.get_msg(), e.get_error_metadata());

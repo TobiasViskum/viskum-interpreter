@@ -1,13 +1,13 @@
-#[derive(Debug, Clone, Copy)]
-pub enum Op {
-    BinaryOp(BinaryOp),
-    UnaryOp(UnaryOp),
-    Define,
-    Assign,
-    StartScope,
-    EndScope,
-    NoOp,
-}
+// #[derive(Debug, Clone, Copy)]
+// pub enum Op {
+//     BinaryOp(BinaryOp),
+//     UnaryOp(UnaryOp),
+//     Define,
+//     Assign,
+//     StartScope,
+//     EndScope,
+//     NoOp,
+// }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ComparisonOp {
@@ -71,34 +71,34 @@ impl UnaryOp {
     }
 }
 
-impl Op {
-    pub fn to_op_string(&self) -> String {
-        match self {
-            Op::BinaryOp(binary_op) =>
-                match binary_op {
-                    BinaryOp::Add => "addition".to_string(),
-                    BinaryOp::Sub => "subtraction".to_string(),
-                    BinaryOp::Mul => "multiplication".to_string(),
-                    BinaryOp::Div => "division".to_string(),
-                    BinaryOp::ComparisonOp(ComparisonOp::Equal) => "equal".to_string(),
-                    BinaryOp::ComparisonOp(ComparisonOp::NotEqual) => "not equal".to_string(),
-                    BinaryOp::ComparisonOp(ComparisonOp::Greater) => "greater".to_string(),
-                    BinaryOp::ComparisonOp(ComparisonOp::GreaterEqual) =>
-                        "greater equal".to_string(),
-                    BinaryOp::ComparisonOp(ComparisonOp::Less) => "less".to_string(),
-                    BinaryOp::ComparisonOp(ComparisonOp::LessEqual) => "less equal".to_string(),
-                }
-            Op::UnaryOp(unary_op) =>
-                match unary_op {
-                    UnaryOp::Neg => "negation".to_string(),
-                    UnaryOp::Truthy => "truthy".to_string(),
-                }
+// impl Op {
+//     pub fn to_op_string(&self) -> String {
+//         match self {
+//             Op::BinaryOp(binary_op) =>
+//                 match binary_op {
+//                     BinaryOp::Add => "addition".to_string(),
+//                     BinaryOp::Sub => "subtraction".to_string(),
+//                     BinaryOp::Mul => "multiplication".to_string(),
+//                     BinaryOp::Div => "division".to_string(),
+//                     BinaryOp::ComparisonOp(ComparisonOp::Equal) => "equal".to_string(),
+//                     BinaryOp::ComparisonOp(ComparisonOp::NotEqual) => "not equal".to_string(),
+//                     BinaryOp::ComparisonOp(ComparisonOp::Greater) => "greater".to_string(),
+//                     BinaryOp::ComparisonOp(ComparisonOp::GreaterEqual) =>
+//                         "greater equal".to_string(),
+//                     BinaryOp::ComparisonOp(ComparisonOp::Less) => "less".to_string(),
+//                     BinaryOp::ComparisonOp(ComparisonOp::LessEqual) => "less equal".to_string(),
+//                 }
+//             Op::UnaryOp(unary_op) =>
+//                 match unary_op {
+//                     UnaryOp::Neg => "negation".to_string(),
+//                     UnaryOp::Truthy => "truthy".to_string(),
+//                 }
 
-            Op::Define => "definement".to_string(),
-            Op::Assign => "assignment".to_string(),
-            Op::StartScope => "start scope".to_string(),
-            Op::EndScope => "end scope".to_string(),
-            Op::NoOp => "no operation".to_string(),
-        }
-    }
-}
+//             Op::Define => "definement".to_string(),
+//             Op::Assign => "assignment".to_string(),
+//             Op::StartScope => "start scope".to_string(),
+//             Op::EndScope => "end scope".to_string(),
+//             Op::NoOp => "no operation".to_string(),
+//         }
+//     }
+// }

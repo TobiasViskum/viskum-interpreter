@@ -36,6 +36,11 @@ lazy_static! {
             precedence: Precedence::PrecNone,
         });
         parse_rules_vec.push(ParseRule {
+            prefix: Some(|c, arg| c.string(arg)),
+            infix: None,
+            precedence: Precedence::PrecNone,
+        });
+        parse_rules_vec.push(ParseRule {
             prefix: None,
             infix: None,
             precedence: Precedence::PrecNone,
@@ -116,22 +121,17 @@ lazy_static! {
             precedence: Precedence::PrecNone,
         });
         parse_rules_vec.push(ParseRule {
+            prefix: None,
+            infix: None,
+            precedence: Precedence::PrecNone,
+        });
+        parse_rules_vec.push(ParseRule {
             prefix: Some(|c, arg| c.literal(arg)),
             infix: None,
             precedence: Precedence::PrecNone,
         });
         parse_rules_vec.push(ParseRule {
             prefix: Some(|c, arg| c.literal(arg)),
-            infix: None,
-            precedence: Precedence::PrecNone,
-        });
-        parse_rules_vec.push(ParseRule {
-            prefix: None,
-            infix: None,
-            precedence: Precedence::PrecNone,
-        });
-        parse_rules_vec.push(ParseRule {
-            prefix: None,
             infix: None,
             precedence: Precedence::PrecNone,
         });

@@ -1,11 +1,12 @@
 use crate::{
     ast::{
-        expr::{ AstIdentifier, Expr, ExprBuilder },
+        expr::{ AstFunctionCall, AstIdentifier, AstNativeCall, Expr, ExprBuilder },
         stmt::{
             BreakStmt,
             ContinueStmt,
             FunctionArgument,
             LoopStmt,
+            ReturnStmt,
             Stmt,
             Typing,
             VarAssignStmt,
@@ -14,6 +15,7 @@ use crate::{
     },
     error_handler::CompileError,
     value::ValueType,
+    vm::instructions::NativeCall,
 };
 
 use super::{
@@ -29,13 +31,14 @@ impl<'a> Parser<'a> {
         let curr = self.get_current().get_ttype();
 
         match curr {
-            TokenLeftCurlyBrace => { Ok(Stmt::ScopeStmt(self.block()?)) }
-            TokenMutable => { self.mut_var_def() }
-            TokenFunction => { self.function() }
-            TokenIf => { Ok(Stmt::IfStmt(self.if_stmt()?)) }
-            TokenLoop => { self.loop_stmt() }
-            TokenBreak => { self.break_stmt() }
-            TokenContinue => { self.continue_stmt() }
+            TokenLeftCurlyBrace => Ok(Stmt::ScopeStmt(self.block()?)),
+            TokenMutable => self.mut_var_def(),
+            TokenFunction => self.function(),
+            TokenIf => Ok(Stmt::IfStmt(self.if_stmt()?)),
+            TokenLoop => self.loop_stmt(),
+            TokenBreak => self.break_stmt(),
+            TokenContinue => self.continue_stmt(),
+            TokenReturn => self.return_stmt(),
 
             _ if curr.is(&TokenIdentifier) && self.is_ttype_in_line(TokenAssign) => {
                 self.var_assign()
@@ -47,6 +50,20 @@ impl<'a> Parser<'a> {
             // TokenTyping => {}
             _ => self.expression_statement(),
         }
+    }
+
+    pub(super) fn return_stmt(&mut self) -> Result<Stmt, CompileError> {
+        let metadata = self.get_current().get_metadata();
+
+        self.advance();
+
+        let return_expr = if !self.is_at_expr_end() {
+            Some(self.expression(Precedence::PrecAssignment.get_next())?)
+        } else {
+            None
+        };
+
+        Ok(Stmt::ReturnStmt(ReturnStmt::new(return_expr, metadata)))
     }
 
     pub(super) fn continue_stmt(&mut self) -> Result<Stmt, CompileError> {
@@ -99,13 +116,21 @@ impl<'a> Parser<'a> {
     pub(super) fn var_assign(&mut self) -> Result<Stmt, CompileError> {
         let target_expr = self.expression(Precedence::PrecCall)?;
 
-        self.consume(
-            TokenAssign,
-            format!(
-                "Expected '=' in variable assignment but got '{}'",
-                self.get_current().get_lexeme(self.source)
-            ).as_str()
-        )?;
+        // Report entire lhs of assignment and change msg
+        if !self.get_current().get_ttype().is(&TokenAssign) {
+            let mut token_vec = vec![self.get_previous().get_metadata()];
+            while !self.get_current().get_ttype().is(&TokenAssign) {
+                token_vec.push(self.get_current().get_metadata());
+                self.advance();
+            }
+            token_vec.reverse();
+
+            return Err(
+                CompileError::new("Invalid left-hand side of assignment".to_string(), token_vec)
+            );
+        }
+
+        self.advance();
 
         let value = self.expression(Precedence::PrecAssignment.get_next())?;
 
@@ -117,20 +142,20 @@ impl<'a> Parser<'a> {
 
         let (lexeme, token_metadata) = {
             let token = self.get_previous();
-            (token.get_lexeme(self.source), token.get_metadata())
+            (token.get_lexeme(&self.source), token.get_metadata())
         };
 
         let found_type = match self.resolve_type() {
-            Ok(found_type) => found_type,
+            Ok(found_type) => { found_type }
             Err(_) => None,
         };
 
-        let value = if found_type.is_none() {
+        let value = if !self.is_at_expr_end() {
             self.consume(
                 TokenDefine,
                 format!(
                     "Expected ':=' in variable definition but got '{}'",
-                    self.get_current().get_lexeme(self.source)
+                    self.get_current().get_lexeme(&self.source)
                 ).as_str()
             )?;
 
@@ -158,7 +183,7 @@ impl<'a> Parser<'a> {
                     TokenDefine,
                     format!(
                         "Expected ':=' in variable definition but got '{}'",
-                        self.get_current().get_lexeme(self.source)
+                        self.get_current().get_lexeme(&self.source)
                     ).as_str()
                 )
             {
@@ -192,8 +217,8 @@ impl<'a> Parser<'a> {
         let found_type = match self.get_current().get_ttype() {
             TokenIdentifier => {
                 self.advance();
-                let type_lexeme = self.get_previous().get_lexeme(&self.source);
-                match type_lexeme.as_str() {
+                let type_lexeme = self.get_previous().get_lexeme(&&self.source);
+                match type_lexeme.as_ref() {
                     "i32" => Ok(Some(ValueType::Int32)),
                     "bool" => Ok(Some(ValueType::Bool)),
                     _ => Ok(None), // This should make a custom type
@@ -270,10 +295,58 @@ impl<'a> Parser<'a> {
                 CompileError::new(
                     format!(
                         "Unexpected token: '{}' (no prefix rule)",
-                        self.get_previous().get_lexeme(self.source)
+                        self.get_previous().get_lexeme(&self.source)
                     ),
                     vec![self.get_previous().get_metadata()]
                 )
+            );
+        }
+
+        Ok(())
+    }
+
+    pub(super) fn fn_call(&mut self, expr_builder: &mut ExprBuilder) -> Result<(), CompileError> {
+        let token = self.get_previous();
+        let lexeme = token.get_lexeme(&self.source);
+        let metadata = token.get_metadata();
+
+        self.advance();
+
+        let mut fn_args = vec![];
+        while !self.is_at_expr_end() {
+            if self.get_current().get_ttype().is(&TokenRightParen) {
+                break;
+            }
+            let arg = self.expression(Precedence::PrecAssignment.get_next())?;
+
+            fn_args.push(arg);
+
+            if !self.get_current().get_ttype().is(&TokenRightParen) {
+                self.consume(
+                    TokenComma,
+                    format!(
+                        "Expected ',' between call arguments, but received: '{}'",
+                        self.get_current().get_lexeme(&self.source)
+                    ).as_str()
+                )?;
+            }
+        }
+
+        self.consume(
+            TokenRightParen,
+            format!(
+                "Expected ')' in function call but got: '{}'",
+                self.get_current().get_lexeme(&self.source)
+            ).as_str()
+        )?;
+
+        let native_call = NativeCall::get_native(&lexeme);
+
+        if let Some(native_call) = native_call {
+            expr_builder.emit_native_call(AstNativeCall::new(metadata, fn_args, native_call));
+        } else {
+            expr_builder.emit_fn_call(
+                AstFunctionCall::new(lexeme, metadata, fn_args, vec![], ValueType::Void)
             );
         }
 
@@ -285,7 +358,7 @@ impl<'a> Parser<'a> {
         expr_builder: &mut ExprBuilder
     ) -> Result<(), CompileError> {
         let token = self.get_previous();
-        let lexeme = token.get_lexeme(self.source);
+        let lexeme = token.get_lexeme(&self.source);
 
         expr_builder.emit_ident_lookup(AstIdentifier::new(lexeme, token.get_metadata()));
 
@@ -295,7 +368,7 @@ impl<'a> Parser<'a> {
     pub(super) fn resolve_function_args(&mut self) -> Result<Vec<FunctionArgument>, CompileError> {
         let mut args = vec![];
 
-        self.consume(TokenLeftParen, "Expected '(' after function identifier");
+        self.consume(TokenLeftParen, "Expected '(' after function identifier")?;
 
         while !self.is_at_expr_end() {
             if self.get_current().get_ttype().is(&TokenComma) {
@@ -309,11 +382,12 @@ impl<'a> Parser<'a> {
                 TokenIdentifier,
                 format!(
                     "Expected identifer but got '{}' Syntax: <identifier> <type>",
-                    self.get_current().get_lexeme(self.source)
+                    self.get_current().get_lexeme(&self.source)
                 ).as_str()
             )?;
 
-            let ident_lexeme = self.get_previous().get_lexeme(&self.source);
+            let ident_lexeme = self.get_previous().get_lexeme(&&self.source);
+            let metadata = self.get_previous().get_metadata();
 
             let is_mutable = match self.get_current().get_ttype().is(&TokenMutable) {
                 true => {
@@ -338,31 +412,13 @@ impl<'a> Parser<'a> {
                 is_mutable,
                 name: ident_lexeme,
                 value_type: arg_type,
+                metadata,
             });
         }
 
-        self.consume(TokenRightParen, "Expected a closing ')' after function arguments");
+        self.consume(TokenRightParen, "Expected a closing ')' after function arguments")?;
 
         Ok(args)
-    }
-
-    // Temporary functions
-    fn consume_type(&mut self, msg: &str) -> Option<&TokenType> {
-        if matches!(self.get_current().get_ttype(), TokenInt32 | TokenBool) {
-            Some(self.get_current().get_ttype())
-        } else {
-            self.report_compile_error(msg.to_string(), vec![self.get_current().get_metadata()]);
-            None
-        }
-    }
-
-    fn consume_identifier(&mut self, msg: &str) -> Option<String> {
-        if matches!(self.get_current().get_ttype(), TokenIdentifier) {
-            Some(self.get_current().get_lexeme(self.source))
-        } else {
-            self.report_compile_error(msg.to_string(), vec![self.get_current().get_metadata()]);
-            None
-        }
     }
 
     pub(super) fn emit_operand(
@@ -379,7 +435,7 @@ impl<'a> Parser<'a> {
                     CompileError::new(
                         format!(
                             "Expected operand but got: '{}'",
-                            self.get_previous().get_lexeme(self.source)
+                            self.get_previous().get_lexeme(&self.source)
                         ),
                         vec![self.get_previous().get_metadata()]
                     )
@@ -390,7 +446,9 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    pub(super) fn resolve_function_return_type(&mut self) -> Result<Option<ValueType>, ()> {
+    pub(super) fn resolve_function_return_type(
+        &mut self
+    ) -> Result<Option<ValueType>, CompileError> {
         let return_type = match self.get_current().get_ttype() {
             TokenLeftCurlyBrace => {
                 return Ok(None);
@@ -399,22 +457,24 @@ impl<'a> Parser<'a> {
                 match self.resolve_type() {
                     Ok(return_type) => return_type,
                     Err(error_tokens) => {
-                        self.report_compile_error(
-                            "Invalid function return type".to_string(),
-                            error_tokens
+                        return Err(
+                            CompileError::new(
+                                "Invalid function return type".to_string(),
+                                error_tokens
+                            )
                         );
-                        return Err(());
                     }
                 }
             _ => {
-                self.report_compile_error(
-                    format!(
-                        "Expected function return type, but got: {}",
-                        self.get_current().get_lexeme(self.source)
-                    ),
-                    vec![self.get_current().get_metadata()]
+                return Err(
+                    CompileError::new(
+                        format!(
+                            "Expected function return type, but got: {}",
+                            self.get_current().get_lexeme(&self.source)
+                        ),
+                        vec![self.get_current().get_metadata()]
+                    )
                 );
-                return Err(());
             }
         };
 
@@ -452,12 +512,12 @@ pub(super) fn resolve_typing(&mut self) -> Result<Typing, ()> {
             TokenInt32 => Typing::new_int32(token_metadata),
             TokenBool => Typing::new_bool(token_metadata),
             TokenIdentifier =>
-                Typing::new_custom(current_token.get_lexeme(self.source), token_metadata),
+                Typing::new_custom(current_token.get_lexeme(&self.source), token_metadata),
             _ => {
                 self.report_compile_error(
                     format!(
                         "Unexpected '{}' cannot be used as a type",
-                        current_token.get_lexeme(self.source)
+                        current_token.get_lexeme(&self.source)
                     ),
                     vec![token_metadata]
                 );
@@ -468,7 +528,7 @@ pub(super) fn resolve_typing(&mut self) -> Result<Typing, ()> {
         self.advance();
 
         Ok(typing)
-        /* 
+        /*
         Idea for resolving types like: state<i32>
 
         .append_type() -> Result<(), String> // x does not take any type parameters
@@ -518,7 +578,7 @@ pub(super) fn resolve_typing(&mut self) -> Result<Typing, ()> {
 pub(super) fn variable_definition(&mut self) {
         let token = self.get_previous().clone();
 
-        let lexeme = token.get_lexeme(self.source);
+        let lexeme = token.get_lexeme(&self.source);
 
         let (found_type, type_token, search_index) = self.resolve_type();
 
@@ -540,7 +600,7 @@ pub(super) fn variable_definition(&mut self) {
                     TokenDefine,
                     format!(
                         "Expected ':=' in variable definition but got '{}'",
-                        self.get_current().get_lexeme(self.source)
+                        self.get_current().get_lexeme(&self.source)
                     ).as_str()
                 )
             {

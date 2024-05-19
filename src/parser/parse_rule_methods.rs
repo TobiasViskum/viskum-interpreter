@@ -1,20 +1,20 @@
 use std::fmt::format;
 
+use super::precedence::Precedence::*;
 use crate::ast;
 use crate::ast::expr::{ AstIdentifier, AstValue, Expr, ExprBuilder };
-use crate::ast::stmt::{ IfStmt, ScopeStmt, Stmt, TypeDefStmt };
+use crate::ast::stmt::{ FunctionStmt, IfStmt, ScopeStmt, Stmt, TypeDefStmt };
 use crate::error_handler::CompileError;
 use crate::operations::{ BinaryOp, UnaryOp };
-use crate::value::Value;
 use crate::parser::token::token_type::TokenType::{ self, * };
-use super::precedence::Precedence::*;
+use crate::value::Value;
 
 use super::{ ParseMethod, Parser, RuleArg };
 
 impl<'a> Parser<'a> {
     pub fn number(&mut self, expr_builder: &mut ExprBuilder) -> Result<(), CompileError> {
         let token = self.get_previous();
-        let lexeme = token.get_lexeme(self.source);
+        let lexeme = token.get_lexeme(&self.source);
 
         match lexeme.parse::<i32>() {
             Ok(int_value) => {
@@ -34,16 +34,19 @@ impl<'a> Parser<'a> {
         self.advance();
 
         match self.get_current().get_ttype() {
-            TokenIdentifier => { self.var_def(true) }
+            TokenIdentifier => self.var_def(true),
             TokenFunction => {
                 panic!("Functions cannot be mutable");
             }
-            _ => panic!("Unexpected: {}", self.get_current().get_lexeme(self.source)),
+            _ => panic!("Unexpected: {}", self.get_current().get_lexeme(&self.source)),
         }
     }
 
     pub fn identifier(&mut self, expr_builder: &mut ExprBuilder) -> Result<(), CompileError> {
-        self.ident_lookup(expr_builder)?;
+        match self.get_current().get_ttype() {
+            TokenLeftParen => self.fn_call(expr_builder)?,
+            _ => self.ident_lookup(expr_builder)?,
+        }
 
         Ok(())
     }
@@ -53,7 +56,7 @@ impl<'a> Parser<'a> {
             TokenType::TokenLeftCurlyBrace,
             format!(
                 "Expected '{{' but got: {}",
-                self.get_current().get_lexeme(self.source)
+                self.get_current().get_lexeme(&self.source)
             ).as_str()
         )?;
 
@@ -84,7 +87,7 @@ impl<'a> Parser<'a> {
         /*
         self.advance();
 
-        let lexeme = self.get_previous().get_lexeme(self.source);
+        let lexeme = self.get_previous().get_lexeme(&self.source);
 
         self.consume(
             TokenType::TokenAssign,
@@ -105,6 +108,34 @@ impl<'a> Parser<'a> {
         */
     }
 
+    pub fn string(&mut self, expr_builder: &mut ExprBuilder) -> Result<(), CompileError> {
+        if self.is_at_end() {
+            return Err(
+                CompileError::new(
+                    format!("Unexpected token: {}", self.get_previous().get_lexeme(self.source)),
+                    vec![self.get_previous().get_metadata()]
+                )
+            );
+        } else {
+            self.consume(
+                TokenString,
+                format!(
+                    "Unexpected token: {}",
+                    self.get_previous().get_lexeme(self.source)
+                ).as_str()
+            )?;
+        }
+
+        let token = self.get_previous();
+        expr_builder.emit_constant_literal(
+            AstValue::new(Value::String(token.get_lexeme(&self.source)), token.get_metadata())
+        );
+
+        self.consume(TokenDoubleQuote, "Expected '\"' after string")?;
+
+        Ok(())
+    }
+
     pub fn literal(&mut self, expr_builder: &mut ExprBuilder) -> Result<(), CompileError> {
         let token = self.get_previous();
 
@@ -120,7 +151,7 @@ impl<'a> Parser<'a> {
             _ => {
                 return Err(
                     CompileError::new(
-                        format!("Unexpected literal: '{}'", token.get_lexeme(self.source)),
+                        format!("Unexpected literal: '{}'", token.get_lexeme(&self.source)),
                         vec![token.get_metadata()]
                     )
                 );
@@ -153,42 +184,38 @@ impl<'a> Parser<'a> {
     }
 
     pub fn function(&mut self) -> Result<Stmt, CompileError> {
-        panic!("Functions not implemented yet!")
-
-        /*
         self.advance();
-        let lexeme = self.get_previous().get_lexeme(self.source);
+
+        let lexeme = self.get_current().get_lexeme(&self.source);
+        let metadata = self.get_current().get_metadata();
+
+        self.advance();
 
         let function_args = match self.resolve_function_args() {
             Ok(v) => v,
-            Err(_) => {
-                return;
+            Err(e) => {
+                return Err(e);
             }
         };
-
-        println!("{:#?}", function_args);
 
         let return_type = match self.resolve_function_return_type() {
             Ok(v) => v,
-            Err(_) => {
-                return;
+            Err(e) => {
+                return Err(e);
             }
         };
 
-        println!("Return type: {:?}", return_type);
+        let mut body = ScopeStmt::new();
 
-        self.start_function(lexeme, function_args, return_type);
-
-        println!("I run");
-
-        self.consume(TokenLeftCurlyBrace, "Expected '{' before function body");
+        self.consume(TokenLeftCurlyBrace, "Expected '{' before function body")?;
         while !self.is_at_end() && !matches!(self.get_current().get_ttype(), &TokenRightCurlyBrace) {
-            self.statement();
+            body.push_stmt(self.statement()?);
         }
-        self.consume(TokenRightCurlyBrace, "Expected '}' after function body");
+        self.consume(TokenRightCurlyBrace, "Expected '}' after function body")?;
 
-        self.end_function();
-        */
+        let function_stmt = FunctionStmt::new(lexeme, function_args, return_type, body, metadata);
+
+        Ok(Stmt::FunctionStmt(function_stmt))
     }
 
     pub fn grouping(&mut self, expr_builder: &mut ExprBuilder) -> Result<(), CompileError> {
@@ -211,7 +238,7 @@ impl<'a> Parser<'a> {
                     CompileError::new(
                         format!(
                             "Token '{}' is not a valid unary operator",
-                            self.get_previous().get_lexeme(self.source)
+                            self.get_previous().get_lexeme(&self.source)
                         ),
                         vec![self.get_previous().get_metadata()]
                     )
@@ -237,7 +264,7 @@ impl<'a> Parser<'a> {
                     CompileError::new(
                         format!(
                             "Token '{}' is not a valid binary operator",
-                            self.get_previous().get_lexeme(self.source)
+                            self.get_previous().get_lexeme(&self.source)
                         ),
                         vec![self.get_previous().get_metadata()]
                     )
@@ -257,7 +284,7 @@ impl<'a> Parser<'a> {
         } else {
             Err(
                 CompileError::new(
-                    format!("Unexpected token: {}", error_token.get_lexeme(self.source)),
+                    format!("Unexpected token: {}", error_token.get_lexeme(&self.source)),
                     vec![error_token.get_metadata()]
                 )
             )

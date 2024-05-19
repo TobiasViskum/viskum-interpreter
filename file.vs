@@ -1,56 +1,28 @@
 // type Hello = i32
 
-
-mut a := 0
-mut b := 0
-
-if a == 1 {
-    k := 8
-    a = 0
-}
-
-loop {
-   
-    if a < 3 {
-        loop {
-            d := 8
-            if b == 8 {
-                c := 2
-                break
-                d := 9
-                a = 8
-            }
-            b = b + 2
-        }
-    } else {
-        break
-        b = 0
+fn fib(n i32) i32 {
+    if n < 2 {
+        return n
     }
-    a = a + 1
+    return fib(n - 2) + fib(n - 1)
 }
-if b == 8 {
-    a = 9
-}
+
+fib(35)
 
 /*
 
 
+fn cmp(x i32, y i32) {
+    if x == y {
+        return x
+    }
+    return cmp(x - y, x - y)
+}
 
-0: ProgramStart
-1: S0, Decision(2, 7)
-2: S1, Decision(3, 4)
-3: S2, Process(7)
-4: S1, Process(5)
-5: S1, Process(1)
-6: S0, Process(7)
-7: ProgramEnd
+cmp(10, 2)
 
-DEFINE
-STARTSCOPE
-ASSIGN
-ENDSCOPE
 
-let decision_node
+
 
 a := 2 + 2 * 8 
 cd := 4
