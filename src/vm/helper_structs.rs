@@ -1,19 +1,86 @@
-use std::mem;
+use std::{ mem, ptr };
 
 use colored::Colorize;
 
 use crate::{ constants::REGISTERS, value::{ Function, Value } };
 
 #[derive(Debug)]
+pub enum VMValue {
+    Value(Value),
+    InstructionPointer(usize),
+}
+
+impl VMValue {
+    pub fn new_val(value: Value) -> Self {
+        Self::Value(value)
+    }
+
+    pub fn new_instr_pointer(ip: usize) -> Self {
+        Self::InstructionPointer(ip)
+    }
+
+    pub fn as_val(&self) -> &Value {
+        match self {
+            Self::Value(v) => v,
+            _ => panic!("Expected value in as_val"),
+        }
+    }
+
+    pub fn as_mut_val(&mut self) -> &mut Value {
+        match self {
+            Self::Value(v) => v,
+            _ => panic!("Expected value in as_mut_val"),
+        }
+    }
+
+    pub fn as_ip(&self) -> usize {
+        match self {
+            Self::InstructionPointer(ip) => *ip,
+            _ => panic!("Expected ip in as_ip"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct VMRegisters2 {
+    registers: [*const Value; REGISTERS],
+}
+
+impl VMRegisters2 {
+    pub fn new() -> Self {
+        // let registers = vec![None; REGISTERS];
+
+        const ARRAY_REPEAT_VALUE: *const Value = ptr::null();
+        Self { registers: [ARRAY_REPEAT_VALUE; REGISTERS] }
+    }
+
+    #[inline(always)]
+    pub fn get(&mut self, reg: usize) -> *const Value {
+        unsafe { *self.registers.get_unchecked(reg) }
+    }
+
+    #[inline(always)]
+    pub fn get_ref(&self, reg: usize) -> *const Value {
+        unsafe { *self.registers.get_unchecked(reg) }
+    }
+
+    #[inline(always)]
+    pub fn get_mut(&mut self, reg: usize) -> &mut *const Value {
+        unsafe { self.registers.get_unchecked_mut(reg) }
+    }
+}
+
+#[derive(Debug)]
 pub struct VMRegisters {
-    registers: Vec<Option<Value>>,
+    registers: [Option<Value>; REGISTERS],
 }
 
 impl VMRegisters {
     pub fn new() -> Self {
-        let registers = vec![None; REGISTERS];
+        // let registers = vec![None; REGISTERS];
 
-        Self { registers }
+        const ARRAY_REPEAT_VALUE: Option<Value> = None;
+        Self { registers: [ARRAY_REPEAT_VALUE; REGISTERS] }
     }
 
     pub fn trace(&self) {
@@ -43,28 +110,23 @@ impl VMRegisters {
 
     #[inline(always)]
     pub fn get(&mut self, reg: usize) -> Value {
-        mem::take(&mut self.registers[reg]).unwrap()
+        mem::take(self.get_mut(reg)).unwrap()
     }
 
     #[inline(always)]
     pub fn get_ref(&self, reg: usize) -> &Value {
-        &self.registers[reg].as_ref().unwrap()
-    }
-
-    #[inline(always)]
-    pub fn get_mut_unwrap(&mut self, reg: usize) -> &mut Value {
-        self.registers[reg].as_mut().unwrap()
+        unsafe { self.registers.get_unchecked(reg).as_ref().unwrap_unchecked() }
     }
 
     #[inline(always)]
     pub fn get_mut(&mut self, reg: usize) -> &mut Option<Value> {
-        &mut self.registers[reg]
+        unsafe { self.registers.get_unchecked_mut(reg) }
     }
 }
 
 #[derive(Debug)]
 pub struct VMStack {
-    stack: Vec<Value>,
+    stack: Vec<VMValue>,
 }
 
 impl VMStack {
@@ -81,53 +143,123 @@ impl VMStack {
             print!(
                 " {}{} ",
                 format!("{}: ", i).as_str().dimmed().italic(),
-                val.to_string().as_str().bold()
+                val.as_val().to_string().as_str().bold()
             );
         }
         println!(" ]");
     }
 
+    // #[inline(always)]
     pub fn len(&self) -> usize {
         self.stack.len()
     }
 
     #[inline(always)]
-    pub fn get(&self, stack_pos: usize) -> Value {
-        self.stack[stack_pos].clone()
+    pub fn get_as_val(&self, stack_pos: usize) -> Value {
+        unsafe { self.stack.get_unchecked(stack_pos).as_val().clone() }
+    }
+
+    #[inline(always)]
+    pub fn get_as_ip(&self, stack_pos: usize) -> usize {
+        unsafe { self.stack.get_unchecked(stack_pos).as_ip() }
+    }
+
+    #[inline(always)]
+    pub fn pop_as_val(&mut self) -> Value {
+        match self.stack.pop().unwrap() {
+            VMValue::Value(v) => v,
+            _ => panic!("Expected value in pop_as_val"),
+        }
+    }
+
+    #[inline(always)]
+    pub fn pop_as_ip(&mut self) -> usize {
+        self.stack.pop().unwrap().as_ip()
+    }
+
+    #[inline(always)]
+    pub fn read_last_as_ip(&mut self) -> usize {
+        self.stack.last().unwrap().as_ip()
     }
 
     #[inline(always)]
     pub fn get_ref(&self, stack_pos: usize) -> &Value {
-        &self.stack[stack_pos]
+        unsafe { self.stack.get_unchecked(stack_pos).as_val() }
     }
 
     #[inline(always)]
     pub fn get_mut_ref(&mut self, stack_pos: usize) -> &mut Value {
-        &mut self.stack[stack_pos]
+        self.stack[stack_pos].as_mut_val()
     }
 
-    #[inline(always)]
+    // #[inline(always)]
     pub fn get_ptr_func(&mut self, stack_pos: usize) -> *mut Function {
-        match &mut self.stack[stack_pos] {
+        match self.stack[stack_pos].as_mut_val() {
             Value::Function(func) => func as *mut Function,
             _ => panic!("sdf"),
         }
     }
 
     #[inline(always)]
-    pub fn get_mut(&mut self, stack_pos: usize) -> &mut Value {
-        &mut self.stack[stack_pos]
+    pub fn push_val(&mut self, value: Value) {
+        self.stack.push(VMValue::Value(value));
     }
 
+    #[inline(always)]
+    pub fn push_ip(&mut self, ip: usize) {
+        self.stack.push(VMValue::InstructionPointer(ip));
+    }
+
+    // #[inline(always)]
     pub fn push(&mut self, value: Value, expected_pos: usize) {
-        self.stack.push(value);
+        self.stack.push(VMValue::Value(value));
         if self.stack.len() - 1 != expected_pos {
             panic!("Expected stack_heigh: {} but got: {}", expected_pos, self.stack.len() - 1)
         }
     }
 
+    #[inline(always)]
     pub fn decrement_stack_height(&mut self, decrement_val: usize) {
         self.stack.truncate(self.stack.len() - decrement_val);
+    }
+}
+
+#[derive(Debug)]
+pub struct ConstantsTable<'a> {
+    constants_table: &'a [Value],
+}
+
+impl<'a> ConstantsTable<'a> {
+    pub fn new(constants_table: &'a [Value]) -> Self {
+        Self { constants_table }
+    }
+}
+
+#[derive(Debug)]
+pub struct RuntimeInformation {
+    stack_heights: Vec<usize>,
+}
+
+impl RuntimeInformation {
+    pub fn new() -> Self {
+        Self {
+            stack_heights: Vec::new(),
+        }
+    }
+
+    #[inline(always)]
+    pub fn pop_stack_height(&mut self) {
+        self.stack_heights.pop();
+    }
+
+    #[inline(always)]
+    pub fn push_stack_height(&mut self, height: usize) {
+        self.stack_heights.push(height);
+    }
+
+    #[inline(always)]
+    pub fn get_stack_offset(&self) -> usize {
+        unsafe { *self.stack_heights.get_unchecked(self.stack_heights.len() - 1) }
     }
 }
 
@@ -148,7 +280,7 @@ impl CallFrame {
     }
 
     pub fn execute(&mut self, stack: &mut VMStack, registers: &mut VMRegisters) -> Value {
-        let result = match stack.get(self.function_pos) {
+        let result = match stack.get_as_val(self.function_pos) {
             Value::Function(mut func) =>
                 func.instructions.execute(&mut self.ip, stack, registers, self.stack_height),
             _ => panic!("Expected func!"),
@@ -170,7 +302,7 @@ impl CallFrames {
         }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn get(&self, call_frame_index: usize) -> &CallFrame {
         &self.call_frames[call_frame_index]
     }

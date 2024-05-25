@@ -66,8 +66,6 @@ impl VMSymbolTable {
             return 0;
         }
 
-        println!("len: {}", self.scope_begin.len());
-        println!("diff: {}", scope_diff);
         let new_stack_height = self.scope_begin.get(self.scope_begin.len() - scope_diff).unwrap();
 
         let mut amount_to_pop = 0;
@@ -78,12 +76,18 @@ impl VMSymbolTable {
                     amount_to_pop += 1;
                 }
             }
+            // if let Some(top_stack_pos) = stack_positions.last() {
+            //     if *top_stack_pos > new_stack_height - 1 {
+            //         amount_to_pop += 1;
+            //     }
+            // }
         }
 
         amount_to_pop
     }
 
     pub fn adjust_scope(&mut self, new_scope: usize) -> Option<Instruction> {
+        println!("new_scope: {}, prev scope: {}", new_scope, self.previous_scope);
         let pop_instruction = if new_scope > self.previous_scope {
             for _ in self.previous_scope..new_scope {
                 self.scope_begin.push(self.stack_height);

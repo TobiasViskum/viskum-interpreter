@@ -251,17 +251,17 @@ impl CFG {
         loop {
             fire_listeners(i);
 
-            if i == 0 {
+            if i == 1 {
                 if let Some(ref initial_variables) = initial_variables {
-                    let mut i = 0;
+                    let mut reg = 0;
                     for var in initial_variables {
                         let (stack_pos, is_relative) = vm_symbol_table.insert_variable(var);
                         instructions.borrow_mut().push(Instruction::Define {
                             stack_loc: StackLocation::new(stack_pos, is_relative),
-                            src: InstructionSrc::Register { reg: i },
+                            src: InstructionSrc::Register { reg },
                         });
-                        vm_symbol_table.free_register(i);
-                        i += 1;
+                        vm_symbol_table.free_register(reg);
+                        reg += 1;
                     }
                 }
             }
@@ -289,13 +289,16 @@ impl CFG {
                         },
                     });
                 }
-                CFGNode::CfgStart { .. } => {}
+                CFGNode::CfgStart { scope, .. } => {
+                    if let Some(pop_instruction) = vm_symbol_table.adjust_scope(*scope) {
+                        instructions.borrow_mut().push(pop_instruction);
+                    }
+                }
                 CFGNode::Process { node, scope } => {
                     if node.state == CFGNodeState::Dead {
                         i += 1;
                         continue;
                     }
-
                     if let Some(pop_instruction) = vm_symbol_table.adjust_scope(*scope) {
                         instructions.borrow_mut().push(pop_instruction);
                     }
@@ -376,6 +379,9 @@ impl CFG {
                         i += 1;
                         continue;
                     }
+                    if let Some(pop_instruction) = vm_symbol_table.adjust_scope(*scope) {
+                        instructions.borrow_mut().push(pop_instruction);
+                    }
 
                     match &node.return_value {
                         Some(dag) => {
@@ -388,11 +394,9 @@ impl CFG {
                                 "Defined vars before return: (not implemented if return_value is None). May cause A LOT of cache misses if this isn't dealt with. Therefore I'm panicking"
                             );
 
-                            instructions
-                                .borrow_mut()
-                                .push(Instruction::Return {
-                                    src: InstructionSrc::Constant { val: Value::Void },
-                                });
+                            instructions.borrow_mut().push(Instruction::Return {
+                                src: InstructionSrc::Constant { val: Value::Void },
+                            });
                         }
                     }
                 }
@@ -406,7 +410,7 @@ impl CFG {
                     }
 
                     let (start_scope, end_scope) = self.get_node_scopes(i, node.goto_node_id);
-                    // println!("{:#?}", vm_symbol_table);
+                    println!("{} {}", start_scope, end_scope);
                     let pop_amount = vm_symbol_table.get_pop_amount_in_scope_diff(
                         start_scope,
                         end_scope

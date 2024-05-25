@@ -1,6 +1,9 @@
 use std::{ fmt::{ self, Display }, rc::Rc };
 
-use crate::{ operations::{ BinaryOp, ComparisonOp, UnaryOp }, vm::Instructions };
+use crate::{
+    operations::{ BinaryOp, ComparisonOp, UnaryOp },
+    vm::{ instructions::Instruction, Instructions },
+};
 
 #[derive(Debug, Clone, Copy)]
 pub enum ValueType {
@@ -159,6 +162,13 @@ impl Function {
             args_count,
         }
     }
+
+    pub fn from(args_count: usize, instructions: Vec<Instruction>) -> Self {
+        Self {
+            instructions: Instructions::from(instructions),
+            args_count,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -191,6 +201,17 @@ impl Display for Value {
 }
 
 impl Value {
+    // pub fn to_u8(&self) -> u8 {
+    //     match self {
+    //         Value::Bool(_) => 0,
+    //         Value::Int32(_) => 1,
+    //         Value::String(_) => 2,
+    //         Value::Function(_) => 3,
+    //         Value::Void => 4,
+    //         Value::Empty => 5,
+    //     }
+    // }
+
     pub fn to_string(&self) -> String {
         match self {
             Self::Int32(i32) => i32.to_string(),
@@ -212,7 +233,7 @@ impl Value {
         }
     }
 
-    #[inline(always)]
+    // #[inline(always)]
     pub fn cmp_e(&self, other: &Value) -> Result<bool, String> {
         match (self, other) {
             (Value::Int32(lhs), Value::Int32(rhs)) => Ok(lhs == rhs),
@@ -228,7 +249,7 @@ impl Value {
         }
     }
 
-    #[inline(always)]
+    // #[inline(always)]
     pub fn cmp_ne(&self, other: &Value) -> Result<bool, String> {
         match (self, other) {
             (Value::Int32(lhs), Value::Int32(rhs)) => Ok(lhs != rhs),
@@ -244,7 +265,7 @@ impl Value {
         }
     }
 
-    #[inline(always)]
+    // #[inline(always)]
     pub fn cmp_g(&self, other: &Value) -> Result<bool, String> {
         match (self, other) {
             (Value::Int32(lhs), Value::Int32(rhs)) => Ok(lhs > rhs),
@@ -260,7 +281,7 @@ impl Value {
         }
     }
 
-    #[inline(always)]
+    // #[inline(always)]
     pub fn cmp_ge(&self, other: &Value) -> Result<bool, String> {
         match (self, other) {
             (Value::Int32(lhs), Value::Int32(rhs)) => Ok(lhs >= rhs),
@@ -276,7 +297,7 @@ impl Value {
         }
     }
 
-    #[inline(always)]
+    // #[inline(always)]
     pub fn cmp_l(&self, other: &Value) -> Result<bool, String> {
         match (self, other) {
             (Value::Int32(lhs), Value::Int32(rhs)) => Ok(lhs < rhs),
@@ -292,7 +313,7 @@ impl Value {
         }
     }
 
-    #[inline(always)]
+    // #[inline(always)]
     pub fn cmp_le(&self, other: &Value) -> Result<bool, String> {
         match (self, other) {
             (Value::Int32(lhs), Value::Int32(rhs)) => Ok(lhs <= rhs),
@@ -308,7 +329,7 @@ impl Value {
         }
     }
 
-    #[inline(always)]
+    // #[inline(always)]
     pub fn add(&self, other: &Value) -> Result<Self, String> {
         match (self, other) {
             (Value::Int32(lhs), Value::Int32(rhs)) => Ok(Value::Int32(lhs + rhs)),
@@ -325,7 +346,7 @@ impl Value {
         }
     }
 
-    #[inline(always)]
+    // #[inline(always)]
     pub fn mul(&self, other: &Value) -> Result<Self, String> {
         match (self, other) {
             (Value::Int32(lhs), Value::Int32(rhs)) => Ok(Value::Int32(lhs * rhs)),
@@ -340,7 +361,7 @@ impl Value {
         }
     }
 
-    #[inline(always)]
+    // #[inline(always)]
     pub fn div(&self, other: &Value) -> Result<Self, String> {
         match (self, other) {
             (Value::Int32(lhs), Value::Int32(rhs)) => Ok(Value::Int32(lhs / rhs)),
@@ -355,7 +376,7 @@ impl Value {
         }
     }
 
-    #[inline(always)]
+    // #[inline(always)]
     pub fn sub(&self, other: &Value) -> Result<Self, String> {
         match (self, other) {
             (Value::Int32(lhs), Value::Int32(rhs)) => Ok(Value::Int32(lhs - rhs)),
@@ -370,7 +391,7 @@ impl Value {
         }
     }
 
-    #[inline(always)]
+    // #[inline(always)]
     pub fn neg(&self) -> Result<Self, String> {
         match self {
             Value::Int32(int32) => Ok(Value::Int32(-int32)),
@@ -378,7 +399,7 @@ impl Value {
         }
     }
 
-    #[inline(always)]
+    // #[inline(always)]
     pub fn not(&self) -> Self {
         match self {
             Value::Bool(bool) => Value::Bool(!*bool),

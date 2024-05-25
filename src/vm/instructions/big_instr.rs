@@ -1,0 +1,45 @@
+#[derive(Debug, Clone, Copy)]
+pub enum Opcode {
+    Halt,
+    LoadBool,
+    LoadInt32,
+    LoadString,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Neg,
+    Not,
+    Jmp,
+    JmpPop,
+    CmpEq,
+    CmpNeq,
+    CmpGt,
+    CmpGeq,
+    CmpLt,
+    CmpLeq,
+    CmpEqJmp,
+    CmpNeqJmp,
+    CmpGtJmp,
+    CmpGeqJmp,
+    CmpLtJmp,
+    CmpLeqJmp,
+    Return,
+    ReturnPop,
+    Pop,
+    PushStack,
+    LoadStack,
+    PushFunction,
+    CallFunction,
+}
+
+pub enum BigInstr {
+    Halt {
+        op: Opcode,
+    },
+    Branch {
+        op: Opcode,
+        true_pos: usize,
+        false_pos: usize,
+    },
+}

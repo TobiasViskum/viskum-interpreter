@@ -1,9 +1,11 @@
-use std::rc::Rc;
+use std::{ rc::Rc, time::Instant };
 
 use crate::{ value::{ Value, ValueType }, vm::helper_structs::CallFrame };
 
 pub mod instructions;
-mod helper_structs;
+pub mod helper_structs;
+mod benchmarking;
+pub mod vm2;
 
 use self::{
     helper_structs::{ CallFrames, VMRegisters, VMStack },
@@ -33,9 +35,12 @@ impl VM {
         }
     }
 
-    #[profiler::function_tracker("vm-execution")]
     pub fn run(&mut self) {
+        let now = Instant::now();
+        // for _ in 0..1000000000 {
         self.program.execute(&mut self.pc, &mut self.stack, &mut self.registers, 0);
+        // }
+        println!("elapsed: {:?}", now.elapsed())
     }
 }
 
@@ -77,31 +82,30 @@ impl Instructions {
         }
     }
 
+    // #[inline]
+    // fn get_cmp_values(
+    //     &self,
+    //     ip: usize,
+    //     registers: &mut VMRegisters,
+    //     stack: &mut VMStack,
+    //     stack_offset: usize
+    // ) -> (Value, Value) {
+    //     match self.get_instruction(ip - 1) {
+    //         Instruction::Cmp { src1, src2 } => {
+    //             let lhs = src1.get_val(registers, stack, stack_offset);
+    //             let rhs = src2.get_val(registers, stack, stack_offset);
+
+    //             (lhs, rhs)
+    //         }
+    //         _ => panic!("Expected CMP instruction"),
+    //     }
+    // }
+
     // #[inline(always)]
-    fn get_cmp_values(
-        &self,
-        ip: usize,
-        registers: &mut VMRegisters,
-        stack: &mut VMStack,
-        stack_offset: usize
-    ) -> (Value, Value) {
-        match self.get_instruction(ip - 1) {
-            Instruction::Cmp { src1, src2 } => {
-                let lhs = src1.get_val(registers, stack, stack_offset);
-                let rhs = src2.get_val(registers, stack, stack_offset);
-
-                (lhs, rhs)
-            }
-            _ => panic!("Expected CMP instruction"),
-        }
-    }
-
-    #[inline(always)]
     fn get_instruction(&self, ip: usize) -> &Instruction {
         &self.instructions[ip]
     }
 
-    #[inline(always)]
     fn trace(
         &self,
         stack: &mut VMStack,
@@ -118,15 +122,21 @@ impl Instructions {
         }
     }
 
+    #[profiler::function_tracker("vm-execution")]
     pub fn execute(
-        &self,
+        &mut self,
         ip: &mut usize,
         stack: &mut VMStack,
         registers: &mut VMRegisters,
         stack_offset: usize
     ) -> Value {
-        while *ip < self.instructions.len() {
-            let instruction = self.get_instruction(*ip);
+        let len = self.instructions.len();
+        let instructions = self.instructions.as_ref();
+
+        while *ip < len {
+            let instruction = &instructions[*ip];
+
+            // let instruction_id = u8::from(instruction.clone());
 
             match instruction {
                 Instruction::NativeCall { stack_loc_dest, args_regs, native_call } => {
@@ -142,18 +152,16 @@ impl Instructions {
                 Instruction::ReturnPop { src, amount } => {
                     let val = src.get_val(registers, stack, stack_offset);
 
-                    // let val = mem::take(src.get_val_mut_ref(registers, stack, stack_offset));
-
                     stack.decrement_stack_height(*amount);
 
-                    self.trace(stack, registers, instruction, stack_offset);
+                    // self.trace(stack, registers, instruction, stack_offset);
 
                     return val;
                 }
                 Instruction::Return { src } => {
                     let val = src.get_val(registers, stack, stack_offset);
 
-                    self.trace(stack, registers, instruction, stack_offset);
+                    // self.trace(stack, registers, instruction, stack_offset);
 
                     return val;
                 }
@@ -163,7 +171,7 @@ impl Instructions {
                     *registers.get_mut(*reg) = Some(val);
                 }
                 Instruction::Call { stack_loc_dest, stack_loc_call } => {
-                    self.trace(stack, registers, instruction, stack_offset);
+                    // self.trace(stack, registers, instruction, stack_offset);
 
                     // let stack_pos = stack_loc_call.get_stack_pos(stack_offset);
                     // let func: crate::value::Function = match stack.get(stack_pos) {
@@ -187,7 +195,7 @@ impl Instructions {
                     stack.decrement_stack_height(*amount);
                     *ip = *pos;
 
-                    self.trace(stack, registers, instruction, stack_offset);
+                    // self.trace(stack, registers, instruction, stack_offset);
 
                     continue;
                 }
@@ -197,7 +205,7 @@ impl Instructions {
                 Instruction::Cmp { .. } => {
                     *ip += 1;
 
-                    self.trace(stack, registers, instruction, stack_offset);
+                    // self.trace(stack, registers, instruction, stack_offset);
 
                     continue;
                 }
@@ -205,22 +213,21 @@ impl Instructions {
                 Instruction::Jmp { pos } => {
                     *ip = *pos;
 
-                    self.trace(stack, registers, instruction, stack_offset);
+                    // self.trace(stack, registers, instruction, stack_offset);
 
                     continue;
                 }
                 Instruction::Halt => {
                     #[cfg(debug_assertions)]
                     {
-                        println!("stack_len: {}", stack.len());
-                        println!("a = {:#?}", stack.get(1));
+                        // println!("stack_len: {}", stack.len());
+                        // println!("a = {:#?}", stack.get(0));
                     }
                     break;
                 }
 
                 Instruction::Define { stack_loc, src } => {
                     let stack_pos = stack_loc.get_stack_pos(stack_offset);
-
                     let src = src.get_val(registers, stack, stack_offset);
 
                     #[cfg(debug_assertions)]
@@ -234,10 +241,8 @@ impl Instructions {
                 }
                 Instruction::Assign { stack_loc, src } => {
                     let stack_pos = stack_loc.get_stack_pos(stack_offset);
-
                     let src = src.get_val(registers, stack, stack_offset);
-
-                    *stack.get_mut(stack_pos) = src;
+                    *stack.get_mut_ref(stack_pos) = src;
                 }
                 | Instruction::JE { true_pos, false_pos }
                 | Instruction::JNE { true_pos, false_pos }
@@ -269,7 +274,7 @@ impl Instructions {
 
                     *ip = if condition { *true_pos } else { *false_pos };
 
-                    self.trace(stack, registers, instruction, stack_offset);
+                    // self.trace(stack, registers, instruction, stack_offset);
 
                     continue;
                 }
@@ -303,7 +308,7 @@ impl Instructions {
                 }
             }
 
-            self.trace(stack, registers, instruction, stack_offset);
+            // self.trace(stack, registers, instruction, stack_offset);
 
             *ip += 1;
         }

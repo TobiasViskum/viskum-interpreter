@@ -9,23 +9,21 @@ fn fib(n i32) i32 {
 
 fib(35)
 
+
 /*
 
-
-fn cmp(x i32, y i32) {
-    if x == y {
-        return x
+fn someFunc(n i32) i32 {
+    if n < 1 {
+        return n
     }
-    return cmp(x - y, x - y)
+    return someFunc(n - 1)
 }
-
-cmp(10, 2)
-
+someFunc(5000)
 
 
 
-a := 2 + 2 * 8 
-cd := 4
+mut a := 2 + 2 * 8 
+mut cd := 4
 
 if (1 + 1) * 2 == cd { 
     if 2 == 3 { 
@@ -45,6 +43,20 @@ if (1 + 1) * 2 == cd {
 
 a 
 cd 
+
+fn cmp(x i32, y i32) {
+    if x == y {
+        return x
+    }
+    return cmp(x - y, x - y)
+}
+
+cmp(10, 2)
+
+
+
+
+
 
 
 

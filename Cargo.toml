@@ -20,7 +20,6 @@ debug = true
 codegen-units = 1
 lto = true
 panic = "abort"
-strip = true
 
 [profile.release-profiler]
 inherits = "release"
