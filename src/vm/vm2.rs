@@ -9,7 +9,7 @@ use super::{
 fn halt_rule(
     (_, ip): (&FastInstr, usize),
     _: &mut RuntimeInformation,
-    _: &mut VMRegisters,
+    _: &mut VMRegisters2,
     _: &mut VMStack
 ) -> usize {
     ip + 1
@@ -17,11 +17,12 @@ fn halt_rule(
 fn load_bool_rule(
     (instr, ip): (&FastInstr, usize),
     runtime_information: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     _: &mut VMStack
 ) -> usize {
-    let (dst, bool_value) = instr.get_load_bool();
-    *registers.get_mut(dst as usize) = Some(Value::Bool(bool_value));
+    panic!("Load bool not supported yet");
+    // let (dst, bool_value) = instr.get_load_bool();
+    // *registers.get_mut(dst as usize) = Some(Value::Bool(bool_value));
 
     ip + 1
 }
@@ -29,18 +30,21 @@ fn load_bool_rule(
 fn load_i32_rule(
     (instr, ip): (&FastInstr, usize),
     runtime_information: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     _: &mut VMStack
 ) -> usize {
-    let (dst, value) = instr.get_load_i32();
-    *registers.get_mut(dst as usize) = Some(Value::Int32(value));
+    let (dst, constants_pos) = instr.get_load_i32_v2();
+
+    let constant = runtime_information.get_constant(constants_pos as usize);
+
+    *registers.get_mut(dst as usize) = constant;
 
     ip + 1
 }
 fn load_string_rule(
     (instr, ip): (&FastInstr, usize),
     runtime_information: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     _: &mut VMStack
 ) -> usize {
     let instr_amount = instr.get_string_instr_amount() as usize;
@@ -55,85 +59,100 @@ fn load_string_rule(
 }
 fn add_rule(
     (instr, ip): (&FastInstr, usize),
-    _: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    runtime_information: &mut RuntimeInformation,
+    registers: &mut VMRegisters2,
     _: &mut VMStack
 ) -> usize {
     let (dst, reg1, reg2) = instr.get_binary();
-    let lhs = &registers.get(reg1 as usize);
-    let rhs = &registers.get(reg2 as usize);
+    let lhs = registers.get(reg1 as usize);
+    let rhs = registers.get(reg2 as usize);
+    let constant = unsafe { (*lhs).add(&*rhs).unwrap_unchecked() };
 
-    *registers.get_mut(dst as usize) = Some(unsafe { lhs.add(rhs).unwrap_unchecked() });
+    let constant_index = runtime_information.push_constant(constant);
+
+    *registers.get_mut(dst as usize) = runtime_information.get_constant(constant_index);
     ip + 1
 }
 fn sub_rule(
     (instr, ip): (&FastInstr, usize),
     runtime_information: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     stack: &mut VMStack
 ) -> usize {
     let (dst, reg1, reg2) = instr.get_binary();
-    let lhs = &registers.get(reg1 as usize);
-    let rhs = &registers.get(reg2 as usize);
+    let lhs = registers.get(reg1 as usize);
+    let rhs = registers.get(reg2 as usize);
+    let constant = unsafe { (*lhs).sub(&*rhs).unwrap_unchecked() };
 
-    *registers.get_mut(dst as usize) = Some(unsafe { lhs.sub(rhs).unwrap_unchecked() });
+    let constant_index = runtime_information.push_constant(constant);
 
+    *registers.get_mut(dst as usize) = runtime_information.get_constant(constant_index);
     ip + 1
 }
 fn mul_rule(
     (instr, ip): (&FastInstr, usize),
     runtime_information: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     _: &mut VMStack
 ) -> usize {
     let (dst, reg1, reg2) = instr.get_binary();
-    let lhs = &registers.get(reg1 as usize);
-    let rhs = &registers.get(reg2 as usize);
+    let lhs = registers.get(reg1 as usize);
+    let rhs = registers.get(reg2 as usize);
+    let constant = unsafe { (*lhs).mul(&*rhs).unwrap_unchecked() };
 
-    *registers.get_mut(dst as usize) = Some(unsafe { lhs.mul(rhs).unwrap_unchecked() });
+    let constant_index = runtime_information.push_constant(constant);
+
+    *registers.get_mut(dst as usize) = runtime_information.get_constant(constant_index);
     ip + 1
 }
 fn div_rule(
     (instr, ip): (&FastInstr, usize),
     runtime_information: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     _: &mut VMStack
 ) -> usize {
     let (dst, reg1, reg2) = instr.get_binary();
-    let lhs = &registers.get(reg1 as usize);
-    let rhs = &registers.get(reg2 as usize);
+    let lhs = registers.get(reg1 as usize);
+    let rhs = registers.get(reg2 as usize);
+    let constant = unsafe { (*lhs).div(&*rhs).unwrap_unchecked() };
 
-    *registers.get_mut(dst as usize) = Some(unsafe { lhs.div(rhs).unwrap_unchecked() });
+    let constant_index = runtime_information.push_constant(constant);
+
+    *registers.get_mut(dst as usize) = runtime_information.get_constant(constant_index);
     ip + 1
 }
 fn neg_rule(
     (instr, ip): (&FastInstr, usize),
     runtime_information: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     _: &mut VMStack
 ) -> usize {
     let (dst, reg) = instr.get_unary();
-    let operand = &registers.get(reg as usize);
+    let operand = registers.get(reg as usize);
+    let result = unsafe { (*operand).neg().unwrap_unchecked() };
+    let constant_index = runtime_information.push_constant(result);
 
-    *registers.get_mut(dst as usize) = Some(unsafe { operand.neg().unwrap_unchecked() });
+    *registers.get_mut(dst as usize) = runtime_information.get_constant(constant_index);
     ip + 1
 }
 fn not_rule(
     (instr, ip): (&FastInstr, usize),
     runtime_information: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     _: &mut VMStack
 ) -> usize {
     let (dst, reg) = instr.get_unary();
-    let operand = &registers.get(reg as usize);
+    let operand = registers.get(reg as usize);
+    let result = unsafe { (*operand).not().unwrap_unchecked() };
+    let constant_index = runtime_information.push_constant(result);
 
-    *registers.get_mut(dst as usize) = Some(operand.not());
+    *registers.get_mut(dst as usize) = runtime_information.get_constant(constant_index);
     ip + 1
 }
 fn jmp_rule(
     (instr, _): (&FastInstr, usize),
     _: &mut RuntimeInformation,
-    _: &mut VMRegisters,
+    _: &mut VMRegisters2,
     _: &mut VMStack
 ) -> usize {
     instr.get_jmp() as usize
@@ -141,7 +160,7 @@ fn jmp_rule(
 fn jmp_pop_rule(
     (instr, _): (&FastInstr, usize),
     _: &mut RuntimeInformation,
-    _: &mut VMRegisters,
+    _: &mut VMRegisters2,
     stack: &mut VMStack
 ) -> usize {
     let (jmp_pos, pop_amount) = instr.get_jmp_pop();
@@ -153,233 +172,244 @@ fn jmp_pop_rule(
 fn cmp_eq_rule(
     (instr, ip): (&FastInstr, usize),
     runtime_information: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     _: &mut VMStack
 ) -> usize {
-    let (dst, reg1, reg2) = instr.get_cmp();
+    // let (dst, reg1, reg2) = instr.get_cmp();
 
-    let val = registers
-        .get(reg1 as usize)
-        .cmp_e(&registers.get(reg2 as usize))
-        .unwrap();
+    // let lhs = registers.get(reg1 as usize);
+    // let rhs = registers.get(reg2 as usize);
 
-    *registers.get_mut(dst as usize) = Some(Value::Bool(val));
+    // let result = Value::Bool(unsafe { (*lhs).cmp_e(&*rhs).unwrap_unchecked() });
+    // let constant_index = runtime_information.push_constant(result);
+
+    // *registers.get_mut(dst as usize) = runtime_information.get_constant(constant_index);
 
     ip + 1
 }
 fn cmp_neq_rule(
     (instr, ip): (&FastInstr, usize),
     runtime_information: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     _: &mut VMStack
 ) -> usize {
-    let (dst, reg1, reg2) = instr.get_cmp();
+    // let (dst, reg1, reg2) = instr.get_cmp();
 
-    let val = registers
-        .get(reg1 as usize)
-        .cmp_ne(&registers.get(reg2 as usize))
-        .unwrap();
+    // let lhs = registers.get(reg1 as usize);
+    // let rhs = registers.get(reg2 as usize);
 
-    *registers.get_mut(dst as usize) = Some(Value::Bool(val));
+    // let result = Value::Bool(unsafe { (*lhs).cmp_ne(&*rhs).unwrap_unchecked() });
+    // let constant_index = runtime_information.push_constant(result);
+
+    // *registers.get_mut(dst as usize) = runtime_information.get_constant(constant_index);
 
     ip + 1
 }
 fn cmp_gt_rule(
     (instr, ip): (&FastInstr, usize),
     runtime_information: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     _: &mut VMStack
 ) -> usize {
-    let (dst, reg1, reg2) = instr.get_cmp();
+    // let (dst, reg1, reg2) = instr.get_cmp();
 
-    let val = registers
-        .get(reg1 as usize)
-        .cmp_g(&registers.get(reg2 as usize))
-        .unwrap();
+    // let lhs = registers.get(reg1 as usize);
+    // let rhs = registers.get(reg2 as usize);
 
-    *registers.get_mut(dst as usize) = Some(Value::Bool(val));
+    // let result = Value::Bool(unsafe { (*lhs).cmp_g(&*rhs).unwrap_unchecked() });
+    // let constant_index = runtime_information.push_constant(result);
+
+    // *registers.get_mut(dst as usize) = runtime_information.get_constant(constant_index);
 
     ip + 1
 }
 fn cmp_geq_rule(
     (instr, ip): (&FastInstr, usize),
     runtime_information: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     _: &mut VMStack
 ) -> usize {
-    let (dst, reg1, reg2) = instr.get_cmp();
+    // let (dst, reg1, reg2) = instr.get_cmp();
 
-    let val = registers
-        .get(reg1 as usize)
-        .cmp_ge(&registers.get(reg2 as usize))
-        .unwrap();
+    // let lhs = registers.get(reg1 as usize);
+    // let rhs = registers.get(reg2 as usize);
 
-    *registers.get_mut(dst as usize) = Some(Value::Bool(val));
+    // let result = Value::Bool(unsafe { (*lhs).cmp_ge(&*rhs).unwrap_unchecked() });
+    // let constant_index = runtime_information.push_constant(result);
+
+    // *registers.get_mut(dst as usize) = runtime_information.get_constant(constant_index);
 
     ip + 1
 }
 fn cmp_lt_rule(
     (instr, ip): (&FastInstr, usize),
     runtime_information: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     _: &mut VMStack
 ) -> usize {
-    let (dst, reg1, reg2) = instr.get_cmp();
+    // let (dst, reg1, reg2) = instr.get_cmp();
 
-    let value = unsafe {
-        registers
-            .get(reg1 as usize)
-            .cmp_l(&registers.get(reg2 as usize))
-            .unwrap_unchecked()
-    };
+    // let lhs = registers.get(reg1 as usize);
+    // let rhs = registers.get(reg2 as usize);
 
-    *registers.get_mut(dst as usize) = Some(Value::Bool(value));
+    // let result = Value::Bool(unsafe { (*lhs).cmp_l(&*rhs).unwrap_unchecked() });
+    // let constant_index = runtime_information.push_constant(result);
+
+    // *registers.get_mut(dst as usize) = runtime_information.get_constant(constant_index);
 
     ip + 1
 }
 fn cmp_leq_rule(
     (instr, ip): (&FastInstr, usize),
     runtime_information: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     _: &mut VMStack
 ) -> usize {
-    let (dst, reg1, reg2) = instr.get_cmp();
+    // let (dst, reg1, reg2) = instr.get_cmp();
 
-    let val = registers
-        .get(reg1 as usize)
-        .cmp_le(&registers.get(reg2 as usize))
-        .unwrap();
+    // let lhs = registers.get(reg1 as usize);
+    // let rhs = registers.get(reg2 as usize);
 
-    *registers.get_mut(dst as usize) = Some(Value::Bool(val));
+    // let result = Value::Bool(unsafe { (*lhs).cmp_le(&*rhs).unwrap_unchecked() });
+    // let constant_index = runtime_information.push_constant(result);
+
+    // *registers.get_mut(dst as usize) = runtime_information.get_constant(constant_index);
 
     ip + 1
 }
 fn cmp_eq_jmp_rule(
     (instr, ip): (&FastInstr, usize),
     _: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     _: &mut VMStack
 ) -> usize {
-    let (reg1, reg2, true_pos, false_pos) = instr.get_cmp_jmp();
+    // let (reg1, reg2, true_pos, false_pos) = instr.get_cmp_jmp();
 
-    let condition = registers
-        .get(reg1 as usize)
-        .cmp_e(&registers.get(reg2 as usize))
-        .unwrap();
+    // let lhs = registers.get(reg1 as usize);
+    // let rhs = registers.get(reg2 as usize);
 
-    if condition {
-        true_pos as usize
-    } else {
-        false_pos as usize
-    }
+    // let condition = unsafe { (*lhs).cmp_e(&*rhs).unwrap_unchecked() };
+
+    // if condition {
+    //     true_pos as usize
+    // } else {
+    //     false_pos as usize
+    // }
+    0
 }
 fn cmp_neq_jmp_rule(
     (instr, ip): (&FastInstr, usize),
     _: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     _: &mut VMStack
 ) -> usize {
-    let (reg1, reg2, true_pos, false_pos) = instr.get_cmp_jmp();
+    // let (reg1, reg2, true_pos, false_pos) = instr.get_cmp_jmp();
 
-    let condition = registers
-        .get(reg1 as usize)
-        .cmp_ne(&registers.get(reg2 as usize))
-        .unwrap();
+    // let lhs = registers.get(reg1 as usize);
+    // let rhs = registers.get(reg2 as usize);
 
-    if condition {
-        true_pos as usize
-    } else {
-        false_pos as usize
-    }
+    // let condition = unsafe { (*lhs).cmp_ne(&*rhs).unwrap_unchecked() };
+
+    // if condition {
+    //     true_pos as usize
+    // } else {
+    //     false_pos as usize
+    // }
+    0
 }
 fn cmp_gt_jmp_rule(
     (instr, ip): (&FastInstr, usize),
     _: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     _: &mut VMStack
 ) -> usize {
-    let (reg1, reg2, true_pos, false_pos) = instr.get_cmp_jmp();
+    // let (reg1, reg2, true_pos, false_pos) = instr.get_cmp_jmp();
 
-    let condition = registers
-        .get(reg1 as usize)
-        .cmp_g(&registers.get(reg2 as usize))
-        .unwrap();
+    // let lhs = registers.get(reg1 as usize);
+    // let rhs = registers.get(reg2 as usize);
 
-    if condition {
-        true_pos as usize
-    } else {
-        false_pos as usize
-    }
+    // let condition = unsafe { (*lhs).cmp_g(&*rhs).unwrap_unchecked() };
+
+    // if condition {
+    //     true_pos as usize
+    // } else {
+    //     false_pos as usize
+    // }
+    0
 }
 fn cmp_geq_jmp_rule(
     (instr, ip): (&FastInstr, usize),
     _: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     _: &mut VMStack
 ) -> usize {
-    let (reg1, reg2, true_pos, false_pos) = instr.get_cmp_jmp();
+    // let (reg1, reg2, true_pos, false_pos) = instr.get_cmp_jmp();
 
-    let condition = registers
-        .get(reg1 as usize)
-        .cmp_ge(&registers.get(reg2 as usize))
-        .unwrap();
+    // let lhs = registers.get(reg1 as usize);
+    // let rhs = registers.get(reg2 as usize);
 
-    if condition {
-        true_pos as usize
-    } else {
-        false_pos as usize
-    }
+    // let condition = unsafe { (*lhs).cmp_ge(&*rhs).unwrap_unchecked() };
+
+    // if condition {
+    //     true_pos as usize
+    // } else {
+    //     false_pos as usize
+    // }
+    0
 }
 fn cmp_lt_jmp_rule(
     (instr, ip): (&FastInstr, usize),
     _: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     _: &mut VMStack
 ) -> usize {
-    let (reg1, reg2, true_pos, false_pos) = instr.get_cmp_jmp();
+    // let (reg1, reg2, true_pos, false_pos) = instr.get_cmp_jmp();
 
-    let lhs = registers.get(reg1 as usize);
+    // let lhs = registers.get(reg1 as usize);
+    // let rhs = registers.get(reg2 as usize);
 
-    let rhs = registers.get(reg2 as usize);
+    // let condition = unsafe { (*lhs).cmp_l(&*rhs).unwrap_unchecked() };
 
-    let condition = unsafe { lhs.cmp_l(&rhs).unwrap_unchecked() };
-
-    if condition {
-        true_pos as usize
-    } else {
-        false_pos as usize
-    }
+    // if condition {
+    //     true_pos as usize
+    // } else {
+    //     false_pos as usize
+    // }
+    0
 }
 fn cmp_leq_jmp_rule(
     (instr, ip): (&FastInstr, usize),
     _: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     _: &mut VMStack
 ) -> usize {
-    let (reg1, reg2, true_pos, false_pos) = instr.get_cmp_jmp();
+    // let (reg1, reg2, true_pos, false_pos) = instr.get_cmp_jmp();
 
-    let condition = registers
-        .get(reg1 as usize)
-        .cmp_le(&registers.get(reg2 as usize))
-        .unwrap();
+    // let lhs = registers.get(reg1 as usize);
+    // let rhs = registers.get(reg2 as usize);
 
-    if condition {
-        true_pos as usize
-    } else {
-        false_pos as usize
-    }
+    // let condition = match unsafe { (*lhs).cmp_le(&*rhs).unwrap_unchecked() } {
+    //     Value::Bool(b) => b
+    // }
+
+    // if condition {
+    //     true_pos as usize
+    // } else {
+    //     false_pos as usize
+    // }
+    0
 }
 fn return_rule(
     (instr, ip): (&FastInstr, usize),
     runtime_information: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     stack: &mut VMStack
 ) -> usize {
     let return_reg = instr.get_return();
 
     let new_ip = stack.pop_as_ip();
 
-    let value = registers.get(return_reg as usize);
+    let value = unsafe { (*registers.get(return_reg as usize)).clone() };
 
     stack.push_val(value);
 
@@ -390,7 +420,7 @@ fn return_rule(
 fn return_pop_rule(
     (instr, ip): (&FastInstr, usize),
     runtime_information: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     stack: &mut VMStack
 ) -> usize {
     let (return_reg, pop_amount) = instr.get_return_pop();
@@ -399,7 +429,7 @@ fn return_pop_rule(
 
     let new_ip = stack.pop_as_ip();
 
-    let value = registers.get(return_reg as usize);
+    let value = unsafe { (*registers.get(return_reg as usize)).clone() };
 
     stack.push_val(value);
 
@@ -410,7 +440,7 @@ fn return_pop_rule(
 fn pop_rule(
     (instr, ip): (&FastInstr, usize),
     runtime_information: &mut RuntimeInformation,
-    _: &mut VMRegisters,
+    _: &mut VMRegisters2,
     stack: &mut VMStack
 ) -> usize {
     let pop_amount = instr.get_pop();
@@ -422,23 +452,23 @@ fn pop_rule(
 fn push_stack_rule(
     (instr, ip): (&FastInstr, usize),
     runtime_information: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     stack: &mut VMStack
 ) -> usize {
     let reg = instr.get_push_stack() as usize;
 
     let value = registers.get(reg);
 
-    stack.push_val(value.clone());
-
-    *registers.get_mut(reg) = Some(value);
+    unsafe {
+        stack.push_val((*value).clone());
+    }
 
     ip + 1
 }
 fn load_stack_rule(
     (instr, ip): (&FastInstr, usize),
     runtime_information: &mut RuntimeInformation,
-    registers: &mut VMRegisters,
+    registers: &mut VMRegisters2,
     stack: &mut VMStack
 ) -> usize {
     let (reg, is_relative, stack_pos) = instr.get_load_stack();
@@ -449,17 +479,16 @@ fn load_stack_rule(
         stack_pos as usize
     };
 
-    let value = stack.get_as_val(stack_pos);
-    let hei = stack.get_ref(stack_pos);
+    let value = stack.get_ref(stack_pos) as *const Value;
 
-    *registers.get_mut(reg as usize) = Some(value);
+    *registers.get_mut(reg as usize) = value;
 
     ip + 1
 }
 fn push_function_rule(
     (instr, ip): (&FastInstr, usize),
     _: &mut RuntimeInformation,
-    _: &mut VMRegisters,
+    _: &mut VMRegisters2,
     stack: &mut VMStack
 ) -> usize {
     let instr_amount = instr.get_push_function() as usize;
@@ -471,7 +500,7 @@ fn push_function_rule(
 fn call_function_rule(
     (instr, ip): (&FastInstr, usize),
     runtime_information: &mut RuntimeInformation,
-    _: &mut VMRegisters,
+    _: &mut VMRegisters2,
     stack: &mut VMStack
 ) -> usize {
     let stack_pos = instr.get_call_function();
@@ -486,7 +515,7 @@ fn call_function_rule(
 }
 
 const RULES: [
-    fn((&FastInstr, usize), &mut RuntimeInformation, &mut VMRegisters, &mut VMStack) -> usize;
+    fn((&FastInstr, usize), &mut RuntimeInformation, &mut VMRegisters2, &mut VMStack) -> usize;
     31
 ] = [
     halt_rule,
@@ -596,24 +625,22 @@ impl Instructions2 {
 
 pub struct VM2<'a> {
     program: &'a [FastInstr],
-    constants_table: &'a ConstantsTable<'a>,
     ip: usize,
 }
 
 impl<'a> VM2<'a> {
-    pub fn new(program: &'a [FastInstr], constants_table: &'a ConstantsTable) -> Self {
+    pub fn new(program: &'a [FastInstr]) -> Self {
         Self {
             program,
-            constants_table,
             ip: 0,
         }
     }
 
     #[profiler::function_tracker]
-    fn execute(&mut self) {
-        let mut registers = VMRegisters::new();
+    fn execute(&mut self, constants_table: Vec<Value>) {
+        let mut registers = VMRegisters2::new();
         let mut stack = VMStack::new();
-        let mut runtime_information = RuntimeInformation::new();
+        let mut runtime_information = RuntimeInformation::new(constants_table);
 
         let now = Instant::now();
 
@@ -635,12 +662,12 @@ impl<'a> VM2<'a> {
         println!("{:#?}", stack)
     }
 
-    pub fn run(&mut self) {
+    pub fn run(&mut self, constants_table: Vec<Value>) {
         // let mut registers = VMRegisters::new();
         // let mut stack = VMStack::new();
 
         // for _ in 0..1000000000 {
-        self.execute();
+        self.execute(constants_table);
         // }
     }
 

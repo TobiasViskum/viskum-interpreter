@@ -9,7 +9,7 @@ use crate::{
     vm::{ instructions::{ Instruction, InstructionSrc }, Instructions },
 };
 
-use self::generate_cfg::generate_cfgs;
+// use self::generate_cfg::generate_cfgs;
 
 use super::cfg::{ CFGNode, CFG };
 
@@ -26,7 +26,7 @@ impl ICFG {
     pub fn from_ast(ast: Ast) -> Self {
         let mut icfg = ICFG { cfgs: vec![], entry_cfg: 0 };
 
-        generate_cfgs(&mut icfg, ast.main_scope, 0);
+        // generate_cfgs(&mut icfg, ast.main_scope, 0);
 
         icfg
     }
@@ -88,22 +88,22 @@ impl ICFG {
             );
             vm_symbol_table.end_func_compilation();
 
-            match instructions.borrow_mut().get_mut(*instruction_id).unwrap() {
-                Instruction::Define { src, .. } =>
-                    match src {
-                        InstructionSrc::Constant { val } =>
-                            match val {
-                                Value::Function(func) => {
-                                    (*func).instructions = Instructions::from(
-                                        function_instructions.take()
-                                    );
-                                }
-                                _ => panic!("Expected function"),
-                            }
-                        _ => panic!("Expected Constant"),
-                    }
-                _ => panic!("Expected "),
-            }
+            // match instructions.borrow_mut().get_mut(*instruction_id).unwrap() {
+            //     Instruction::Define { src, .. } =>
+            //         match src {
+            //             InstructionSrc::Constant { val } =>
+            //                 match val {
+            //                     Value::Function(func) => {
+            //                         (*func).instructions = Instructions::from(
+            //                             function_instructions.take()
+            //                         );
+            //                     }
+            //                     _ => panic!("Expected function"),
+            //                 }
+            //             _ => panic!("Expected Constant"),
+            //         }
+            //     _ => panic!("Expected "),
+            // }
         }
 
         instructions.take()

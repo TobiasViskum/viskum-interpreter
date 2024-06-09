@@ -27,6 +27,9 @@ impl TokenType {
         match self {
             Self::TokenBang => Ok(UnaryOp::Truthy),
             Self::TokenMinus => Ok(UnaryOp::Neg),
+            Self::TokenReference => Ok(UnaryOp::Ref),
+            Self::TokenMutableReference => Ok(UnaryOp::MutRef),
+            Self::TokenStar => Ok(UnaryOp::Deref),
             _ => Err(()),
         }
     }

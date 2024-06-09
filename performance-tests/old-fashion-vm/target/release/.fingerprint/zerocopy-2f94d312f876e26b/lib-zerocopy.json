@@ -1,0 +1,1 @@
+{"rustc":792111255936306319,"features":"[\"simd\"]","target":11900192546071679123,"profile":17084641470040582370,"path":17444556571349236883,"deps":[],"local":[{"CheckDepInfo":{"dep_info":"release/.fingerprint/zerocopy-2f94d312f876e26b/dep-lib-zerocopy"}}],"rustflags":[],"metadata":12085453815966418680,"config":2202906307356721367,"compile_kind":0}

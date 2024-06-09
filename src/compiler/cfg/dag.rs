@@ -270,6 +270,10 @@ impl DAG {
                             reg: register,
                             src: right,
                         },
+                    _ =>
+                        panic!(
+                            "References not support in bytecode. They should've been dereferenced before used in an expression"
+                        ),
                 };
 
                 bytecode.push(instruction);
@@ -338,7 +342,7 @@ impl DAG {
                 let value = match operands.get(1) {
                     Some(value_node_id) =>
                         self.generate_node_bytecode(*value_node_id, vm_symbol_table, bytecode),
-                    None => InstructionSrc::Constant { val: Value::Empty },
+                    None => InstructionSrc::Constant { val: Value::Bool(false) },
                 };
                 if let InstructionSrc::Register { reg } = &value {
                     vm_symbol_table.free_register(*reg);
@@ -367,7 +371,7 @@ impl DAG {
                 let value = match operands.get(1) {
                     Some(value_node_id) =>
                         self.generate_node_bytecode(*value_node_id, vm_symbol_table, bytecode),
-                    None => InstructionSrc::Constant { val: Value::Empty },
+                    None => InstructionSrc::Constant { val: Value::Bool(false) },
                 };
                 if let InstructionSrc::Register { reg } = &value {
                     vm_symbol_table.free_register(*reg);

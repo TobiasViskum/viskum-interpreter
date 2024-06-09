@@ -87,7 +87,7 @@ impl VMSymbolTable {
     }
 
     pub fn adjust_scope(&mut self, new_scope: usize) -> Option<Instruction> {
-        println!("new_scope: {}, prev scope: {}", new_scope, self.previous_scope);
+        // println!("new_scope: {}, prev scope: {}", new_scope, self.previous_scope);
         let pop_instruction = if new_scope > self.previous_scope {
             for _ in self.previous_scope..new_scope {
                 self.scope_begin.push(self.stack_height);

@@ -194,15 +194,18 @@ impl VMStack {
 
     // #[inline(always)]
     pub fn get_ptr_func(&mut self, stack_pos: usize) -> *mut Function {
-        match self.stack[stack_pos].as_mut_val() {
-            Value::Function(func) => func as *mut Function,
-            _ => panic!("sdf"),
-        }
+        // match self.stack[stack_pos].as_mut_val() {
+        //     Value::Function(func) => func as *mut Function,
+        //     _ => panic!("sdf"),
+        // }
+
+        std::ptr::null_mut::<Function>()
     }
 
     #[inline(always)]
-    pub fn push_val(&mut self, value: Value) {
+    pub fn push_val(&mut self, value: Value) -> usize {
         self.stack.push(VMValue::Value(value));
+        self.stack.len() - 1
     }
 
     #[inline(always)]
@@ -225,12 +228,12 @@ impl VMStack {
 }
 
 #[derive(Debug)]
-pub struct ConstantsTable<'a> {
-    constants_table: &'a [Value],
+pub struct ConstantsTable {
+    constants_table: Vec<Value>,
 }
 
-impl<'a> ConstantsTable<'a> {
-    pub fn new(constants_table: &'a [Value]) -> Self {
+impl ConstantsTable {
+    pub fn new(constants_table: Vec<Value>) -> Self {
         Self { constants_table }
     }
 }
@@ -238,13 +241,26 @@ impl<'a> ConstantsTable<'a> {
 #[derive(Debug)]
 pub struct RuntimeInformation {
     stack_heights: Vec<usize>,
+    constants_table: Vec<Value>,
 }
 
 impl RuntimeInformation {
-    pub fn new() -> Self {
+    pub fn new(constants_table: Vec<Value>) -> Self {
         Self {
             stack_heights: Vec::new(),
+            constants_table,
         }
+    }
+
+    #[inline(always)]
+    pub fn get_constant(&self, pos: usize) -> *const Value {
+        self.constants_table.get(pos).unwrap() as *const Value
+    }
+
+    #[inline(always)]
+    pub fn push_constant(&mut self, constant: Value) -> usize {
+        self.constants_table.push(constant);
+        self.constants_table.len() - 1
     }
 
     #[inline(always)]
@@ -280,13 +296,13 @@ impl CallFrame {
     }
 
     pub fn execute(&mut self, stack: &mut VMStack, registers: &mut VMRegisters) -> Value {
-        let result = match stack.get_as_val(self.function_pos) {
-            Value::Function(mut func) =>
-                func.instructions.execute(&mut self.ip, stack, registers, self.stack_height),
-            _ => panic!("Expected func!"),
-        };
+        // let result = match stack.get_as_val(self.function_pos) {
+        //     Value::Function(mut func) =>
+        //         func.instructions.execute(&mut self.ip, stack, registers, self.stack_height),
+        //     _ => panic!("Expected func!"),
+        // };
 
-        result
+        Value::Void
     }
 }
 

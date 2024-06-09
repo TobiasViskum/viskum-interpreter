@@ -1,0 +1,12 @@
+[package]
+name = "performance-tests"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[profile.release]
+debug = true
+codegen-units = 1
+lto = true
+panic = "abort"

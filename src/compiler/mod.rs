@@ -31,35 +31,35 @@ impl<'a> Compiler<'a> {
 
         panic!("sdf");
 
-        let mut cfg = ast.generate_cfg();
+        // let mut cfg = ast.generate_cfg();
 
-        cfg.dissassemble();
+        // cfg.dissassemble();
 
-        let instructions = cfg.optimize_and_generate_bytecode();
+        // let instructions = cfg.optimize_and_generate_bytecode();
 
-        #[cfg(debug_assertions)]
-        {
-            let mut indentation_level = 0;
-            let indentation_size = 4;
+        // #[cfg(debug_assertions)]
+        // {
+        //     let mut indentation_level = 0;
+        //     let indentation_size = 4;
 
-            if !self.error_handler.has_error() {
-                println!("Optimized instructions:");
-                println!("----------------------\n");
+        //     if !self.error_handler.has_error() {
+        //         println!("Optimized instructions:");
+        //         println!("----------------------\n");
 
-                for instruction in &instructions {
-                    let print_string = format!(
-                        "{}{}",
-                        " ".repeat(indentation_level * indentation_size),
-                        instruction.dissassemble()
-                    );
+        //         for instruction in &instructions {
+        //             let print_string = format!(
+        //                 "{}{}",
+        //                 " ".repeat(indentation_level * indentation_size),
+        //                 instruction.dissassemble()
+        //             );
 
-                    println!("{}", print_string);
-                }
-                println!("\n----------------------");
-            }
-        }
+        //             println!("{}", print_string);
+        //         }
+        //         println!("\n----------------------");
+        //     }
+        // }
 
-        Some(instructions)
+        // Some(instructions)
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::parser::token::token_type::TokenType;
+use crate::parser::TokenType;
 
 use super::Lexer;
 
@@ -53,6 +53,18 @@ impl<'a> Lexer<'a> {
             ttype
         } else {
             TokenType::TokenIdentifier
+        }
+    }
+
+    pub(super) fn is_keyword(&self, start: usize, length: usize, rest: &str) -> bool {
+        let search_lexeme = self.source[self.start + start..self.start + start + length]
+            .iter()
+            .collect::<String>();
+
+        if search_lexeme == rest {
+            true
+        } else {
+            false
         }
     }
 }

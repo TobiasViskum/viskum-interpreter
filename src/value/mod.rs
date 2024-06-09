@@ -1,19 +1,41 @@
-use std::{ fmt::{ self, Display }, rc::Rc };
+use std::{ boxed, fmt::{ self, Display }, rc::Rc };
 
 use crate::{
+    create_tokens_and_parse_rules,
+    def_binary_val_method,
+    define_unary_val_method,
     operations::{ BinaryOp, ComparisonOp, UnaryOp },
     vm::{ instructions::Instruction, Instructions },
+    Dissasemble,
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ValueType {
     Int32,
     Bool,
     Void,
     String,
-    Empty,
     Function,
+    Deref(Box<Self>),
+    Ref(Box<Self>),
+    MutableRef(Box<Self>),
 }
+
+impl Dissasemble for ValueType {
+    fn dissasemble(&self) -> String {
+        match self {
+            Self::Int32 => "i32".to_string(),
+            Self::Bool => "bool".to_string(),
+            Self::Void => "()".to_string(),
+            Self::String => "string".to_string(),
+            Self::Function => "<fn>".to_string(),
+            Self::Deref(boxed) => format!("*{}", boxed.dissasemble()),
+            Self::Ref(boxed) => format!("&{}", boxed.dissasemble()),
+            Self::MutableRef(boxed) => format!("&mut {}", boxed.dissasemble()),
+        }
+    }
+}
+
 impl ValueType {
     pub fn is(&self, other: &ValueType) -> bool {
         matches!(
@@ -28,9 +50,9 @@ impl ValueType {
             ValueType::Int32 => "i32".to_string(),
             ValueType::Bool => "bool".to_string(),
             ValueType::Void => "void".to_string(),
-            ValueType::Empty => "empty".to_string(),
             ValueType::String => "string".to_string(),
             ValueType::Function => "<fn>".to_string(),
+            _ => "TO_TYPE_STRING".to_string(),
         }
     }
 
@@ -52,7 +74,10 @@ impl ValueType {
     pub fn type_check_unary(&self, op: UnaryOp) -> Result<ValueType, String> {
         match op {
             UnaryOp::Neg => self.try_neg(),
-            UnaryOp::Truthy => Ok(*self),
+            UnaryOp::Truthy => Ok(self.clone()),
+            UnaryOp::Ref => Ok(Self::Ref(Box::new(self.clone()))),
+            UnaryOp::Deref => Ok(Self::Deref(Box::new(self.clone()))),
+            UnaryOp::MutRef => Ok(Self::MutableRef(Box::new(self.clone()))),
         }
     }
 
@@ -83,8 +108,31 @@ impl ValueType {
         }
     }
 
+    pub fn get_minified(value_type: &Self) -> Self {
+        let mut minified_type = value_type.clone();
+        match minified_type {
+            ValueType::Deref(inner) => {
+                match *inner {
+                    ValueType::Ref(contained) => {
+                        minified_type = Self::get_minified(&contained);
+                        minified_type
+                    }
+                    ValueType::Deref(_) => {
+                        minified_type = Self::get_minified(&inner);
+                        minified_type
+                    }
+                    t => t,
+                }
+            }
+            _ => minified_type,
+        }
+    }
+
     pub fn try_add(&self, other: &ValueType) -> Result<ValueType, String> {
-        match (self, other) {
+        let minified_self = Self::get_minified(self);
+        let minified_other = Self::get_minified(other);
+
+        match (minified_self, minified_other) {
             (ValueType::Int32, ValueType::Int32) => Ok(ValueType::Int32),
             (ValueType::String, ValueType::String) => Ok(ValueType::String),
             _ =>
@@ -142,7 +190,7 @@ impl ValueType {
 
     pub fn try_neg(&self) -> Result<ValueType, String> {
         if self.is(&ValueType::Int32) {
-            Ok(*self)
+            Ok(self.clone())
         } else {
             Err(format!("Negation is not defined for {}", self.to_type_string()))
         }
@@ -176,14 +224,31 @@ pub enum Value {
     Int32(i32),
     Bool(bool),
     String(Rc<str>),
+    Ref(Box<Self>),
+    MutableRef(Box<Self>),
+    Deref(Box<Self>),
+    Mutable(Box<Self>),
     Void,
-    Empty,
-    Function(Function),
+}
+
+impl Dissasemble for Value {
+    fn dissasemble(&self) -> String {
+        match self {
+            Self::Int32(i32) => i32.to_string(),
+            Self::Bool(bool) => bool.to_string(),
+            Self::String(str) => str.to_string(),
+            Self::Void => "()".to_string(),
+            Self::Deref(contained) => format!("*{}", contained.dissasemble()),
+            Self::Ref(contained) => format!("&{}", contained.dissasemble()),
+            Self::MutableRef(contained) => format!("&mut {}", contained.dissasemble()),
+            Self::Mutable(contained) => format!("mut {}", contained.dissasemble()),
+        }
+    }
 }
 
 impl Default for Value {
     fn default() -> Self {
-        Self::Empty
+        Self::Bool(false) // Remove this (only used in outdated VM)
     }
 }
 
@@ -192,10 +257,9 @@ impl Display for Value {
         match self {
             Value::Int32(int32) => write!(f, "{}", int32),
             Value::Bool(bool) => write!(f, "{}", bool),
-            Value::Empty => write!(f, "empty"),
-            Value::Function(_) => { write!(f, "<fn>") }
             Value::String(str) => write!(f, "{}", str),
             Value::Void => write!(f, "()"),
+            _ => write!(f, "sdfdsfsdfasdfas"),
         }
     }
 }
@@ -217,8 +281,8 @@ impl Value {
             Self::Int32(i32) => i32.to_string(),
             Self::Bool(bool) => bool.to_string(),
             Self::String(str) => str.to_string(),
-            Self::Empty | Self::Void => String::new(),
-            Self::Function(_) => "<fn>".to_string(),
+            Self::Void => String::new(),
+            _ => "not impl yet".to_string(),
         }
     }
 
@@ -226,188 +290,66 @@ impl Value {
         match self {
             Value::Int32(_) => ValueType::Int32,
             Value::Bool(_) => ValueType::Bool,
-            Value::Empty => ValueType::Empty,
-            Value::Function(_) => ValueType::Function,
             Value::String(_) => ValueType::String,
             Value::Void => ValueType::Void,
+            _ => panic!(),
         }
     }
 
-    // #[inline(always)]
-    pub fn cmp_e(&self, other: &Value) -> Result<bool, String> {
-        match (self, other) {
-            (Value::Int32(lhs), Value::Int32(rhs)) => Ok(lhs == rhs),
-            (Value::Bool(lhs), Value::Bool(rhs)) => Ok(lhs == rhs),
-            _ =>
-                Err(
-                    format!(
-                        "Comparison '==' is not defined for {} and {}",
-                        self.to_value_type().to_type_string(),
-                        other.to_value_type().to_type_string()
-                    )
-                ),
-        }
-    }
+    def_binary_val_method!(cmp_eq, |lhs == rhs| -> Bool, {
+        (Int32, Int32),
+        (Bool, Bool),
+    });
 
-    // #[inline(always)]
-    pub fn cmp_ne(&self, other: &Value) -> Result<bool, String> {
-        match (self, other) {
-            (Value::Int32(lhs), Value::Int32(rhs)) => Ok(lhs != rhs),
-            (Value::Bool(lhs), Value::Bool(rhs)) => Ok(lhs != rhs),
-            _ =>
-                Err(
-                    format!(
-                        "Comparison '!=' is not defined for {} and {}",
-                        self.to_value_type().to_type_string(),
-                        other.to_value_type().to_type_string()
-                    )
-                ),
-        }
-    }
+    def_binary_val_method!(cmp_ne, |lhs != rhs| -> Bool, {
+        (Int32, Int32),
+        (Bool, Bool),
+    });
 
-    // #[inline(always)]
-    pub fn cmp_g(&self, other: &Value) -> Result<bool, String> {
-        match (self, other) {
-            (Value::Int32(lhs), Value::Int32(rhs)) => Ok(lhs > rhs),
-            (Value::Bool(lhs), Value::Bool(rhs)) => Ok(lhs > rhs),
-            _ =>
-                Err(
-                    format!(
-                        "Comparison '>' is not defined for {} and {}",
-                        self.to_value_type().to_type_string(),
-                        other.to_value_type().to_type_string()
-                    )
-                ),
-        }
-    }
+    def_binary_val_method!(cmp_gt, |lhs > rhs| -> Bool, {
+        (Int32, Int32),
+        (Bool, Bool),
+    });
 
-    // #[inline(always)]
-    pub fn cmp_ge(&self, other: &Value) -> Result<bool, String> {
-        match (self, other) {
-            (Value::Int32(lhs), Value::Int32(rhs)) => Ok(lhs >= rhs),
-            (Value::Bool(lhs), Value::Bool(rhs)) => Ok(lhs >= rhs),
-            _ =>
-                Err(
-                    format!(
-                        "Comparison '>=' is not defined for {} and {}",
-                        self.to_value_type().to_type_string(),
-                        other.to_value_type().to_type_string()
-                    )
-                ),
-        }
-    }
+    def_binary_val_method!(cmp_ge, |lhs >= rhs| -> Bool, {
+        (Int32, Int32),
+        (Bool, Bool),
+    });
 
-    // #[inline(always)]
-    pub fn cmp_l(&self, other: &Value) -> Result<bool, String> {
-        match (self, other) {
-            (Value::Int32(lhs), Value::Int32(rhs)) => Ok(lhs < rhs),
-            (Value::Bool(lhs), Value::Bool(rhs)) => Ok(lhs < rhs),
-            _ =>
-                Err(
-                    format!(
-                        "Comparison '<' is not defined for {} and {}",
-                        self.to_value_type().to_type_string(),
-                        other.to_value_type().to_type_string()
-                    )
-                ),
-        }
-    }
+    def_binary_val_method!(cmp_lt, |lhs < rhs| -> Bool, {
+        (Int32, Int32),
+        (Bool, Bool),
+    });
 
-    // #[inline(always)]
-    pub fn cmp_le(&self, other: &Value) -> Result<bool, String> {
-        match (self, other) {
-            (Value::Int32(lhs), Value::Int32(rhs)) => Ok(lhs <= rhs),
-            (Value::Bool(lhs), Value::Bool(rhs)) => Ok(lhs <= rhs),
-            _ =>
-                Err(
-                    format!(
-                        "Comparison '<=' is not defined for {} and {}",
-                        self.to_value_type().to_type_string(),
-                        other.to_value_type().to_type_string()
-                    )
-                ),
-        }
-    }
+    def_binary_val_method!(cmp_le, |lhs <= rhs| -> Bool, {
+        (Int32, Int32),
+        (Bool, Bool),
+    });
 
-    // #[inline(always)]
-    pub fn add(&self, other: &Value) -> Result<Self, String> {
-        match (self, other) {
-            (Value::Int32(lhs), Value::Int32(rhs)) => Ok(Value::Int32(lhs + rhs)),
-            (Value::String(lhs), Value::String(rhs)) =>
-                Ok(Value::String(format!("{}{}", lhs.as_ref(), rhs.as_ref()).into())),
-            _ =>
-                Err(
-                    format!(
-                        "Addition is not defined for {} and {}",
-                        self.to_value_type().to_type_string(),
-                        other.to_value_type().to_type_string()
-                    )
-                ),
-        }
-    }
+    def_binary_val_method!(add, |lhs + rhs| -> Self, {
+        (Int32, Int32),
+        (String, String): format!("{}{}", lhs, rhs).into(),
+    });
 
-    // #[inline(always)]
-    pub fn mul(&self, other: &Value) -> Result<Self, String> {
-        match (self, other) {
-            (Value::Int32(lhs), Value::Int32(rhs)) => Ok(Value::Int32(lhs * rhs)),
-            _ =>
-                Err(
-                    format!(
-                        "Multiplication is not defined for {} and {}",
-                        self.to_value_type().to_type_string(),
-                        other.to_value_type().to_type_string()
-                    )
-                ),
-        }
-    }
+    def_binary_val_method!(mul, |lhs * rhs| -> Self, {
+        (Int32, Int32),
+    });
 
-    // #[inline(always)]
-    pub fn div(&self, other: &Value) -> Result<Self, String> {
-        match (self, other) {
-            (Value::Int32(lhs), Value::Int32(rhs)) => Ok(Value::Int32(lhs / rhs)),
-            _ =>
-                Err(
-                    format!(
-                        "Division is not defined for {} and {}",
-                        self.to_value_type().to_type_string(),
-                        other.to_value_type().to_type_string()
-                    )
-                ),
-        }
-    }
+    def_binary_val_method!(div, |lhs / rhs| -> Self, {
+        (Int32, Int32),
+    });
 
-    // #[inline(always)]
-    pub fn sub(&self, other: &Value) -> Result<Self, String> {
-        match (self, other) {
-            (Value::Int32(lhs), Value::Int32(rhs)) => Ok(Value::Int32(lhs - rhs)),
-            _ =>
-                Err(
-                    format!(
-                        "Subtraction is not defined for {} and {}",
-                        self.to_value_type().to_type_string(),
-                        other.to_value_type().to_type_string()
-                    )
-                ),
-        }
-    }
+    def_binary_val_method!(sub, |lhs - rhs| -> Self, {
+        (Int32, Int32),
+    });
 
-    // #[inline(always)]
-    pub fn neg(&self) -> Result<Self, String> {
-        match self {
-            Value::Int32(int32) => Ok(Value::Int32(-int32)),
-            v => Err(format!("Negation is not defined for {}", v.to_value_type().to_type_string())),
-        }
-    }
+    define_unary_val_method!(neg, |-rhs| -> Self, {
+        (Int32)
+    });
 
-    // #[inline(always)]
-    pub fn not(&self) -> Self {
-        match self {
-            Value::Bool(bool) => Value::Bool(!*bool),
-            Value::Int32(int32) => Value::Bool(*int32 == 0),
-            Value::String(str) => Value::Bool((*str).len() == 0),
-            Value::Function(_) => Value::Bool(false),
-            Value::Void | Value::Empty =>
-                panic!("Cannot do operations on {}", self.to_value_type().to_type_string()),
-        }
-    }
+    define_unary_val_method!(not, |!rhs| -> Bool, {
+        (Int32): *rhs == 0,
+        (Bool),
+        (String): rhs.len() == 0
+    });
 }

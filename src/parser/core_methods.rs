@@ -1,30 +1,25 @@
 use crate::{
     ast::{
-        expr::{ AstFunctionCall, AstIdentifier, AstNativeCall, Expr, ExprBuilder },
+        expr::{ Expr, ExprBuilder, FnCallExpr, IdentifierExpr },
         stmt::{
             BreakStmt,
             ContinueStmt,
+            ExprStmt,
             FunctionArgument,
             LoopStmt,
             ReturnStmt,
             Stmt,
-            Typing,
             VarAssignStmt,
             VarDefStmt,
         },
     },
-    error_handler::CompileError,
+    error_handler::{ CompileError, SrcCharsRange },
+    merge_chars_range,
     value::ValueType,
     vm::instructions::NativeCall,
 };
 
-use super::{
-    precedence::Precedence,
-    token::{ token_type::TokenType::{ self, * }, Token, TokenMetadata },
-    ParseMethod,
-    Parser,
-    RuleArg,
-};
+use super::{ precedence::Precedence, token::TokenMetadata, Parser, TokenType::{ self, * } };
 
 impl<'a> Parser<'a> {
     pub(super) fn statement(&mut self) -> Result<Stmt, CompileError> {
@@ -47,7 +42,6 @@ impl<'a> Parser<'a> {
                 self.var_def(false)
             }
 
-            // TokenTyping => {}
             _ => self.expression_statement(),
         }
     }
@@ -58,7 +52,7 @@ impl<'a> Parser<'a> {
         self.advance();
 
         let return_expr = if !self.is_at_expr_end() {
-            Some(self.expression(Precedence::PrecAssignment.get_next())?)
+            Some(ExprStmt::new(self.expression(Precedence::PrecAssignment.get_next())?))
         } else {
             None
         };
@@ -70,14 +64,14 @@ impl<'a> Parser<'a> {
         self.advance();
         self.consume_expr_end()?;
 
-        Ok(Stmt::ContinueStmt(ContinueStmt))
+        Ok(Stmt::ContinueStmt(ContinueStmt::new()))
     }
 
     pub(super) fn break_stmt(&mut self) -> Result<Stmt, CompileError> {
         self.advance();
         self.consume_expr_end()?;
 
-        Ok(Stmt::BreakStmt(BreakStmt))
+        Ok(Stmt::BreakStmt(BreakStmt::new()))
     }
 
     pub(super) fn loop_stmt(&mut self) -> Result<Stmt, CompileError> {
@@ -114,25 +108,31 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn var_assign(&mut self) -> Result<Stmt, CompileError> {
-        let target_expr = self.expression(Precedence::PrecCall)?;
+        let target_expr = ExprStmt::new(self.expression(Precedence::PrecCall)?);
 
-        // Report entire lhs of assignment and change msg
         if !self.get_current().get_ttype().is(&TokenAssign) {
             let mut token_vec = vec![self.get_previous().get_metadata()];
             while !self.get_current().get_ttype().is(&TokenAssign) {
                 token_vec.push(self.get_current().get_metadata());
                 self.advance();
             }
-            token_vec.reverse();
 
             return Err(
-                CompileError::new("Invalid left-hand side of assignment".to_string(), token_vec)
+                CompileError::new(
+                    "Invalid left-hand side of assignment".to_string(),
+                    merge_chars_range!(
+                        token_vec
+                            .iter()
+                            .map(|m| (*m).into())
+                            .collect()
+                    )
+                )
             );
         }
 
         self.advance();
 
-        let value = self.expression(Precedence::PrecAssignment.get_next())?;
+        let value = ExprStmt::new(self.expression(Precedence::PrecAssignment.get_next())?);
 
         Ok(Stmt::VarAssignStmt(VarAssignStmt { target_expr, value }))
     }
@@ -155,7 +155,7 @@ impl<'a> Parser<'a> {
                 TokenDefine,
                 format!(
                     "Expected ':=' in variable definition but got '{}'",
-                    self.get_current().get_lexeme(&self.source)
+                    self.get_current().get_lexeme(&self.source).get_lexeme_str()
                 ).as_str()
             )?;
 
@@ -163,62 +163,53 @@ impl<'a> Parser<'a> {
                 return Err(
                     CompileError::new(
                         "Missing right hand side of variable definition".to_string(),
-                        vec![self.get_previous().get_metadata()]
+                        self.get_previous().get_metadata().into()
                     )
                 );
             }
             let value = self.expression(Precedence::PrecAssignment.get_next())?;
 
-            Some(value)
+            Some(ExprStmt::new(value))
         } else {
             None
         };
 
-        Ok(Stmt::VarDefStmt(VarDefStmt::new(lexeme, found_type, is_mutable, value, token_metadata)))
-
-        /*
-        if !self.is_at_expr_end() {
-            if
-                self.consume(
-                    TokenDefine,
-                    format!(
-                        "Expected ':=' in variable definition but got '{}'",
-                        self.get_current().get_lexeme(&self.source)
-                    ).as_str()
+        Ok(
+            Stmt::VarDefStmt(
+                VarDefStmt::new(
+                    lexeme.take_lexeme_rc(),
+                    found_type,
+                    is_mutable,
+                    value,
+                    token_metadata
                 )
-            {
-                if !self.is_at_expr_end() {
-                    self.parse_precedence(Precedence::PrecAssignment.get_next(), None);
-                    self.consume_expr_end();
-                } else {
-                    self.report_compile_error(
-                        "Missing right hand side of variable definition".to_string(),
-                        vec![self.get_previous().get_metadata()]
-                    );
-                }
-            }
-        }
-
-        let result = self.ast_generator.emit_variable_definition(
-            lexeme,
-            identifier_metadata,
-            found_type,
-            is_mutable,
-            last_token_in_definition
-        );
-
-        if let Err((message, token_vec)) = result {
-            self.report_compile_error(message, token_vec);
-        }
-        */
+            )
+        )
     }
 
+    // pub(super) fn resolve_type(&mut self) -> Result<Option<ValueType>, >
+
     pub(super) fn resolve_type(&mut self) -> Result<Option<ValueType>, Vec<TokenMetadata>> {
-        let found_type = match self.get_current().get_ttype() {
+        // loop {
+        //     match self.get_current().get_ttype() {
+        //         TokenReference => {
+        //             if let Some(value_type) = &mut value_type {
+        //                 value_type.append_type();
+        //             } else {
+        //                 value_type = ValueType::Ref(Box::new(x));
+        //             }
+        //         }
+        //         TokenMutableReference => {
+
+        //         }
+        //     }
+        // }
+
+        let resolved_type = match self.get_current().get_ttype() {
             TokenIdentifier => {
                 self.advance();
                 let type_lexeme = self.get_previous().get_lexeme(&&self.source);
-                match type_lexeme.as_ref() {
+                match type_lexeme.get_lexeme_str() {
                     "i32" => Ok(Some(ValueType::Int32)),
                     "bool" => Ok(Some(ValueType::Bool)),
                     _ => Ok(None), // This should make a custom type
@@ -227,7 +218,7 @@ impl<'a> Parser<'a> {
             _ => Err(vec![self.get_current().get_metadata()]),
         };
 
-        found_type
+        resolved_type
     }
 
     pub(super) fn expression_statement(&mut self) -> Result<Stmt, CompileError> {
@@ -235,7 +226,7 @@ impl<'a> Parser<'a> {
 
         self.consume_expr_end()?;
 
-        Ok(Stmt::ExprStmt(expr))
+        Ok(Stmt::ExprStmt(ExprStmt::new(expr)))
 
         /*
         match self.ast_generator.push_expr() {
@@ -295,9 +286,9 @@ impl<'a> Parser<'a> {
                 CompileError::new(
                     format!(
                         "Unexpected token: '{}' (no prefix rule)",
-                        self.get_previous().get_lexeme(&self.source)
+                        self.get_previous().get_lexeme(&self.source).get_lexeme_str()
                     ),
-                    vec![self.get_previous().get_metadata()]
+                    self.get_previous().get_metadata().into()
                 )
             );
         }
@@ -326,7 +317,7 @@ impl<'a> Parser<'a> {
                     TokenComma,
                     format!(
                         "Expected ',' between call arguments, but received: '{}'",
-                        self.get_current().get_lexeme(&self.source)
+                        self.get_current().get_lexeme(&self.source).get_lexeme_str()
                     ).as_str()
                 )?;
             }
@@ -336,18 +327,17 @@ impl<'a> Parser<'a> {
             TokenRightParen,
             format!(
                 "Expected ')' in function call but got: '{}'",
-                self.get_current().get_lexeme(&self.source)
+                self.get_current().get_lexeme(&self.source).get_lexeme_str()
             ).as_str()
         )?;
 
-        let native_call = NativeCall::get_native(&lexeme);
+        let native_call = NativeCall::get_native(lexeme.get_lexeme_str());
 
         if let Some(native_call) = native_call {
-            expr_builder.emit_native_call(AstNativeCall::new(metadata, fn_args, native_call));
+            panic!("Native calls not supported yet!");
+            // expr_builder.emit_native_call(AstNativeCall::new(metadata, fn_args, native_call));
         } else {
-            expr_builder.emit_fn_call(
-                AstFunctionCall::new(lexeme, metadata, fn_args, vec![], ValueType::Void)
-            );
+            expr_builder.emit_fn_call(FnCallExpr::new(lexeme.take_lexeme_rc(), metadata, fn_args));
         }
 
         Ok(())
@@ -360,7 +350,9 @@ impl<'a> Parser<'a> {
         let token = self.get_previous();
         let lexeme = token.get_lexeme(&self.source);
 
-        expr_builder.emit_ident_lookup(AstIdentifier::new(lexeme, token.get_metadata()));
+        expr_builder.emit_ident_lookup(
+            IdentifierExpr::new(lexeme.take_lexeme_rc(), token.get_metadata())
+        );
 
         Ok(())
     }
@@ -382,7 +374,7 @@ impl<'a> Parser<'a> {
                 TokenIdentifier,
                 format!(
                     "Expected identifer but got '{}' Syntax: <identifier> <type>",
-                    self.get_current().get_lexeme(&self.source)
+                    self.get_current().get_lexeme(&self.source).get_lexeme_str()
                 ).as_str()
             )?;
 
@@ -404,13 +396,23 @@ impl<'a> Parser<'a> {
                         None => panic!("Custom types not yet supported"),
                     }
                 Err(error_tokens) => {
-                    return Err(CompileError::new("Invalid type".to_string(), error_tokens));
+                    return Err(
+                        CompileError::new(
+                            "Invalid type".to_string(),
+                            merge_chars_range!(
+                                error_tokens
+                                    .iter()
+                                    .map(|m| (*m).into())
+                                    .collect()
+                            )
+                        )
+                    );
                 }
             };
 
             args.push(FunctionArgument {
                 is_mutable,
-                name: ident_lexeme,
+                name: ident_lexeme.take_lexeme_rc(),
                 value_type: arg_type,
                 metadata,
             });
@@ -435,9 +437,9 @@ impl<'a> Parser<'a> {
                     CompileError::new(
                         format!(
                             "Expected operand but got: '{}'",
-                            self.get_previous().get_lexeme(&self.source)
+                            self.get_previous().get_lexeme(&self.source).get_lexeme_str()
                         ),
-                        vec![self.get_previous().get_metadata()]
+                        self.get_previous().get_metadata().into()
                     )
                 );
             }
@@ -460,7 +462,12 @@ impl<'a> Parser<'a> {
                         return Err(
                             CompileError::new(
                                 "Invalid function return type".to_string(),
-                                error_tokens
+                                merge_chars_range!(
+                                    error_tokens
+                                        .iter()
+                                        .map(|m| (*m).into())
+                                        .collect()
+                                )
                             )
                         );
                     }
@@ -470,9 +477,9 @@ impl<'a> Parser<'a> {
                     CompileError::new(
                         format!(
                             "Expected function return type, but got: {}",
-                            self.get_current().get_lexeme(&self.source)
+                            self.get_current().get_lexeme(&self.source).get_lexeme_str()
                         ),
-                        vec![self.get_current().get_metadata()]
+                        self.get_current().get_metadata().into()
                     )
                 );
             }

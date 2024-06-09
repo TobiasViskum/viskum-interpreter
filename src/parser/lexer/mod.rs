@@ -1,7 +1,7 @@
 use core::panic;
 use std::{ marker::PhantomData, mem, time::Instant };
 
-use crate::parser::token::{ token_type::TokenType, Token };
+use crate::parser::{ token::Token, TokenType };
 
 mod core_methods;
 mod helper_methods;
@@ -73,14 +73,22 @@ impl<'a> Lexer<'a> {
             ')' => self.make_token(TokenType::TokenRightParen),
             '{' => self.make_token(TokenType::TokenLeftCurlyBrace),
             '}' => self.make_token(TokenType::TokenRightCurlyBrace),
-            '[' => self.make_token(TokenType::TokenLeftSquareBracket),
-            ']' => self.make_token(TokenType::TokenRightSquareBracket),
+            '[' => self.make_token(TokenType::TokenLeftSquareBrace),
+            ']' => self.make_token(TokenType::TokenRightSquareBrace),
             '+' => self.make_token(TokenType::TokenPlus),
             '-' => self.make_token(TokenType::TokenMinus),
             '*' => self.make_token(TokenType::TokenStar),
             '/' => self.make_token(TokenType::TokenSlash),
             ';' => self.make_token(TokenType::TokenSemicolon),
             ',' => self.make_token(TokenType::TokenComma),
+            '&' => {
+                if self.is_keyword(1, 3, "mut") {
+                    self.current += 3;
+                    self.make_token(TokenType::TokenMutableReference)
+                } else {
+                    self.make_token(TokenType::TokenReference)
+                }
+            }
             '"' => {
                 self.make_token(TokenType::TokenDoubleQuote);
                 self.start = self.current;

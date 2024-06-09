@@ -4,27 +4,90 @@ use colored::Colorize;
 // const AT_STR: &str = "at: ";
 const CONTEXT_RANGE: isize = 5;
 
-enum _ErrorType {
+enum ErrorType {
     Error,
     Warning,
 }
 
 #[derive(Debug)]
+pub enum InternalErrorCode {
+    Compile(usize),
+    Runtime(usize),
+}
+
+#[derive(Debug)]
 pub struct InternalError {
+    error_code: InternalErrorCode,
     message: String,
+}
+
+impl InternalError {
+    pub fn new(error_code: InternalErrorCode, message: &str) -> Self {
+        Self {
+            error_code,
+            message: message.to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SrcCharsRange {
+    char_info: (usize, usize),
+    line_info: (usize, usize),
+}
+
+impl Into<TokenMetadata> for SrcCharsRange {
+    fn into(self) -> TokenMetadata {
+        TokenMetadata::new(self.char_info.0, self.char_info.1 - self.char_info.0, self.line_info.0)
+    }
+}
+
+impl SrcCharsRange {
+    pub fn new(char_info: (usize, usize), line_info: (usize, usize)) -> Self {
+        Self {
+            char_info,
+            line_info,
+        }
+    }
+
+    pub fn dec_char_by(&mut self, amount: usize) {
+        self.char_info.0 -= amount;
+    }
+
+    pub fn inc_char_by(&mut self, amount: usize) {
+        self.char_info.1 += amount;
+    }
+
+    pub fn merge(&mut self, other: &Self) {
+        let other_char_info = other.char_info;
+        if other_char_info.0 < self.char_info.0 {
+            self.char_info.0 = other_char_info.0;
+        }
+        if other_char_info.1 > self.char_info.1 {
+            self.char_info.1 = other_char_info.1;
+        }
+
+        let other_line_info = other.line_info;
+        if other_line_info.0 < self.line_info.0 {
+            self.line_info.0 = other_line_info.0;
+        }
+        if other_line_info.1 > self.line_info.1 {
+            self.line_info.1 = other_line_info.1;
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct CompileError {
     message: String,
-    error_metadata: Vec<TokenMetadata>,
+    chars_range: SrcCharsRange,
 }
 
 impl CompileError {
-    pub fn new(message: String, error_metadata: Vec<TokenMetadata>) -> Self {
+    pub fn new(message: String, chars_range: SrcCharsRange) -> Self {
         Self {
             message,
-            error_metadata,
+            chars_range,
         }
     }
 
@@ -32,8 +95,8 @@ impl CompileError {
         self.message.clone()
     }
 
-    pub fn get_error_metadata(&self) -> Vec<TokenMetadata> {
-        self.error_metadata.clone()
+    pub fn get_metadata(&self) -> SrcCharsRange {
+        self.chars_range
     }
 }
 
@@ -41,48 +104,63 @@ impl CompileError {
 pub struct ErrorHandler {
     _compile_warnings: Vec<CompileError>,
     compile_errors: Vec<CompileError>,
+    src: String,
 }
 
 impl ErrorHandler {
-    pub fn new() -> Self {
-        Self { _compile_warnings: Vec::new(), compile_errors: Vec::new() }
+    pub fn new(src: String) -> Self {
+        Self { src, _compile_warnings: Vec::new(), compile_errors: Vec::new() }
     }
 
-    pub fn report_compile_error(&mut self, message: String, error_metadata: Vec<TokenMetadata>) {
-        self.compile_errors.push(CompileError { message, error_metadata });
+    pub fn report_compile_error(&mut self, compile_error: CompileError) {
+        self.compile_errors.push(compile_error);
+    }
+
+    pub fn report_many_compile_errors(&mut self, compile_errors: Vec<CompileError>) {
+        for compile_error in compile_errors {
+            self.report_compile_error(compile_error);
+        }
     }
 
     pub fn has_error(&self) -> bool {
         !self.compile_errors.is_empty()
     }
 
-    pub fn print_errors(&self, src: &str) {
-        eprintln!("{}", "Errors:\n".red().underline().bold());
+    pub fn print_errors(&self) {
+        if self.compile_errors.len() > 0 {
+            eprintln!("{}", "Errors:\n".red().underline().bold());
+        }
         for error in &self.compile_errors {
-            let error_metadata = &error.error_metadata;
-            if error.error_metadata.len() == 1 {
-                let metadata = &error.error_metadata[0];
-                eprintln!("[line {}] {}", metadata.get_line(), error.message);
-                eprintln!("-------> {}", self.get_five_char_context(src, metadata));
-                // eprintln!("{}", self.get_arrows_up_to_error_token(metadata, ErrorType::Error));
-            } else {
-                let first = error_metadata.last().unwrap();
-                let last = error_metadata.first().unwrap();
+            println!("Error: {}", error.message);
+            // let error_metadata = &error.error_metadata;
+            // if error.error_metadata.len() == 1 {
+            //     let metadata = &error.error_metadata[0];
+            //     eprintln!("[line {}] {}", metadata.get_line(), error.message);
+            //     eprintln!("-------> {}", self.get_five_char_context(self.src.as_str(), metadata));
+            // eprintln!("{}", self.get_arrows_up_to_error_token(metadata, ErrorType::Error));
+            // } else {
 
-                let combined_metadata = TokenMetadata::new(
-                    first.get_start(),
-                    last.get_start() - first.get_start() + last.get_len(),
-                    last.get_line(),
-                    last.get_ttype()
-                );
+            // let first = error_metadata.last().unwrap();
+            // let last = error_metadata.first().unwrap();
 
-                eprintln!("[line {}] {}", combined_metadata.get_line(), error.message);
-                eprintln!("-------> {}", self.get_five_char_context(src, &combined_metadata));
-                // eprintln!(
-                //     "{}",
-                //     self.get_arrows_up_to_error_token(&combined_metadata, ErrorType::Error)
-                // );
-            }
+            // let combined_metadata = TokenMetadata::new(
+            //     first.get_start(),
+            //     last.get_start() - first.get_start() + last.get_len(),
+            //     last.get_line(),
+            //     last.get_ttype()
+            // );
+
+            // eprintln!("[line {}] {}", combined_metadata.get_line(), error.message);
+            // eprintln!(
+            //     "-------> {}",
+            //     self.get_five_char_context(self.src.as_str(), &combined_metadata)
+            // );
+
+            // eprintln!(
+            //     "{}",
+            //     self.get_arrows_up_to_error_token(&combined_metadata, ErrorType::Error)
+            // );
+            // }
         }
     }
 
@@ -117,7 +195,7 @@ impl ErrorHandler {
     fn _get_arrows_up_to_error_token(
         &self,
         token: &TokenMetadata,
-        _error_type: _ErrorType
+        _error_type: ErrorType
     ) -> String {
         let start = token.get_start() as isize;
 

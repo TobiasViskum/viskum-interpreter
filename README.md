@@ -12,6 +12,10 @@
 
 ## TODO
 
+- Constant folding should happen during the AST. This should also check if "variables" have so it can possibly use them. Also eliminate scopes if CFG if possible (this should be thought about in depth before changing this. Find a way to get popped variables then)
+
+- Rewrite the way a directed acyclic graph works. All basic blocks (linear sequence of stmts that do jump) should be in its own cfg node which is called the Process node. Right now each stmt gets its own node, which makes optimizations harder
+
 - Dead code analysis also have to scan for unnused variables
 
 - Remove: PrecAssignment and other useless precedences (probably the only one) because '=' or ':=' is not part of a "expresison" but more of a way to structure an assignment statement.
@@ -25,6 +29,10 @@
 
 - FIX: Right now the jmp instructions in the scope is after end scope and jumps to start scope meaning new scopes are created all the time. The jump instructions should be between the StartScpe and EndScope
 
+- Use an Arena for the AST instead to avoid countless heap allocations: https://users.rust-lang.org/t/is-there-a-better-way-to-represent-an-abstract-syntax-tree/9549/4
+
 ## Machine code???
 
 - MLIR: https://github.com/raviqqe/melior
+
+- I should probalby use LLVM. Write my own backend for LLVM which means I have to learn LLVM syntax (it would be cool if the language could both be interpreted and compiled :))

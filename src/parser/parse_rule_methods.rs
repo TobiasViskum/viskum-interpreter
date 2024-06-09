@@ -1,33 +1,32 @@
-use std::fmt::format;
-
 use super::precedence::Precedence::*;
-use crate::ast;
-use crate::ast::expr::{ AstIdentifier, AstValue, Expr, ExprBuilder };
-use crate::ast::stmt::{ FunctionStmt, IfStmt, ScopeStmt, Stmt, TypeDefStmt };
+use crate::ast::expr::{ ExprBuilder, LiteralExpr };
+use crate::ast::stmt::{ ExprStmt, FunctionStmt, IfStmt, ScopeStmt, Stmt };
 use crate::error_handler::CompileError;
-use crate::operations::{ BinaryOp, UnaryOp };
-use crate::parser::token::token_type::TokenType::{ self, * };
-use crate::value::Value;
-
-use super::{ ParseMethod, Parser, RuleArg };
+use crate::value::{ Value, ValueType };
+use super::Parser;
+use super::TokenType::{ self, * };
 
 impl<'a> Parser<'a> {
     pub fn number(&mut self, expr_builder: &mut ExprBuilder) -> Result<(), CompileError> {
         let token = self.get_previous();
         let lexeme = token.get_lexeme(&self.source);
 
-        match lexeme.parse::<i32>() {
-            Ok(int_value) => {
-                expr_builder.emit_constant_literal(
-                    AstValue::new(Value::Int32(int_value), token.get_metadata())
+        let value = lexeme.parse_number();
+
+        match value {
+            Some(val) => {
+                expr_builder.emit_constant_literal(LiteralExpr::new(val, token.get_metadata()));
+                Ok(())
+            }
+            None => {
+                return Err(
+                    CompileError::new(
+                        format!("Could not parse number '{}'", lexeme.get_lexeme_str()),
+                        self.get_previous().get_metadata().into()
+                    )
                 );
             }
-            Err(e) => {
-                eprintln!("Could not parse i32. In c.number(RuleArg): {}", e);
-            }
         }
-
-        Ok(())
     }
 
     pub fn mut_var_def(&mut self) -> Result<Stmt, CompileError> {
@@ -38,7 +37,11 @@ impl<'a> Parser<'a> {
             TokenFunction => {
                 panic!("Functions cannot be mutable");
             }
-            _ => panic!("Unexpected: {}", self.get_current().get_lexeme(&self.source)),
+            _ =>
+                panic!(
+                    "Unexpected: {}",
+                    self.get_current().get_lexeme(&self.source).get_lexeme_str()
+                ),
         }
     }
 
@@ -56,7 +59,7 @@ impl<'a> Parser<'a> {
             TokenType::TokenLeftCurlyBrace,
             format!(
                 "Expected '{{' but got: {}",
-                self.get_current().get_lexeme(&self.source)
+                self.get_current().get_lexeme(&self.source).get_lexeme_str()
             ).as_str()
         )?;
 
@@ -69,8 +72,8 @@ impl<'a> Parser<'a> {
             match self.statement() {
                 Ok(stmt) =>
                     match stmt {
-                        Stmt::FunctionStmt(_) => scope_stmt.forwards_declarations.push(stmt),
-                        _ => scope_stmt.cf_stmts.push(stmt),
+                        Stmt::FunctionStmt(_) => scope_stmt.push_forward_stmt(stmt),
+                        _ => scope_stmt.push_stmt(stmt),
                     }
                 Err(e) => {
                     // RCE
@@ -112,8 +115,11 @@ impl<'a> Parser<'a> {
         if self.is_at_end() {
             return Err(
                 CompileError::new(
-                    format!("Unexpected token: {}", self.get_previous().get_lexeme(self.source)),
-                    vec![self.get_previous().get_metadata()]
+                    format!(
+                        "Unexpected token: {}",
+                        self.get_previous().get_lexeme(self.source).get_lexeme_str()
+                    ),
+                    self.get_previous().get_metadata().into()
                 )
             );
         } else {
@@ -121,14 +127,17 @@ impl<'a> Parser<'a> {
                 TokenString,
                 format!(
                     "Unexpected token: {}",
-                    self.get_previous().get_lexeme(self.source)
+                    self.get_previous().get_lexeme(self.source).get_lexeme_str()
                 ).as_str()
             )?;
         }
 
         let token = self.get_previous();
         expr_builder.emit_constant_literal(
-            AstValue::new(Value::String(token.get_lexeme(&self.source)), token.get_metadata())
+            LiteralExpr::new(
+                Value::String(token.get_lexeme(&self.source).take_lexeme_rc()),
+                token.get_metadata()
+            )
         );
 
         self.consume(TokenDoubleQuote, "Expected '\"' after string")?;
@@ -142,17 +151,20 @@ impl<'a> Parser<'a> {
         match token.get_ttype() {
             TokenFalse =>
                 expr_builder.emit_constant_literal(
-                    AstValue::new(Value::Bool(false), token.get_metadata())
+                    LiteralExpr::new(Value::Bool(false), token.get_metadata())
                 ),
             TokenTrue =>
                 expr_builder.emit_constant_literal(
-                    AstValue::new(Value::Bool(true), token.get_metadata())
+                    LiteralExpr::new(Value::Bool(true), token.get_metadata())
                 ),
             _ => {
                 return Err(
                     CompileError::new(
-                        format!("Unexpected literal: '{}'", token.get_lexeme(&self.source)),
-                        vec![token.get_metadata()]
+                        format!(
+                            "Unexpected literal: '{}'",
+                            token.get_lexeme(&self.source).get_lexeme_str()
+                        ),
+                        token.get_metadata().into()
                     )
                 );
             }
@@ -164,17 +176,17 @@ impl<'a> Parser<'a> {
     pub fn if_stmt(&mut self) -> Result<IfStmt, CompileError> {
         self.advance();
 
-        let condition = self.expression(PrecAssignment)?;
+        let condition = ExprStmt::new(self.expression(PrecAssignment)?);
 
         let true_block = self.block()?;
 
         let false_block = if self.get_current().get_ttype().is(&TokenType::TokenElse) {
             self.advance();
             if self.get_current().get_ttype().is(&TokenType::TokenIf) {
-                Some(Box::new(self.if_stmt()?))
+                Some(self.if_stmt()?)
             } else {
                 let true_block = self.block()?;
-                Some(Box::new(IfStmt::new(None, true_block, None)))
+                Some(IfStmt::new(None, true_block, None))
             }
         } else {
             None
@@ -198,12 +210,14 @@ impl<'a> Parser<'a> {
             }
         };
 
-        let return_type = match self.resolve_function_return_type() {
-            Ok(v) => v,
-            Err(e) => {
-                return Err(e);
+        let return_type = (
+            match self.resolve_function_return_type() {
+                Ok(v) => v,
+                Err(e) => {
+                    return Err(e);
+                }
             }
-        };
+        ).unwrap_or(ValueType::Void);
 
         let mut body = ScopeStmt::new();
 
@@ -213,7 +227,13 @@ impl<'a> Parser<'a> {
         }
         self.consume(TokenRightCurlyBrace, "Expected '}' after function body")?;
 
-        let function_stmt = FunctionStmt::new(lexeme, function_args, return_type, body, metadata);
+        let function_stmt = FunctionStmt::new(
+            lexeme.take_lexeme_rc(),
+            function_args,
+            return_type,
+            body,
+            metadata
+        );
 
         Ok(Stmt::FunctionStmt(function_stmt))
     }
@@ -227,52 +247,52 @@ impl<'a> Parser<'a> {
     }
 
     pub fn unary(&mut self, expr_builder: &mut ExprBuilder) -> Result<(), CompileError> {
-        let operator_type = *self.get_previous().get_ttype();
+        let unary_token = self.get_previous().clone();
 
-        self.parse_precedence(PrecAssignment.get_next(), expr_builder)?;
+        self.parse_precedence(PrecUnary.get_next(), expr_builder)?;
 
-        let unary_op = match operator_type.parse_unary() {
+        let unary_op = match unary_token.get_ttype().parse_unary() {
             Ok(op) => op,
             Err(_) => {
                 return Err(
                     CompileError::new(
                         format!(
                             "Token '{}' is not a valid unary operator",
-                            self.get_previous().get_lexeme(&self.source)
+                            unary_token.get_lexeme(&self.source).get_lexeme_str()
                         ),
-                        vec![self.get_previous().get_metadata()]
+                        unary_token.get_metadata().into()
                     )
                 );
             }
         };
 
-        expr_builder.emit_unary_op(unary_op)
+        expr_builder.emit_unary_op(unary_op, unary_token.get_metadata())
     }
 
     pub fn binary(&mut self, expr_builder: &mut ExprBuilder) -> Result<(), CompileError> {
-        let operator_type = *self.get_previous().get_ttype();
+        let binary_token = self.get_previous().clone();
 
         self.parse_precedence(
-            self.get_parse_rule(&operator_type).get_precedence().get_next(),
+            self.get_parse_rule(&binary_token.get_ttype()).get_precedence().get_next(),
             expr_builder
         )?;
 
-        let binary_op = match operator_type.parse_binary() {
+        let binary_op = match binary_token.get_ttype().parse_binary() {
             Ok(op) => op,
             Err(_) => {
                 return Err(
                     CompileError::new(
                         format!(
                             "Token '{}' is not a valid binary operator",
-                            self.get_previous().get_lexeme(&self.source)
+                            binary_token.get_lexeme(&self.source).get_lexeme_str()
                         ),
-                        vec![self.get_previous().get_metadata()]
+                        binary_token.get_metadata().into()
                     )
                 );
             }
         };
 
-        expr_builder.emit_binary_op(binary_op)
+        expr_builder.emit_binary_op(binary_op, binary_token.get_metadata())
     }
 
     pub(super) fn error(&mut self, expr_builder: &mut ExprBuilder) -> Result<(), CompileError> {
@@ -280,12 +300,15 @@ impl<'a> Parser<'a> {
         let msg = error_token.get_message();
 
         if let Some(msg) = msg {
-            Err(CompileError::new(msg.to_string(), vec![error_token.get_metadata()]))
+            Err(CompileError::new(msg.to_string(), error_token.get_metadata().into()))
         } else {
             Err(
                 CompileError::new(
-                    format!("Unexpected token: {}", error_token.get_lexeme(&self.source)),
-                    vec![error_token.get_metadata()]
+                    format!(
+                        "Unexpected token: {}",
+                        error_token.get_lexeme(&self.source).get_lexeme_str()
+                    ),
+                    error_token.get_metadata().into()
                 )
             )
         }

@@ -232,9 +232,9 @@ impl Instructions {
 
                     #[cfg(debug_assertions)]
                     {
-                        if let Value::Function(func) = &src {
-                            func.instructions.dissassemble();
-                        }
+                        // if let Value::Function(func) = &src {
+                        //     func.instructions.dissassemble();
+                        // }
                     }
 
                     stack.push(src, stack_pos);
@@ -260,17 +260,22 @@ impl Instructions {
                         _ => panic!("Expected CMP instruction"),
                     };
 
-                    let condition = (
-                        match instruction {
-                            Instruction::JE { .. } => lhs.cmp_e(&rhs),
-                            Instruction::JNE { .. } => lhs.cmp_ne(&rhs),
-                            Instruction::JG { .. } => lhs.cmp_g(&rhs),
-                            Instruction::JGE { .. } => lhs.cmp_ge(&rhs),
-                            Instruction::JL { .. } => lhs.cmp_l(&rhs),
-                            Instruction::JLE { .. } => lhs.cmp_le(&rhs),
-                            _ => unreachable!(),
-                        }
-                    ).unwrap();
+                    let condition = match
+                        (
+                            match instruction {
+                                Instruction::JE { .. } => lhs.cmp_eq(&rhs),
+                                Instruction::JNE { .. } => lhs.cmp_ne(&rhs),
+                                Instruction::JG { .. } => lhs.cmp_gt(&rhs),
+                                Instruction::JGE { .. } => lhs.cmp_ge(&rhs),
+                                Instruction::JL { .. } => lhs.cmp_lt(&rhs),
+                                Instruction::JLE { .. } => lhs.cmp_le(&rhs),
+                                _ => unreachable!(),
+                            }
+                        ).unwrap()
+                    {
+                        Value::Bool(b) => b,
+                        _ => panic!("Expected bool"),
+                    };
 
                     *ip = if condition { *true_pos } else { *false_pos };
 
@@ -300,7 +305,7 @@ impl Instructions {
 
                     let val = match instruction {
                         Instruction::Neg { .. } => src.neg().unwrap(),
-                        Instruction::Truthy { .. } => src.not(),
+                        Instruction::Truthy { .. } => src.not().unwrap(),
                         _ => unreachable!(),
                     };
 

@@ -115,8 +115,8 @@ pub enum NativeCall {
 }
 
 impl NativeCall {
-    pub fn get_native(lexeme: &Rc<str>) -> Option<Self> {
-        match lexeme.as_ref() {
+    pub fn get_native(lexeme: &str) -> Option<Self> {
+        match lexeme {
             "print" => Some(NativeCall::Print),
             "now" => Some(NativeCall::Now),
             _ => None,

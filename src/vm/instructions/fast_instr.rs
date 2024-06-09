@@ -130,7 +130,9 @@ impl FastInstr {
             panic!("Greater than u40 max in load_i32");
         }
 
-        Self(Self::place_b1(Opcode::LoadInt32 as u8) | (const_table_pos << 24))
+        Self(
+            Self::place_b1(Opcode::LoadInt32 as u8) | Self::place_b2(dst) | (const_table_pos << 24)
+        )
     }
 
     pub fn new_load_string(dst: u8, string: String) -> (FastInstr, Vec<FastInstr>) {

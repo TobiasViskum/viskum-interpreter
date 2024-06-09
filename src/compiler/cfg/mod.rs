@@ -282,12 +282,12 @@ impl CFG {
                     ));
                     let (stack_pos, is_relative) = vm_symbol_table.insert_variable(fn_name);
 
-                    instructions.borrow_mut().push(Instruction::Define {
-                        stack_loc: StackLocation::new(stack_pos, is_relative),
-                        src: InstructionSrc::Constant {
-                            val: Value::Function(Function::new(*args_count)),
-                        },
-                    });
+                    // instructions.borrow_mut().push(Instruction::Define {
+                    //     stack_loc: StackLocation::new(stack_pos, is_relative),
+                    //     src: InstructionSrc::Constant {
+                    //         val: Value::Function(Function::new(*args_count)),
+                    //     },
+                    // });
                 }
                 CFGNode::CfgStart { scope, .. } => {
                     if let Some(pop_instruction) = vm_symbol_table.adjust_scope(*scope) {

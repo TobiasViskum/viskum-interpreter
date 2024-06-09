@@ -1,4 +1,4 @@
-use crate::parser::token::{ Token, token_type::TokenType };
+use crate::parser::{ token::Token, TokenType };
 
 use super::{ is_alphabetic, Lexer };
 

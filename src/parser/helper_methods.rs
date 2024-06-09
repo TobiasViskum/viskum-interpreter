@@ -1,11 +1,12 @@
-use crate::{
-    ast::{ stmt::FunctionArgument, Ast },
-    error_handler::CompileError,
-    parser::token::{ token_type::TokenType, Token },
-    value::ValueType,
-};
+use crate::{ ast::{ stmt::FunctionArgument, Ast }, error_handler::CompileError, value::ValueType };
 
-use super::{ parse_rule::{ ParseRule, PARSE_RULES }, token::TokenMetadata, Parser };
+use super::{
+    parse_rule::{ ParseRule },
+    token::{ Token, TokenMetadata },
+    Parser,
+    TokenType,
+    PARSE_RULES,
+};
 
 impl<'a> Parser<'a> {
     pub(super) fn advance(&mut self) {
@@ -47,10 +48,10 @@ impl<'a> Parser<'a> {
                 let msg = self.get_current().get_message().unwrap().to_string();
                 let metadata = self.get_current().get_metadata();
                 self.advance();
-                Err(CompileError::new(msg, vec![metadata]))
+                Err(CompileError::new(msg, metadata.into()))
             } else {
                 self.advance();
-                Err(CompileError::new(msg.to_string(), vec![self.get_current().get_metadata()]))
+                Err(CompileError::new(msg.to_string(), self.get_current().get_metadata().into()))
             }
         }
     }
@@ -90,15 +91,17 @@ impl<'a> Parser<'a> {
                 if self.get_current().get_line() <= prev_line {
                     if self.get_current().get_ttype() == &TokenType::TokenError {
                         let msg = self.get_current().get_message().unwrap().to_string();
-                        return Err(CompileError::new(msg, vec![self.get_current().get_metadata()]));
+                        return Err(
+                            CompileError::new(msg, self.get_current().get_metadata().into())
+                        );
                     } else {
                         return Err(
                             CompileError::new(
                                 format!(
                                     "Unexpected end of expression. Expected new line or ';' but got {}",
-                                    self.get_current().get_lexeme(&self.source)
+                                    self.get_current().get_lexeme(&self.source).get_lexeme_str()
                                 ),
-                                vec![self.get_current().get_metadata()]
+                                self.get_current().get_metadata().into()
                             )
                         );
                     }
@@ -126,7 +129,7 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn get_parse_rule(&self, ttype: &TokenType) -> &ParseRule {
-        PARSE_RULES.get(*ttype as usize).unwrap()
+        self.parse_rules.get(*ttype as usize).unwrap()
     }
 
     pub(super) fn enter_panic_mode(&mut self) {
@@ -137,8 +140,8 @@ impl<'a> Parser<'a> {
         self.panic_mode = false;
     }
 
-    pub(super) fn report_compile_error(&mut self, message: String, token: Vec<TokenMetadata>) {
-        self.error_handler.report_compile_error(message, token);
+    pub(super) fn report_compile_error(&mut self, err: CompileError) {
+        self.error_handler.report_compile_error(err);
         self.enter_panic_mode();
     }
 }

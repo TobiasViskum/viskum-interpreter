@@ -1,26 +1,18 @@
-use std::mem;
+use stmt::ScopeStmt;
 
-use crate::{
-    error_handler::ErrorHandler,
-    operations::{ BinaryOp, UnaryOp },
-    parser::{ ast_generator::AstEnvironment, token::TokenMetadata },
-    value::ValueType,
-};
-
-use self::{
-    expr::Expr,
-    stmt::{ FunctionArgument, FunctionStmt, ScopeStmt, Stmt },
-    ast_symbol_table::AstSymbolTable,
-};
+use crate::{ error_handler::ErrorHandler, Dissasemble };
+use self::ast_symbol_table::AstSymbolTable;
+use crate::ast::stmt::StmtTrait;
 
 mod generate_cfg;
+
 pub mod expr;
 pub mod stmt;
 pub mod ast_symbol_table;
 
 #[derive(Debug)]
 pub struct Ast {
-    pub main_scope: ScopeStmt,
+    main_scope: ScopeStmt,
     pub ast_symbol_table: AstSymbolTable,
 }
 
@@ -32,7 +24,16 @@ impl Ast {
         }
     }
 
-    pub fn type_check(&mut self, error_handler: &mut ErrorHandler) {
-        self.main_scope.type_check(&mut self.ast_symbol_table, error_handler);
+    pub fn type_check_and_constant_fold(&mut self, error_handler: &mut ErrorHandler) {
+        self.main_scope.validate_stmt(&mut self.ast_symbol_table, error_handler);
+    }
+}
+
+impl Dissasemble for Ast {
+    fn dissasemble(&self) -> String {
+        let mut string_builder = "\n----- AST -----\n\n".to_string();
+        string_builder += self.main_scope.dissasemble().as_str();
+        string_builder += "\n---------------\n";
+        string_builder
     }
 }

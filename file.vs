@@ -1,5 +1,12 @@
 // type Hello = i32
 
+mut a := 2 * 2 + 2
+b := *&a
+c := b + 1
+
+
+/*
+
 fn fib(n i32) i32 {
     if n < 2 {
         return n
@@ -9,8 +16,7 @@ fn fib(n i32) i32 {
 
 fib(35)
 
-
-/*
+arr &mut [i32] := &mut [2, 9, 8]
 
 fn someFunc(n i32) i32 {
     if n < 1 {
@@ -20,10 +26,23 @@ fn someFunc(n i32) i32 {
 }
 someFunc(5000)
 
+fn computeValue() ref i32 {
+    return &3
+}
 
+valueRef := computeValue()
+drop(valueRef)
+valueRef += 1
+// ERROR: valueRef was dropped
 
 mut a := 2 + 2 * 8 
 mut cd := 4
+
+[1, 2, 3, 4].forEach(|num mut ref i32| {
+    num++
+})
+// [2, 3, 4, 5]
+
 
 if (1 + 1) * 2 == cd { 
     if 2 == 3 { 
@@ -43,6 +62,9 @@ if (1 + 1) * 2 == cd {
 
 a 
 cd 
+
+
+
 
 fn cmp(x i32, y i32) {
     if x == y {

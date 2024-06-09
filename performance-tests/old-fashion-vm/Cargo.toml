@@ -1,0 +1,16 @@
+[package]
+name = "old-fashion-vm"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ahash = "0.8.11"
+
+[profile.test]
+opt-level = 3
+
+[profile.release]
+debug = true
+codegen-units = 1
+lto = true
+panic = "abort"

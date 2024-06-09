@@ -72,7 +72,7 @@ impl Ast {
 
         self.main_scope.forward_declare(&mut ast_environment);
 
-        for stmt in &self.main_scope.cf_stmts {
+        for stmt in &self.main_scope.stmts {
             match stmt {
                 Stmt::TypeDefStmt(type_def_stmt) => {
                     let type_name = type_def_stmt.type_name.clone();

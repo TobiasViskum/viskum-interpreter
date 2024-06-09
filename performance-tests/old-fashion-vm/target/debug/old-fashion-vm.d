@@ -1,0 +1,1 @@
+/Users/tobiasviskum/Programming/Rust/viskum-language/performance-tests/old-fashion-vm/target/debug/old-fashion-vm: /Users/tobiasviskum/Programming/Rust/viskum-language/performance-tests/old-fashion-vm/src/main.rs /Users/tobiasviskum/Programming/Rust/viskum-language/performance-tests/old-fashion-vm/src/tests.rs

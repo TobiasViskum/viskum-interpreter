@@ -1,24 +1,31 @@
 use std::rc::Rc;
 
-use self::token_type::TokenType;
+use crate::error_handler::SrcCharsRange;
+use crate::parser::Lexeme;
 
-pub mod token_type;
+use super::TokenType;
 
 #[derive(Debug, Clone, Copy)]
 pub struct TokenMetadata {
     start: usize,
     length: usize,
     line: usize,
-    token_type: TokenType,
+}
+
+impl Into<SrcCharsRange> for TokenMetadata {
+    fn into(self) -> SrcCharsRange {
+        let char_info = (self.start, self.start + self.length);
+        let line_info = (self.line, self.line);
+        SrcCharsRange::new(char_info, line_info)
+    }
 }
 
 impl TokenMetadata {
-    pub fn new(start: usize, length: usize, line: usize, token_type: TokenType) -> Self {
+    pub fn new(start: usize, length: usize, line: usize) -> Self {
         Self {
             start,
             length,
             line,
-            token_type,
         }
     }
 
@@ -30,18 +37,6 @@ impl TokenMetadata {
     }
     pub fn get_line(&self) -> usize {
         self.line
-    }
-    pub fn get_ttype(&self) -> TokenType {
-        self.token_type
-    }
-
-    pub fn increment_length(&mut self) {
-        self.length += 1;
-    }
-    pub fn decrement_start(&mut self) {
-        if self.start > 0 {
-            self.start -= 1;
-        }
     }
 }
 
@@ -70,7 +65,6 @@ impl Token {
             start: self.start,
             length: self.length,
             line: self.line,
-            token_type: self.token_type,
         }
     }
 
@@ -95,14 +89,15 @@ impl Token {
     }
 
     #[profiler::function_tracker]
-    pub fn get_lexeme(&self, source: &Vec<char>) -> Rc<str> {
+    pub fn get_lexeme(&self, source: &Vec<char>) -> Lexeme {
         let mut lexeme = String::new();
 
         for i in self.start..self.start + self.length {
             lexeme.push(*source.get(i).unwrap());
         }
 
-        lexeme.into()
+        let lexeme_str: Rc<str> = lexeme.into();
+        Lexeme::new(lexeme_str)
     }
 
     pub fn get_line(&self) -> usize {

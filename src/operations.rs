@@ -1,13 +1,4 @@
-// #[derive(Debug, Clone, Copy)]
-// pub enum Op {
-//     BinaryOp(BinaryOp),
-//     UnaryOp(UnaryOp),
-//     Define,
-//     Assign,
-//     StartScope,
-//     EndScope,
-//     NoOp,
-// }
+use crate::Dissasemble;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ComparisonOp {
@@ -19,6 +10,21 @@ pub enum ComparisonOp {
     LessEqual,
 }
 
+impl Dissasemble for ComparisonOp {
+    fn dissasemble(&self) -> String {
+        (
+            match self {
+                Self::Equal => "==",
+                Self::NotEqual => "!=",
+                Self::Greater => ">",
+                Self::GreaterEqual => ">=",
+                Self::Less => "<",
+                Self::LessEqual => "<=",
+            }
+        ).to_string()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BinaryOp {
     Add,
@@ -26,6 +32,22 @@ pub enum BinaryOp {
     Mul,
     Div,
     ComparisonOp(ComparisonOp),
+}
+
+impl Dissasemble for BinaryOp {
+    fn dissasemble(&self) -> String {
+        (
+            match self {
+                Self::Add => "+",
+                Self::Sub => "-",
+                Self::Div => "/",
+                Self::Mul => "*",
+                Self::ComparisonOp(comparison_op) => {
+                    return comparison_op.dissasemble();
+                }
+            }
+        ).to_string()
+    }
 }
 
 impl BinaryOp {
@@ -51,13 +73,33 @@ impl BinaryOp {
 pub enum UnaryOp {
     Neg,
     Truthy,
+    Ref,
+    MutRef,
+    Deref,
+}
+
+impl Dissasemble for UnaryOp {
+    fn dissasemble(&self) -> String {
+        (
+            match self {
+                Self::Neg => "-",
+                Self::Truthy => "!",
+                Self::Ref => "&",
+                Self::MutRef => "&mut ",
+                Self::Deref => "*",
+            }
+        ).to_string()
+    }
 }
 
 impl UnaryOp {
     pub fn get_op_len(&self) -> usize {
         match self {
-            UnaryOp::Neg => 1,
-            UnaryOp::Truthy => 1,
+            Self::Neg => 1,
+            Self::Truthy => 1,
+            Self::Ref => 1,
+            Self::MutRef => 4,
+            Self::Deref => 1,
         }
     }
 
@@ -66,6 +108,9 @@ impl UnaryOp {
             match self {
                 Self::Neg => "Negation",
                 Self::Truthy => "Truthy",
+                Self::Ref => "Reference",
+                Self::MutRef => "Mutable reference",
+                Self::Deref => "Dereference",
             }
         ).to_string()
     }
