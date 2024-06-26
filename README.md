@@ -9,27 +9,24 @@
 - Constant folding: https://en.wikipedia.org/wiki/Constant_folding
 - SCCP: https://en.wikipedia.org/wiki/Sparse_conditional_constant_propagation (Constant folding w/ SSA)
 - DCE: https://en.wikipedia.org/wiki/Dead-code_elimination
+- More optimizations:
+  - https://www.javatpoint.com/machine-independent-optimization
 
 ## TODO
 
-- Constant folding should happen during the AST. This should also check if "variables" have so it can possibly use them. Also eliminate scopes if CFG if possible (this should be thought about in depth before changing this. Find a way to get popped variables then)
+- Move constant fold to CFG instead of AST (this makes it possible to use references in recursive structs instead of mutable raw pointers). This also makes it possible to change validate_stmt(&mut self) -> validate_stmt(&self) which also makes it possible that validate_stmt receives a reference to SymbolTableRef instead of a bitwise copy
 
-- Rewrite the way a directed acyclic graph works. All basic blocks (linear sequence of stmts that do jump) should be in its own cfg node which is called the Process node. Right now each stmt gets its own node, which makes optimizations harder
+- Rewrite the way a directed acyclic graph works. All basic blocks (linear sequence of stmts that don't jump) should be in its own cfg node which is called the Process node. Right now each stmt gets its own node, which makes optimizations harder
 
 - Dead code analysis also have to scan for unnused variables
 
 - Remove: PrecAssignment and other useless precedences (probably the only one) because '=' or ':=' is not part of a "expresison" but more of a way to structure an assignment statement.
 
-- AST environment: Rename to Symbol Table
-
 - Fix "unnused" expressions like: 1 + 2 will permanently take up a register. That should be detected in the control-flow graph and therefore the register should be released or "unnused" expression should be ignored.
 
-- Fix that this: "bool i32 c := 2" is actually valid syntax. It should "emit" the types as soon as it sees one (right now it's skipping them, and then when the identifier comes it resolves the types)
-  - Fix that this "i32 := 2" produces the correct error (i32 is a keyword and cannot be used as a definition target)
-
-- FIX: Right now the jmp instructions in the scope is after end scope and jumps to start scope meaning new scopes are created all the time. The jump instructions should be between the StartScpe and EndScope
-
 - Use an Arena for the AST instead to avoid countless heap allocations: https://users.rust-lang.org/t/is-there-a-better-way-to-represent-an-abstract-syntax-tree/9549/4
+
+- Use just one symbol table datastructure that's usable for all intermediate representations: Ast, Icfg (cfg + dag)
 
 ## Machine code???
 

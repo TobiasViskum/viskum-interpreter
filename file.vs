@@ -1,11 +1,76 @@
 // type Hello = i32
 
-mut a := 2 * 2 + 2
-b := *&a
-c := b + 1
+
+mut a := (2 * 2 + 2)
+b := (2 + 3 + 6)
+mut c := a + 9
+
+fn hello() {
+
+}
 
 
 /*
+
+fn hi() {
+    k := 2 + 6 * 1 + 1
+    d := k + 1
+}
+
+
+use crate.hello as hello
+
+fib3 := crate.hello.fib(3)
+
+enum Something {
+    A,
+    B,
+    C,
+    D
+}
+
+struct Node<'arena> {
+    id Int,
+    linked Option<&'arena Node<'arena>>
+}
+
+struct Arena {
+    'lifetime: Node
+}
+
+struct Graph {
+    'a = 'this.arena.lifetime
+
+    nodes Vec<&'a Node<'a>>,
+    arena Arena
+}
+
+impl Graph {
+    pub fn setMsg(&mut self, msg String) {
+        self.msg = msg
+    }
+
+    pub fn alloc(&mut self, item Node) {
+        allocatedNode = self.arena.alloc(item)
+        self.nodes.push()
+    }
+}
+
+fn fib(hello &mut Graph) {
+    a := hello
+    b := hello
+    
+    a.setMsg("Hello")
+} 
+
+fn getA() {
+    something := Something.A // Now this is of type Something
+
+    match something {
+        Something.A -> true,
+        _ -> false
+    }
+}
 
 fn fib(n i32) i32 {
     if n < 2 {
@@ -199,5 +264,37 @@ impl i32 {
         return "The value is: {self.toString()}"
     }
 }
+
+a := calc(2, 1)
+
+fn add(x int, y int) int {
+    x + y
+}
+
+fn sub(x int, y int) int {
+    x - y
+}
+
+fn calc(x int, y int) int {
+    add(x, y) + sub(x, y)
+}
+
+// converts into this:
+
+fn add(x int, y int) int
+fn sub(x int, y int) int
+fn calc(x int, y int) int
+
+fn add(x int, y int) int {
+    x + y
+}
+fn sub(x int, y int) int {
+    x - y
+}
+fn calc(x int, y int) int {
+    add(x, y) + sub(x, y)
+}
+
+a := calc(2, 1)
 
 */
