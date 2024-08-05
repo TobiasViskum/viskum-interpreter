@@ -1,8 +1,13 @@
+use ahash::AHashMap;
+
 use crate::compiler::{
-    ds::symbol_table::SymbolTableRef,
+    ds::symbol_table::{ SSAKey, SymbolTableRef },
     error_handler::ErrorHandler,
-    ir::icfg::dag::DAG,
-    Dissasemble,
+    ir::{
+        ast::expr::Expr,
+        icfg::{ dag::{ DAGAssignNode, DAGNode, DAG }, icfg_builder::ICFGBuilder },
+    },
+    traits::{ Dissasemble, ExprTrait },
 };
 
 use super::{ ExprStmt, LinearControlFlow, StmtTrait };
@@ -25,6 +30,10 @@ impl<'ast> VarAssignStmt<'ast> {
         &self.target_expr
     }
 
+    pub fn get_mut_target_expr(&mut self) -> &mut ExprStmt<'ast> {
+        &mut self.target_expr
+    }
+
     pub fn get_mut_value_expr(&mut self) -> &mut ExprStmt<'ast> {
         &mut self.value
     }
@@ -41,6 +50,10 @@ impl<'ast> Dissasemble for VarAssignStmt<'ast> {
 }
 
 impl<'ast> StmtTrait for VarAssignStmt<'ast> {
+    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder) {
+        todo!()
+    }
+
     fn is_linear_control_flow(&self) -> bool {
         true
     }
@@ -57,12 +70,30 @@ impl<'ast> StmtTrait for VarAssignStmt<'ast> {
     }
 
     fn as_linear_control_flow(&self) -> Option<&dyn LinearControlFlow> {
-        None
+        Some(self)
     }
 }
 
 impl<'ast> LinearControlFlow for VarAssignStmt<'ast> {
-    fn compile_into_dag(&self, dag: &mut DAG) {
-        todo!()
+    fn compile_into_dag(
+        &self,
+        dag: &mut DAG,
+        ident_node_id_map: &mut AHashMap<SSAKey, usize>
+    ) -> usize {
+        let ident_expr = match self.target_expr.get_expr() {
+            Expr::IdentifierExpr(ident_expr) => ident_expr,
+            _ => panic!("Only identifiers are supported in assignment"),
+        };
+        let ident_node_id = ident_expr.compile_into_dag(dag, ident_node_id_map);
+        let value_node_id = self.value.compile_into_dag(dag, ident_node_id_map);
+
+        let assign_node_id = dag.push_node(DAGNode::AssignNode(DAGAssignNode));
+
+        dag.add_edge(assign_node_id, ident_node_id);
+        dag.add_edge(assign_node_id, value_node_id);
+
+        dag.set_entry_node_id(assign_node_id);
+
+        assign_node_id
     }
 }

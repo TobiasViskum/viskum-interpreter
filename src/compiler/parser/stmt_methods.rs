@@ -1,6 +1,6 @@
 use crate::{
     compiler::{
-        ds::{ symbol_table::{ SymbolTableAlloc, SymbolTableRef }, value::ValueType },
+        ds::{ symbol_table::SymbolTableRef, value::ValueType },
         error_handler::{ CompileError, ReportedError },
         ir::ast::{
             stmt::{
@@ -18,6 +18,7 @@ use crate::{
             },
             AstArena,
         },
+        traits::SymbolTableAlloc,
     },
     macros::merge_chars_range,
 };
@@ -250,12 +251,13 @@ impl<'a> Parser<'a> {
 
         let false_block = if self.get_current().get_ttype().is(&TokenType::TokenElse) {
             self.advance();
-            if self.get_current().get_ttype().is(&TokenType::TokenIf) {
-                Some(self.if_stmt((arena, symbol_table_ref))?)
+            let if_stmt = if self.get_current().get_ttype().is(&TokenType::TokenIf) {
+                self.if_stmt((arena, symbol_table_ref))?
             } else {
                 let true_block = self.block((arena, symbol_table_ref), None)?;
-                Some(IfStmt::new(None, true_block, None))
-            }
+                IfStmt::new(None, true_block, None)
+            };
+            Some(arena.alloc_if_stmt(if_stmt))
         } else {
             None
         };

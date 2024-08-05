@@ -1,10 +1,16 @@
 use std::fmt::Debug;
 
 use expr::Expr;
-use stmt::{ IfStmt, ScopeStmt, Stmt, StmtTrait };
+use stmt::{ IfStmt, ScopeStmt, Stmt };
 use typed_arena::Arena;
 
-use crate::compiler::{ error_handler::ErrorHandler, Dissasemble };
+use crate::compiler::{
+    error_handler::ErrorHandler,
+    ir::icfg::icfg_builder::ICFGBuilder,
+    traits::{ Dissasemble, StmtTrait },
+};
+
+use super::icfg::{ cfg::CFG, ICFG };
 
 pub mod expr;
 pub mod stmt;
@@ -31,7 +37,7 @@ impl<'ast> AstArena<'ast> {
         }
     }
 
-    pub fn alloc_expr(&self, expr: Expr<'ast>) -> &'ast Expr {
+    pub fn alloc_expr(&self, expr: Expr<'ast>) -> &'ast mut Expr {
         let allocated_expr = self.arena.alloc(AstArenaItem::Expr(expr));
 
         match allocated_expr {
@@ -40,16 +46,7 @@ impl<'ast> AstArena<'ast> {
         }
     }
 
-    pub fn alloc_mut_expr(&self, expr: Expr<'ast>) -> &'ast mut Expr {
-        let allocated_expr = self.arena.alloc(AstArenaItem::Expr(expr));
-
-        match allocated_expr {
-            AstArenaItem::Expr(expr) => expr,
-            _ => panic!("Expected expression in alloc_expr"),
-        }
-    }
-
-    pub fn alloc_if_stmt(&self, if_stmt: IfStmt<'ast>) -> &'ast IfStmt {
+    pub fn alloc_if_stmt(&self, if_stmt: IfStmt<'ast>) -> &'ast mut IfStmt {
         let allocated_if_stmt = self.arena.alloc(AstArenaItem::Stmt(Stmt::IfStmt(if_stmt)));
 
         match allocated_if_stmt {
@@ -77,7 +74,12 @@ impl<'ast> Ast<'ast> {
         }
     }
 
-    pub fn construct_icfg(mut self) -> () {}
+    pub fn construct_icfg(self) -> ICFG {
+        let mut icfg_builder = ICFGBuilder::new();
+        self.main_scope.compile_into_icfg(&mut icfg_builder);
+
+        icfg_builder.take_icfg()
+    }
 
     pub fn type_check_and_constant_fold(&mut self, error_handler: &mut ErrorHandler) {
         self.main_scope.validate_stmt(&self.main_scope.get_symbol_table_ref(), error_handler);

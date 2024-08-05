@@ -5,7 +5,7 @@ use std::rc::Rc;
 use ops::{ BinaryOp, ComparisonOp, UnaryOp };
 
 use crate::{
-    compiler::Dissasemble,
+    compiler::traits::Dissasemble,
     macros::{
         def_binary_try_method,
         def_binary_val_method,
@@ -40,7 +40,7 @@ pub enum ValueType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ValueType {
-    Int32,
+    Int,
     Bool,
     Void,
     String,
@@ -52,7 +52,7 @@ pub enum ValueType {
 impl Dissasemble for ValueType {
     fn dissasemble(&self) -> String {
         match self {
-            Self::Int32 => "i32".to_string(),
+            Self::Int => "int".to_string(),
             Self::Bool => "bool".to_string(),
             Self::Void => "()".to_string(),
             Self::String => "string".to_string(),
@@ -70,7 +70,7 @@ impl ValueType {
 
     pub fn to_type_string(&self) -> String {
         match self {
-            ValueType::Int32 => "i32".to_string(),
+            ValueType::Int => "int".to_string(),
             ValueType::Bool => "bool".to_string(),
             ValueType::Void => "void".to_string(),
             ValueType::String => "string".to_string(),
@@ -128,66 +128,96 @@ impl ValueType {
     }
 
     def_binary_try_method!(try_cmp_eq, ComparisonOp::Eq => Bool, {
-        (Int32, Int32),
+        (Int, Int),
         (Bool, Bool),
         (String, String),
     });
 
     def_binary_try_method!(try_cmp_ne, ComparisonOp::Ne => Bool, {
-        (Int32, Int32),
+        (Int, Int),
         (Bool, Bool),
         (String, String),
     });
 
     def_binary_try_method!(try_cmp_gt, ComparisonOp::Gt => Bool, {
-        (Int32, Int32),
+        (Int, Int),
         (Bool, Bool),
         (String, String),
     });
 
     def_binary_try_method!(try_cmp_ge, ComparisonOp::Ge => Bool, {
-        (Int32, Int32),
+        (Int, Int),
         (Bool, Bool),
         (String, String),
     });
 
     def_binary_try_method!(try_cmp_lt, ComparisonOp::Lt => Bool, {
-        (Int32, Int32),
+        (Int, Int),
         (Bool, Bool),
         (String, String),
     });
 
     def_binary_try_method!(try_cmp_le, ComparisonOp::Le => Bool, {
-        (Int32, Int32),
+        (Int, Int),
         (Bool, Bool),
         (String, String),
     });
 
     def_binary_try_method!(try_add, BinaryOp::Add, {
-        (Int32, Int32),
+        (Int, Int),
         (String, String)
     });
 
     def_binary_try_method!(try_sub, BinaryOp::Sub, {
-        (Int32, Int32),
+        (Int, Int),
     });
 
     def_binary_try_method!(try_mul, BinaryOp::Mul, {
-        (Int32, Int32),
+        (Int, Int),
     });
 
     def_binary_try_method!(try_div, BinaryOp::Div, {
-        (Int32, Int32),
+        (Int, Int),
     });
 
-    def_unary_try_method!(try_neg, UnaryOp::Neg, { Int32 });
+    def_unary_try_method!(try_neg, UnaryOp::Neg, { Int });
 
-    def_unary_try_method!(try_not, UnaryOp::Not => Bool, { Int32, Bool, String });
+    def_unary_try_method!(try_not, UnaryOp::Not => Bool, { Int, Bool, String });
 }
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum SimpleConst {
+    Int(i64),
+    Bool(bool),
+}
+
+impl SimpleConst {
+    pub fn get_as_i64(&self) -> i64 {
+        match self {
+            Self::Int(int) => *int,
+            Self::Bool(bool) => *bool as i64,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ComplexConst {
+    String(Rc<str>),
+}
+
+// pub enum ValueV2 {
+//     SimpleConst(SimpleConst),
+//     ComplexConst(ComplexConst),
+//     Ref(Box<Self>),
+//     MutableRef(Box<Self>),
+//     Deref(Box<Self>),
+//     Mutable(Box<Self>),
+//     Void,
+// }
 
 #[derive(Debug, Clone)]
 pub enum Value {
-    Int32(i32),
+    Int(i64),
     Bool(bool),
     String(Rc<str>),
     Ref(Box<Self>),
@@ -200,7 +230,7 @@ pub enum Value {
 impl Dissasemble for Value {
     fn dissasemble(&self) -> String {
         match self {
-            Self::Int32(i32) => i32.to_string(),
+            Self::Int(int) => int.to_string(),
             Self::Bool(bool) => bool.to_string(),
             Self::String(str) => str.to_string(),
             Self::Void => "()".to_string(),
@@ -219,9 +249,17 @@ impl Default for Value {
 }
 
 impl Value {
+    pub fn get_as_simple_const(&self) -> Option<SimpleConst> {
+        match self {
+            Self::Int(int) => Some(SimpleConst::Int(*int)),
+            Self::Bool(bool) => Some(SimpleConst::Bool(*bool)),
+            _ => None,
+        }
+    }
+
     pub fn to_string(&self) -> String {
         match self {
-            Self::Int32(i32) => i32.to_string(),
+            Self::Int(int) => int.to_string(),
             Self::Bool(bool) => bool.to_string(),
             Self::String(str) => str.to_string(),
             Self::Void => String::new(),
@@ -231,7 +269,7 @@ impl Value {
 
     pub fn to_value_type(&self) -> ValueType {
         match self {
-            Value::Int32(_) => ValueType::Int32,
+            Value::Int(_) => ValueType::Int,
             Value::Bool(_) => ValueType::Bool,
             Value::String(_) => ValueType::String,
             Value::Void => ValueType::Void,
@@ -243,58 +281,58 @@ impl Value {
     }
 
     def_binary_val_method!(cmp_eq, |lhs == rhs| -> Bool, {
-        (Int32, Int32),
+        (Int, Int),
         (Bool, Bool),
     });
 
     def_binary_val_method!(cmp_ne, |lhs != rhs| -> Bool, {
-        (Int32, Int32),
+        (Int, Int),
         (Bool, Bool),
     });
 
     def_binary_val_method!(cmp_gt, |lhs > rhs| -> Bool, {
-        (Int32, Int32),
+        (Int, Int),
         (Bool, Bool),
     });
 
     def_binary_val_method!(cmp_ge, |lhs >= rhs| -> Bool, {
-        (Int32, Int32),
+        (Int, Int),
         (Bool, Bool),
     });
 
     def_binary_val_method!(cmp_lt, |lhs < rhs| -> Bool, {
-        (Int32, Int32),
+        (Int, Int),
         (Bool, Bool),
     });
 
     def_binary_val_method!(cmp_le, |lhs <= rhs| -> Bool, {
-        (Int32, Int32),
+        (Int, Int),
         (Bool, Bool),
     });
 
     def_binary_val_method!(add, |lhs + rhs| -> Self, {
-        (Int32, Int32),
+        (Int, Int),
         (String, String): format!("{}{}", lhs, rhs).into(),
     });
 
     def_binary_val_method!(mul, |lhs * rhs| -> Self, {
-        (Int32, Int32),
+        (Int, Int),
     });
 
     def_binary_val_method!(div, |lhs / rhs| -> Self, {
-        (Int32, Int32),
+        (Int, Int),
     });
 
     def_binary_val_method!(sub, |lhs - rhs| -> Self, {
-        (Int32, Int32),
+        (Int, Int),
     });
 
     def_unary_val_method!(neg, |-rhs| -> Self, {
-        (Int32)
+        (Int)
     });
 
     def_unary_val_method!(not, |!rhs| -> Bool, {
-        (Int32): *rhs == 0,
+        (Int): *rhs == 0,
         (Bool),
         (String): rhs.len() == 0
     });

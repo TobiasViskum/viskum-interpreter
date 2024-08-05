@@ -1,11 +1,13 @@
 use std::rc::Rc;
 
+use ahash::AHashMap;
+
 use crate::compiler::{
-    ds::{ symbol_table::{ SSAKey, SymbolTableActions, SymbolTableRef }, value::ValueType },
+    ds::{ symbol_table::{ SSAKey, SymbolTableRef }, value::ValueType },
     error_handler::{ CompileError, ReportedError, SrcCharsRange },
-    ir::icfg::dag::DAG,
+    ir::icfg::dag::{ DAGIdentNode, DAGNode, DAG },
     parser::token::TokenMetadata,
-    Dissasemble,
+    traits::{ Dissasemble, SymbolTableActions },
 };
 
 use super::ExprTrait;
@@ -48,7 +50,7 @@ impl IdentifierExpr {
 
 impl Dissasemble for IdentifierExpr {
     fn dissasemble(&self) -> String {
-        format!("{}", self.lexeme)
+        format!("{}", self.get_ssa_key().dissasemble())
     }
 }
 
@@ -57,8 +59,20 @@ impl ExprTrait for IdentifierExpr {
     //     todo!("Evaluate identifer if it hasn't changed and if its a variable")
     // }
 
-    fn compile_to_dag_node(&self, _: &mut DAG) -> usize {
-        todo!()
+    fn compile_into_dag(
+        &self,
+        dag: &mut DAG,
+        ident_node_id_map: &mut AHashMap<SSAKey, usize>
+    ) -> usize {
+        if let Some(&node_id) = ident_node_id_map.get(&self.get_ssa_key()) {
+            node_id
+        } else {
+            let ident_node_id = dag.push_node(
+                DAGNode::IdentNode(DAGIdentNode::new(self.get_ssa_key()))
+            );
+            ident_node_id_map.insert(self.get_ssa_key(), ident_node_id);
+            ident_node_id
+        }
     }
 
     fn type_check(&mut self, symbol_table_ref: &SymbolTableRef) -> Result<ValueType, CompileError> {

@@ -1,9 +1,11 @@
-#![feature(macro_metavar_expr)]
-
 mod macros;
 mod compiler;
+mod vm;
 
 use compiler::Compiler;
+use vm::VM;
+
+pub const U16_MAX: usize = u16::MAX as usize;
 
 fn main() {
     /*
@@ -28,12 +30,13 @@ fn main() {
     llvm_main_fn.compile_and_execute();
     */
 
-    let (vm_data, llvm_main_fn) = {
+    let (registers, instructions) = {
         let mut compiler = Compiler::new();
 
-        match compiler.compile_entry() {
-            Some(v) => ((), ()),
-            None => compiler.log_errors(),
-        }
+        compiler.compile_entry()
     };
+
+    let mut vm = VM::new(registers);
+    vm.run(instructions);
+    println!("{:#?}", vm.print_regs())
 }

@@ -18,11 +18,12 @@ use crate::macros::create_tokens_and_parse_rules;
 
 use super::{
     ds::{
-        symbol_table::{ GlobalSymbolTable, SymbolTableAlloc },
+        symbol_table::GlobalSymbolTable,
         value::{ ops::{ BinaryOp, ComparisonOp, UnaryOp }, Value },
     },
     error_handler::ErrorHandler,
     ir::ast::{ stmt::ScopeStmt, Ast, AstArena },
+    traits::SymbolTableAlloc,
 };
 
 #[derive(Debug, Hash)]
@@ -46,7 +47,7 @@ impl Lexeme {
     }
 
     pub fn parse_number(&self) -> Option<Value> {
-        let parse_hireachy = [Self::try_parse_i32, Self::try_parse_i64];
+        let parse_hireachy = [Self::try_parse_int, Self::try_parse_i64];
 
         for parse_fn in parse_hireachy {
             match parse_fn(self) {
@@ -62,9 +63,9 @@ impl Lexeme {
         None
     }
 
-    fn try_parse_i32(&self) -> Option<Value> {
-        match self.lexeme.parse::<i32>() {
-            Ok(v) => Some(Value::Int32(v)),
+    fn try_parse_int(&self) -> Option<Value> {
+        match self.lexeme.parse::<i64>() {
+            Ok(v) => Some(Value::Int(v)),
             Err(_) => None,
         }
     }

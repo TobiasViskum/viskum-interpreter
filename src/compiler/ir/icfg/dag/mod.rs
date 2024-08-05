@@ -1,134 +1,33 @@
-use std::{ fmt::Debug, rc::Rc };
+mod dag_node;
+mod helper_methods;
 
-use crate::compiler::ds::value::{ ops::{ BinaryOp, UnaryOp }, Value };
+pub use dag_node::*;
 
-#[derive(Debug)]
-pub struct DAGBinaryNode {
-    binary_op: BinaryOp,
-    operands: (usize, usize),
-}
-
-impl DAGBinaryNode {
-    pub fn new(binary_op: BinaryOp, operands: (usize, usize)) -> Self {
-        Self { binary_op, operands }
-    }
-
-    pub fn get_binary_op(&self) -> BinaryOp {
-        self.binary_op
-    }
-
-    pub fn get_operands(&self) -> (usize, usize) {
-        self.operands
-    }
-}
+use crate::{
+    compiler::{
+        ds::{ register_allocator::{ self, RegisterAllocator }, vm_builder::VMBuilder },
+        traits::{ DAGNodeTrait, Dissasemble, GenerateBytecode },
+    },
+    vm::{ self, instructions::{ Instruction, Reg } },
+};
 
 #[derive(Debug)]
-pub struct DAGUnaryNode {
-    unary_op: UnaryOp,
-    operand: usize,
+pub struct DAGEdge {
+    origin: usize,
+    dest: usize,
 }
 
-impl DAGUnaryNode {
-    pub fn new(unary_op: UnaryOp, operand: usize) -> Self {
-        Self { unary_op, operand }
+impl DAGEdge {
+    pub fn new(origin: usize, dest: usize) -> Self {
+        Self { origin, dest }
     }
 
-    pub fn get_unary_op(&self) -> UnaryOp {
-        self.unary_op
+    pub fn get_origin(&self) -> usize {
+        self.origin
     }
 
-    pub fn get_operand(&self) -> usize {
-        self.operand
-    }
-}
-
-#[derive(Debug)]
-pub struct DAGFnCallNode {
-    ident: Rc<str>,
-    args: Vec<DAGNode>,
-}
-
-impl DAGFnCallNode {
-    pub fn new(ident: Rc<str>, args: Vec<DAGNode>) -> Self {
-        Self { ident, args }
-    }
-
-    pub fn get_ident(&self) -> Rc<str> {
-        Rc::clone(&self.ident)
-    }
-
-    pub fn get_args(&self) -> &Vec<DAGNode> {
-        &self.args
-    }
-}
-
-#[derive(Debug)]
-pub struct DAGDefineNode {
-    ident: Rc<str>,
-    value_node: usize,
-}
-
-impl DAGDefineNode {
-    pub fn new(ident: Rc<str>, value_node: usize) -> Self {
-        Self { ident, value_node }
-    }
-
-    pub fn get_ident(&self) -> Rc<str> {
-        Rc::clone(&self.ident)
-    }
-
-    pub fn get_value_node(&self) -> usize {
-        self.value_node
-    }
-}
-
-#[derive(Debug)]
-pub struct DAGAssignNode {
-    ident: Rc<str>,
-    value_node: usize,
-}
-
-impl DAGAssignNode {
-    pub fn new(ident: Rc<str>, value_node: usize) -> Self {
-        Self { ident, value_node }
-    }
-
-    pub fn get_ident(&self) -> Rc<str> {
-        Rc::clone(&self.ident)
-    }
-
-    pub fn get_value_node(&self) -> usize {
-        self.value_node
-    }
-}
-
-#[derive(Debug)]
-pub struct DAGConstNode {
-    value: Value,
-}
-
-impl DAGConstNode {
-    pub fn new(value: Value) -> Self {
-        Self { value }
-    }
-
-    pub fn get_value(&self) -> &Value {
-        &self.value
-    }
-}
-
-#[derive(Debug)]
-pub struct DAGIdentNode {
-    ident: Rc<str>,
-}
-
-impl DAGIdentNode {
-    pub fn new(ident: Rc<str>) -> Self {
-        Self { ident }
-    }
-
-    pub fn get_ident(&self) -> Rc<str> {
-        Rc::clone(&self.ident)
+    pub fn get_dest(&self) -> usize {
+        self.dest
     }
 }
 
@@ -136,6 +35,7 @@ impl DAGIdentNode {
 pub enum DAGNode {
     BinaryNode(DAGBinaryNode),
     UnaryNode(DAGUnaryNode),
+    GroupNode(DAGGroupNode),
     FnCallNode(DAGFnCallNode),
     DefineNode(DAGDefineNode),
     AssignNode(DAGAssignNode),
@@ -143,8 +43,25 @@ pub enum DAGNode {
     IdentNode(DAGIdentNode),
 }
 
+impl DAGNodeTrait for DAGNode {
+    fn expected_connected_nodes(&self) -> usize {
+        match self {
+            Self::BinaryNode(binary_node) => binary_node.expected_connected_nodes(),
+            Self::UnaryNode(unary_node) => unary_node.expected_connected_nodes(),
+            Self::GroupNode(group_node) => group_node.expected_connected_nodes(),
+            Self::FnCallNode(fn_call_node) => fn_call_node.expected_connected_nodes(),
+            Self::DefineNode(define_node) => define_node.expected_connected_nodes(),
+            Self::AssignNode(assign_node) => assign_node.expected_connected_nodes(),
+            Self::ConstNode(const_node) => const_node.expected_connected_nodes(),
+            Self::IdentNode(ident_node) => ident_node.expected_connected_nodes(),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct DAG {
     nodes: Vec<DAGNode>,
+    edges: Vec<DAGEdge>,
     entry_node_id: usize,
 }
 
@@ -152,8 +69,21 @@ impl DAG {
     pub fn new() -> Self {
         Self {
             nodes: Vec::new(),
+            edges: Vec::new(),
             entry_node_id: 0,
         }
+    }
+
+    pub fn get_entry_node_id(&self) -> usize {
+        self.entry_node_id
+    }
+
+    pub fn set_entry_node_id(&mut self, entry_node_id: usize) {
+        self.entry_node_id = entry_node_id;
+    }
+
+    pub fn add_edge(&mut self, origin: usize, dest: usize) {
+        self.edges.push(DAGEdge::new(origin, dest));
     }
 
     pub fn push_node(&mut self, dag_node: DAGNode) -> usize {
@@ -161,13 +91,254 @@ impl DAG {
         self.nodes.len() - 1
     }
 
-    pub fn set_entry_node(&mut self, entry_node_id: usize) {
-        self.entry_node_id = entry_node_id;
+    pub fn get_connected_node_ids(&self, node_id: usize) -> Vec<usize> {
+        let mut connected_nodes = vec![];
+        for edge in self.edges.iter() {
+            if edge.get_origin() == node_id {
+                connected_nodes.push(edge.get_dest());
+            }
+        }
+        connected_nodes
+    }
+
+    pub fn generate_instruction(
+        &self,
+        node_id: usize,
+        instructions: &mut Vec<Instruction>,
+        register_allocator: &mut RegisterAllocator
+    ) -> Reg {
+        let node = self.nodes.get(node_id).expect("Expected dag node");
+
+        if
+            let Some(next_stmt_node_id) = self
+                .get_connected_node_ids(node_id)
+                .get(node.expected_connected_nodes())
+        {
+            self.generate_instruction(*next_stmt_node_id, instructions, register_allocator);
+        }
+
+        let dst_reg = match node {
+            DAGNode::BinaryNode(binary_node) => {
+                self.generate_binary_instruction(
+                    node_id,
+                    instructions,
+                    register_allocator,
+                    binary_node.get_op()
+                )
+            }
+            DAGNode::UnaryNode(unary_node) => {
+                self.generate_unary_instruction(
+                    node_id,
+                    instructions,
+                    register_allocator,
+                    unary_node.get_op()
+                )
+            }
+            DAGNode::GroupNode(group_node) => {
+                self.generate_group_instruction(node_id, instructions, register_allocator)
+            }
+            DAGNode::ConstNode(const_node) => {
+                self.generate_const_instruction(register_allocator, const_node.get_value())
+            }
+            DAGNode::DefineNode(define_node) => {
+                self.generate_define_instruction(node_id, instructions, register_allocator)
+            }
+            _ => todo!(),
+        };
+
+        dst_reg
     }
 }
 
-impl Debug for DAG {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+impl GenerateBytecode for DAG {
+    fn load_constants(&self, vm_builder: &mut VMBuilder) {
+        self.nodes.iter().for_each(|node| {
+            if let DAGNode::ConstNode(const_node) = node {
+                if let Some(simple_const) = const_node.get_value().get_as_simple_const() {
+                    vm_builder.alloc_const_reg(simple_const);
+                } else {
+                    // vm_builder.alloc_heap(complex_const);
+                }
+            }
+        })
+    }
+
+    fn generate_instructions(
+        &self,
+        register_allocator: &mut RegisterAllocator
+    ) -> Vec<Instruction> {
+        let mut instructions = vec![];
+
+        self.generate_instruction(self.entry_node_id, &mut instructions, register_allocator);
+
+        instructions
+    }
+}
+
+impl Dissasemble for DAG {
+    fn dissasemble(&self) -> String {
+        self.dissasemble_node(self.entry_node_id)
+    }
+}
+
+// Dissasemble helper methods
+impl DAG {
+    fn dissasemble_node(&self, node_id: usize) -> String {
+        let mut connected_nodes = self.get_connected_node_ids(node_id);
+
+        match &self.nodes[node_id] {
+            DAGNode::BinaryNode(binary_node) => {
+                self.dissasemble_binary_node(binary_node, &mut connected_nodes)
+            }
+            DAGNode::UnaryNode(unary_node) => {
+                self.dissasemble_unary_node(unary_node, &mut connected_nodes)
+            }
+            DAGNode::GroupNode(_) => { self.dissasemble_group_node(&mut connected_nodes) }
+            DAGNode::DefineNode(define_node) => {
+                self.dissasemble_define_node(define_node, &mut connected_nodes)
+            }
+            DAGNode::AssignNode(assign_node) => {
+                self.dissasemble_assign_node(assign_node, &mut connected_nodes)
+            }
+            DAGNode::FnCallNode(fn_call_node) => {
+                self.dissasemble_fn_call_node(fn_call_node, &mut connected_nodes)
+            }
+            DAGNode::ConstNode(node) => {
+                self.dissasemble_const_or_ident_node(node, &mut connected_nodes)
+            }
+            DAGNode::IdentNode(node) => {
+                self.dissasemble_const_or_ident_node(node, &mut connected_nodes)
+            }
+        }
+    }
+
+    fn dissasemble_const_or_ident_node<T>(
+        &self,
+        node: &T,
+        connected_nodes: &mut Vec<usize>
+    ) -> String
+        where T: Dissasemble
+    {
+        let mut string_builder = if connected_nodes.len() == 1 {
+            let mut string_builder = self.dissasemble_node(connected_nodes.pop().unwrap());
+            string_builder += "\n";
+            string_builder
+        } else {
+            String::new()
+        };
+
+        string_builder += node.dissasemble().as_str();
+
+        string_builder
+    }
+
+    fn dissasemble_binary_node(
+        &self,
+        binary_node: &DAGBinaryNode,
+        connected_nodes: &mut Vec<usize>
+    ) -> String {
+        let mut string_builder = if connected_nodes.len() == 3 {
+            let mut string_builder = self.dissasemble_node(connected_nodes.pop().unwrap());
+            string_builder += "\n";
+            string_builder
+        } else {
+            String::new()
+        };
+
+        let rhs = self.dissasemble_node(connected_nodes.pop().unwrap());
+        let lhs = self.dissasemble_node(connected_nodes.pop().unwrap());
+        string_builder += format!("{} {} {}", lhs, binary_node.dissasemble(), rhs).as_str();
+        string_builder
+    }
+
+    fn dissasemble_unary_node(
+        &self,
+        unary_node: &DAGUnaryNode,
+        connected_nodes: &mut Vec<usize>
+    ) -> String {
+        let mut string_builder = if connected_nodes.len() == 2 {
+            self.dissasemble_node(connected_nodes.pop().unwrap())
+        } else {
+            String::new()
+        };
+
+        let rhs = self.dissasemble_node(connected_nodes.pop().unwrap());
+        string_builder += format!("{}{}", unary_node.dissasemble(), rhs).as_str();
+        string_builder
+    }
+
+    fn dissasemble_group_node(&self, connected_nodes: &mut Vec<usize>) -> String {
+        let mut string_builder = if connected_nodes.len() == 2 {
+            self.dissasemble_node(connected_nodes.pop().unwrap())
+        } else {
+            String::new()
+        };
+        let group = self.dissasemble_node(connected_nodes.pop().unwrap());
+        string_builder += format!("({})", group).as_str();
+        string_builder
+    }
+
+    fn dissasemble_define_node(
+        &self,
+        define_node: &DAGDefineNode,
+        connected_nodes: &mut Vec<usize>
+    ) -> String {
+        let mut string_builder = if connected_nodes.len() == 3 {
+            let mut string_builder = self.dissasemble_node(connected_nodes.pop().unwrap());
+            string_builder += "\n";
+            string_builder
+        } else {
+            String::new()
+        };
+
+        let (ident, value) = if connected_nodes.len() == 1 {
+            let ident = self.dissasemble_node(connected_nodes.pop().unwrap());
+            (ident, None)
+        } else {
+            let value = Some(self.dissasemble_node(connected_nodes.pop().unwrap()));
+            let ident = self.dissasemble_node(connected_nodes.pop().unwrap());
+            (ident, value)
+        };
+
+        let node_string = if let Some(value) = value {
+            format!("{} {} {}", ident, define_node.dissasemble(), value)
+        } else {
+            format!("{}", ident)
+        };
+
+        string_builder += node_string.as_str();
+        string_builder
+    }
+
+    fn dissasemble_assign_node(
+        &self,
+        assign_node: &DAGAssignNode,
+        connected_nodes: &mut Vec<usize>
+    ) -> String {
+        let (ident, value) = {
+            let value = self.dissasemble_node(connected_nodes.pop().unwrap());
+            let ident = self.dissasemble_node(connected_nodes.pop().unwrap());
+            (ident, value)
+        };
+
+        format!("{} {} {}", ident, assign_node.dissasemble(), value)
+    }
+
+    fn dissasemble_fn_call_node(
+        &self,
+        fn_call_node: &DAGFnCallNode,
+        connected_nodes: &mut Vec<usize>
+    ) -> String {
+        let mut string_builder = fn_call_node.dissasemble();
+        for (i, connected_node_id) in connected_nodes.iter().enumerate() {
+            let arg = self.dissasemble_node(*connected_node_id);
+            string_builder += arg.as_str();
+            if i != connected_nodes.len() - 1 {
+                string_builder += ", ";
+            }
+        }
+
+        string_builder += ")";
+        string_builder
     }
 }

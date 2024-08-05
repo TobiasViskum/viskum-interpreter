@@ -1,12 +1,12 @@
-use crate::compiler::{
-    ds::{ symbol_table::SymbolTableRef, value::{ Value, ValueType } },
-    error_handler::{ CompileError, SrcCharsRange },
-    ir::icfg::dag::DAG,
-    parser::token::TokenMetadata,
-    Dissasemble,
-};
+use ahash::AHashMap;
 
-use super::ExprTrait;
+use crate::compiler::{
+    ds::{ symbol_table::{ SSAKey, SymbolTableRef }, value::{ Value, ValueType } },
+    error_handler::{ CompileError, SrcCharsRange },
+    ir::icfg::dag::{ DAGConstNode, DAGNode, DAG },
+    parser::token::TokenMetadata,
+    traits::{ Dissasemble, ExprTrait },
+};
 
 #[derive(Debug)]
 pub struct LiteralExpr {
@@ -42,17 +42,13 @@ impl Dissasemble for LiteralExpr {
 }
 
 impl ExprTrait for LiteralExpr {
-    // fn evaluate(&mut self, _: &AstSymbolTable) -> ExprEvaluateResult {
-    //     Ok((self.get_value().clone(), self.collect_metadata()))
-    // }
-
-    fn compile_to_dag_node(&self, _: &mut DAG) -> usize {
-        todo!()
+    fn compile_into_dag(
+        &self,
+        dag: &mut DAG,
+        ident_node_id_map: &mut AHashMap<SSAKey, usize>
+    ) -> usize {
+        dag.push_node(DAGNode::ConstNode(DAGConstNode::new(self.value.clone())))
     }
-
-    // fn type_check_and_constant_fold(&mut self, _: &AstSymbolTable) -> ExprResult {
-    //     Ok(ExprResultOk::new(self.value.to_value_type(), true))
-    // }
 
     fn type_check(&mut self, _: &SymbolTableRef) -> Result<ValueType, CompileError> {
         Ok(self.value.to_value_type())

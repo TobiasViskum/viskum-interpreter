@@ -1,9 +1,9 @@
 use crate::compiler::{
     ds::symbol_table::SymbolTableRef,
     error_handler::{ CompileError, ErrorHandler, ReportedError },
-    ir::ast::expr::ExprTrait,
+    ir::icfg::{ cfg::{ CFGNodeId, CFG }, icfg_builder::ICFGBuilder, ICFG },
     parser::token::TokenMetadata,
-    Dissasemble,
+    traits::Dissasemble,
 };
 
 use super::{ ExprStmt, LinearControlFlow, StmtTrait };
@@ -30,6 +30,10 @@ impl<'ast> Dissasemble for ReturnStmt<'ast> {
 }
 
 impl<'ast> StmtTrait for ReturnStmt<'ast> {
+    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder) {
+        todo!()
+    }
+
     fn is_linear_control_flow(&self) -> bool {
         false
     }

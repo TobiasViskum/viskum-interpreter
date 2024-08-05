@@ -1,12 +1,6 @@
 use std::fmt::Debug;
 
-use crate::compiler::Dissasemble;
-
-pub trait OpTrait: Dissasemble + Debug + Clone + Copy {
-    fn get_op_len(&self) -> usize;
-
-    fn get_can_constant_fold(&self) -> bool;
-}
+use crate::compiler::traits::{ Dissasemble, OpTrait };
 
 #[derive(Debug, Clone, Copy)]
 pub enum BinaryOp {

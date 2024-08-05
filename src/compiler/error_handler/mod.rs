@@ -2,8 +2,6 @@ use colored::Colorize;
 
 use super::parser::token::TokenMetadata;
 
-pub trait ErrorTrait {}
-
 enum ErrorType {
     Error,
     Warning,

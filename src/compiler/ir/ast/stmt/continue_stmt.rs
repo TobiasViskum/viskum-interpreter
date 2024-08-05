@@ -1,6 +1,9 @@
-use crate::compiler::{ ds::symbol_table::SymbolTableRef, error_handler::ErrorHandler, Dissasemble };
-
-use super::{ LinearControlFlow, StmtTrait };
+use crate::compiler::{
+    ds::symbol_table::SymbolTableRef,
+    error_handler::ErrorHandler,
+    ir::icfg::{ cfg::{ CFGNodeId, CFG }, icfg_builder::ICFGBuilder, ICFG },
+    traits::{ Dissasemble, LinearControlFlow, StmtTrait },
+};
 
 #[derive(Debug)]
 pub struct ContinueStmt;
@@ -12,6 +15,10 @@ impl ContinueStmt {
 }
 
 impl StmtTrait for ContinueStmt {
+    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder) {
+        todo!()
+    }
+
     fn is_linear_control_flow(&self) -> bool {
         false
     }

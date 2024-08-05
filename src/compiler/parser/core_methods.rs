@@ -34,7 +34,7 @@ impl<'a> Parser<'a> {
                 self.advance();
                 let type_lexeme = self.get_previous().get_lexeme(&&self.source);
                 match type_lexeme.get_lexeme_str() {
-                    "i32" => Ok(Some(ValueType::Int32)),
+                    "int" => Ok(Some(ValueType::Int)),
                     "bool" => Ok(Some(ValueType::Bool)),
                     _ => Ok(None), // This should make a custom type
                 }

@@ -1,6 +1,11 @@
-use crate::compiler::{ ds::symbol_table::SymbolTableRef, error_handler::ErrorHandler, Dissasemble };
+use crate::compiler::{
+    ds::symbol_table::SymbolTableRef,
+    error_handler::ErrorHandler,
+    ir::icfg::{ cfg::{ CFGNodeId, CFG }, icfg_builder::ICFGBuilder, ICFG },
+    traits::{ Dissasemble, LinearControlFlow, StmtTrait },
+};
 
-use super::{ LinearControlFlow, Stmt, StmtTrait, Stmts };
+use super::{ Stmt, Stmts };
 
 #[derive(Debug)]
 pub struct ScopeStmt<'ast> {
@@ -41,6 +46,10 @@ impl<'ast> Dissasemble for ScopeStmt<'ast> {
 }
 
 impl<'ast> StmtTrait for ScopeStmt<'ast> {
+    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder) {
+        self.stmts.compile_into_icfg(icfg_builder);
+    }
+
     fn is_linear_control_flow(&self) -> bool {
         self.stmts.is_linear_control_flow()
     }
@@ -52,6 +61,6 @@ impl<'ast> StmtTrait for ScopeStmt<'ast> {
     }
 
     fn as_linear_control_flow(&self) -> Option<&dyn LinearControlFlow> {
-        todo!()
+        None
     }
 }

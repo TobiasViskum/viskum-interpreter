@@ -1,25 +1,29 @@
-use crate::compiler::{ ds::symbol_table::SymbolTableRef, error_handler::ErrorHandler, Dissasemble };
+use crate::compiler::{
+    ds::symbol_table::SymbolTableRef,
+    error_handler::ErrorHandler,
+    ir::icfg::{
+        cfg::{ CFGDecisionNode, CFGNode, CFGNodeId, CFGNodeType, CFG },
+        icfg_builder::ICFGBuilder,
+        ICFG,
+    },
+    traits::{ Dissasemble, LinearControlFlow, StmtTrait },
+};
 
-use super::{ ExprStmt, LinearControlFlow, ScopeStmt, StmtTrait };
+use super::{ ExprStmt, ScopeStmt };
 
 #[derive(Debug)]
 pub struct IfStmt<'ast> {
     condition: Option<ExprStmt<'ast>>,
     true_block: ScopeStmt<'ast>,
-    false_block: Option<Box<IfStmt<'ast>>>,
+    false_block: Option<&'ast mut IfStmt<'ast>>,
 }
 
 impl<'ast> IfStmt<'ast> {
     pub fn new(
         condition: Option<ExprStmt<'ast>>,
         true_block: ScopeStmt<'ast>,
-        false_block: Option<IfStmt<'ast>>
+        false_block: Option<&'ast mut IfStmt<'ast>>
     ) -> Self {
-        let false_block = match false_block {
-            Some(stmt) => Some(Box::new(stmt)),
-            None => None,
-        };
-
         Self {
             condition,
             true_block,
@@ -30,19 +34,19 @@ impl<'ast> IfStmt<'ast> {
 
 impl<'ast> Dissasemble for IfStmt<'ast> {
     fn dissasemble(&self) -> String {
-        let mut string_builder = String::from("");
+        let mut string_builder = String::new();
         if let Some(condition) = &self.condition {
-            string_builder += format!("if {} {{\n", condition.dissasemble()).as_str();
+            string_builder += format!("if {} ", condition.dissasemble()).as_str();
 
             string_builder += self.true_block.dissasemble().as_str();
-
-            string_builder += "}\n";
 
             if let Some(false_block) = &self.false_block {
                 string_builder += false_block.dissasemble().as_str();
             }
         } else {
-            string_builder += "else {\n";
+            string_builder += "else ";
+
+            string_builder += self.true_block.dissasemble().as_str();
         }
 
         string_builder
@@ -50,6 +54,20 @@ impl<'ast> Dissasemble for IfStmt<'ast> {
 }
 
 impl<'ast> StmtTrait for IfStmt<'ast> {
+    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder) {
+        // let condition = self.condition.as_ref().map(|expr| expr.compile_to_dag());
+        // let decision_node_id = current_cfg.push_node(
+        //     CFGNode::new(CFGNodeType::DecisionNode(CFGDecisionNode::new(condition)))
+        // );
+        // let true_node_id = self.true_block.compile_into_icfg(icfg, current_cfg);
+
+        // let false_node_id = self.false_block
+        //     .as_ref()
+        //     .map(|scope| scope.compile_into_icfg(icfg, current_cfg));
+
+        todo!()
+    }
+
     fn is_linear_control_flow(&self) -> bool {
         false
     }

@@ -4,13 +4,10 @@ use ahash::AHashMap;
 
 use crate::compiler::{
     error_handler::{ CompileError, ReportedError },
-    ir::ast::{
-        expr::{ Expr, ExprTrait },
-        stmt::{ FunctionArgument, FunctionStmt, VarAssignStmt, VarDefStmt },
-    },
+    ir::ast::{ expr::Expr, stmt::{ FunctionArgument, FunctionStmt, VarAssignStmt, VarDefStmt } },
     parser::token::TokenMetadata,
     print_todo,
-    Dissasemble,
+    traits::{ Dissasemble, ExprTrait, SymbolTableActions, SymbolTableAlloc },
 };
 
 use super::value::ValueType;
@@ -128,20 +125,27 @@ impl SSAKey {
     }
 }
 
-pub trait SymbolTableActions {
-    fn lookup_with_key(&self, ssa_key: &SSAKey) -> Option<&Symbol>;
+impl Dissasemble for SSAKey {
+    fn dissasemble(&self) -> String {
+        let mut subscript = String::new();
+        for char in self.subscript.to_string().chars() {
+            subscript += match char {
+                '0' => "₀",
+                '1' => "₁",
+                '2' => "₂",
+                '3' => "₃",
+                '4' => "₄",
+                '5' => "₅",
+                '6' => "₆",
+                '7' => "₇",
+                '8' => "₈",
+                '9' => "₉",
+                c => panic!("Invalid subscript character: {} (only chars 0-9 is supported)", c),
+            };
+        }
 
-    fn lookup_as_fn(&self, ident: &Rc<str>) -> Result<&SymbolFunction, String>;
-
-    fn lookup_as_var(&self, ident: &Rc<str>) -> Result<&SymbolVariable, String>;
-
-    fn lookup(&self, ident: &Rc<str>) -> Option<(&SSAKey, &Symbol)>;
-
-    fn insert(&mut self, ident: Rc<str>, symbol: Symbol) -> SSAKey;
-}
-
-pub trait SymbolTableAlloc {
-    fn alloc_symbol_table(&mut self, return_type: Option<ValueType>) -> SymbolTableRef;
+        format!("{}{}", self.ident, subscript)
+    }
 }
 
 #[derive(Debug)]
@@ -164,7 +168,7 @@ impl Symbols {
     }
 }
 
-impl SymbolTableActions for Symbols {
+impl Symbols {
     fn lookup_with_key(&self, ssa_key: &SSAKey) -> Option<&Symbol> {
         match self.symbols.get(ssa_key) {
             Some((symbol, _)) => Some(symbol),
@@ -210,9 +214,7 @@ impl SymbolTableActions for Symbols {
             .and_then(|(ssa_key, (symbol, _))| Some((ssa_key, symbol)))
     }
 
-    fn insert(&mut self, ident: Rc<str>, symbol: Symbol) -> SSAKey {
-        let ssa_subscript = self.count_ident_occurences(&ident) + 1;
-        let ssa_key = SSAKey::new(ident, ssa_subscript);
+    fn insert(&mut self, ssa_key: SSAKey, symbol: Symbol) -> SSAKey {
         self.symbols.insert(ssa_key.clone(), (symbol, SymbolState::Unchanged));
         ssa_key
     }
@@ -282,7 +284,17 @@ impl LocalSymbolTable {
     ) {
         let symbol = Symbol::new_variable(value_type, is_mutable, metadata);
 
-        self.symbols.insert(name, symbol);
+        let ssa_subscript = self.count_ident_occurences(&name) + 1;
+        self.symbols.insert(SSAKey::new(name, ssa_subscript), symbol);
+    }
+
+    fn count_ident_occurences(&self, ident: &Rc<str>) -> usize {
+        let ident_occurences_in_self = self.symbols.count_ident_occurences(ident);
+        let other_occuerences_count = match self.parent {
+            Some(parent) => unsafe { (*parent).count_ident_occurences(ident) }
+            None => unsafe { (*self.global_symbol_table).count_ident_occurences(ident) }
+        };
+        ident_occurences_in_self + other_occuerences_count
     }
 
     pub fn declare_fn(&mut self, fn_stmt: &FunctionStmt) -> Result<(), CompileError> {
@@ -296,17 +308,27 @@ impl LocalSymbolTable {
             "Check if the body returns the provided return type. Also check that if the body returns something that the correct return type is provided"
         );
 
-        self.symbols.insert(fn_stmt.get_name(), symbol);
+        self.insert(fn_stmt.get_name(), symbol);
 
         Ok(())
     }
 
-    pub fn assing_var(&mut self, var_assign_stmt: &mut VarAssignStmt) -> Result<(), CompileError> {
+    pub fn assing_var(
+        &mut self,
+        var_assign_stmt: &mut VarAssignStmt
+    ) -> Result<SSAKey, CompileError> {
         let symbol_table_ref = SymbolTableRef::new(self as *mut LocalSymbolTable);
 
         let value_type = var_assign_stmt.get_mut_value_expr().type_check(&symbol_table_ref)?;
 
-        let ident_expr = match (unsafe { &*var_assign_stmt.get_target_expr().get_expr() }) {
+        print_todo("Show correct subscript in assignment when dissasembling");
+        print_todo(
+            "To fix it keep a hash map in GlobalSymbolTable (AHashMap<Rc<str>, usize>), which counts the occurrences of each lexeme globally"
+        );
+
+        var_assign_stmt.get_mut_target_expr().type_check(&symbol_table_ref)?;
+
+        let ident_expr = match &*var_assign_stmt.get_target_expr().get_expr() {
             Expr::IdentifierExpr(ident_expr) => ident_expr,
             _ => panic!("Only assignment to lexemes is currently supported"),
         };
@@ -321,9 +343,13 @@ impl LocalSymbolTable {
         match symbol_var.get_is_mutable() {
             true => {
                 if symbol_var.get_value_type().is(&value_type) {
-                    self.symbols.insert(ident_expr_lexeme, Symbol::Variable(symbol_var.clone()));
+                    let ssa_key = self.insert(
+                        ident_expr_lexeme,
+                        Symbol::Variable(symbol_var.clone())
+                    );
+                    Ok(ssa_key)
                 } else {
-                    return Err(
+                    Err(
                         CompileError::new(
                             ReportedError::new(
                                 format!(
@@ -343,11 +369,11 @@ impl LocalSymbolTable {
                                 }
                             )
                         )
-                    );
+                    )
                 }
             }
             false => {
-                return Err(
+                Err(
                     CompileError::new_multiple(
                         vec![
                             ReportedError::new(
@@ -368,14 +394,13 @@ impl LocalSymbolTable {
                             )
                         ]
                     )
-                );
+                )
             }
         }
-
-        Ok(())
     }
 
-    pub fn declare_var(&mut self, var_def_stmt: &mut VarDefStmt) -> Result<(), CompileError> {
+    #[must_use = "Remember to set ssa_subscript"]
+    pub fn declare_var(&mut self, var_def_stmt: &mut VarDefStmt) -> Result<SSAKey, CompileError> {
         let symbol_table_ref = SymbolTableRef::new(self as *mut LocalSymbolTable);
 
         let value_type = var_def_stmt.get_resolved_value_type(&symbol_table_ref)?;
@@ -386,9 +411,7 @@ impl LocalSymbolTable {
             var_def_stmt.get_metadata()
         );
 
-        self.symbols.insert(var_def_stmt.get_name(), symbol);
-
-        Ok(())
+        Ok(symbol_table_ref.get_mut().insert(var_def_stmt.get_name(), symbol))
     }
 }
 
@@ -407,7 +430,8 @@ impl SymbolTableAlloc for LocalSymbolTable {
 
 impl SymbolTableActions for LocalSymbolTable {
     fn insert(&mut self, ident: Rc<str>, symbol: Symbol) -> SSAKey {
-        self.symbols.insert(ident, symbol)
+        let ssa_subscript = self.count_ident_occurences(&ident) + 1;
+        self.symbols.insert(SSAKey::new(ident, ssa_subscript), symbol)
     }
 
     fn lookup(&self, ident: &Rc<str>) -> Option<(&SSAKey, &Symbol)> {
@@ -479,6 +503,10 @@ impl GlobalSymbolTable {
         let idx = self.allocated_symbol_tables.len() - 1;
         self.allocated_symbol_tables.get_mut(idx).unwrap() as *mut LocalSymbolTable
     }
+
+    fn count_ident_occurences(&self, ident: &Rc<str>) -> usize {
+        self.symbols.count_ident_occurences(ident)
+    }
 }
 
 impl SymbolTableAlloc for GlobalSymbolTable {
@@ -490,7 +518,8 @@ impl SymbolTableAlloc for GlobalSymbolTable {
 
 impl SymbolTableActions for GlobalSymbolTable {
     fn insert(&mut self, ident: Rc<str>, symbol: Symbol) -> SSAKey {
-        self.symbols.insert(ident, symbol)
+        let ssa_subscript = self.count_ident_occurences(&ident) + 1;
+        self.symbols.insert(SSAKey::new(ident, ssa_subscript), symbol)
     }
 
     fn lookup(&self, ident: &Rc<str>) -> Option<(&SSAKey, &Symbol)> {

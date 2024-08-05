@@ -1,11 +1,19 @@
-use crate::compiler::{
-    ds::{ symbol_table::SymbolTableRef, value::ValueType },
-    error_handler::{ CompileError, ErrorHandler, SrcCharsRange },
-    ir::{ ast::expr::{ Expr, ExprTrait }, icfg::dag::DAG },
-    Dissasemble,
-};
+use ahash::AHashMap;
 
-use super::{ LinearControlFlow, StmtTrait };
+use crate::compiler::{
+    ds::{ symbol_table::{ SSAKey, SymbolTableRef }, value::ValueType },
+    error_handler::{ CompileError, ErrorHandler, SrcCharsRange },
+    ir::{
+        ast::expr::Expr,
+        icfg::{
+            cfg::{ CFGNode, CFGNodeId, CFGNodeType, CFGProcessNode, CFG },
+            dag::DAG,
+            icfg_builder::ICFGBuilder,
+            ICFG,
+        },
+    },
+    traits::{ Dissasemble, ExprTrait, LinearControlFlow, StmtTrait },
+};
 
 #[derive(Debug)]
 pub struct ExprStmt<'ast> {
@@ -21,50 +29,35 @@ impl<'ast> ExprStmt<'ast> {
         &self.expr
     }
 
-    // pub fn get_value_type(&mut self, error_handler: &mut ErrorHandler) -> Option<ValueType> {
-    //     match self.type_check_and_constant_fold(ast_symbol_table) {}
-    // }
-}
-
-impl<'ast> ExprTrait for ExprStmt<'ast> {
-    fn collect_metadata(&self) -> SrcCharsRange {
-        unsafe { self.expr.collect_metadata() }
+    pub fn collect_metadata(&self) -> SrcCharsRange {
+        self.expr.collect_metadata()
     }
 
-    fn compile_to_dag_node(&self, dag: &mut DAG) -> usize {
-        unsafe { self.expr.compile_to_dag_node(dag) }
+    pub fn type_check(
+        &mut self,
+        symbol_table_ref: &SymbolTableRef
+    ) -> Result<ValueType, CompileError> {
+        self.expr.type_check(symbol_table_ref)
     }
 
-    fn type_check(&mut self, symbol_table_ref: &SymbolTableRef) -> Result<ValueType, CompileError> {
-        unsafe { self.expr.type_check(symbol_table_ref) }
+    pub fn compile_to_dag(&self) -> DAG {
+        let mut dag = DAG::new();
+        let mut ident_node_id_map = AHashMap::new();
+        self.compile_into_dag(&mut dag, &mut ident_node_id_map);
+        dag
     }
-
-    // fn evaluate(&mut self, ast_symbol_table: &AstSymbolTable) -> ExprEvaluateResult {
-    //     let (new_value, src_chars_range) = unsafe { (*self.expr).evaluate(ast_symbol_table)? };
-
-    //     unsafe {
-    //         *self.expr = Expr::LiteralExpr(
-    //             LiteralExpr::new(new_value.clone(), src_chars_range.into())
-    //         );
-    //     }
-
-    //     Ok((new_value, src_chars_range))
-    // }
-
-    // fn type_check_and_constant_fold(&mut self, ast_symbol_table: &AstSymbolTable) -> ExprResult {
-    //     let expr_result_ok = unsafe {
-    //         (*self.expr).type_check_and_constant_fold(ast_symbol_table)?
-    //     };
-
-    //     if expr_result_ok.get_can_constant_fold() {
-    //         self.evaluate(ast_symbol_table)?;
-    //     }
-
-    //     Ok(expr_result_ok)
-    // }
 }
 
 impl<'ast> StmtTrait for ExprStmt<'ast> {
+    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder) {
+        let mut dag = DAG::new();
+        let mut ident_node_id_map = AHashMap::new();
+        let entry_node_id = self.compile_into_dag(&mut dag, &mut ident_node_id_map);
+        dag.set_entry_node_id(entry_node_id);
+        let cfg_process_node = CFGNode::new(CFGNodeType::ProcessNode(CFGProcessNode::new(dag)));
+        icfg_builder.push_cfg_node(cfg_process_node);
+    }
+
     fn is_linear_control_flow(&self) -> bool {
         true
     }
@@ -74,21 +67,31 @@ impl<'ast> StmtTrait for ExprStmt<'ast> {
         symbol_table_ref: &SymbolTableRef,
         error_handler: &mut ErrorHandler
     ) {
-        unsafe {
-            match self.expr.type_check(&symbol_table_ref) {
-                Ok(_) => {}
-                Err(err) => error_handler.report_compile_error(err),
-            }
+        match self.expr.type_check(&symbol_table_ref) {
+            Ok(_) => {}
+            Err(err) => error_handler.report_compile_error(err),
         }
     }
 
     fn as_linear_control_flow(&self) -> Option<&dyn LinearControlFlow> {
-        None
+        Some(self)
+    }
+}
+
+impl<'ast> LinearControlFlow for ExprStmt<'ast> {
+    fn compile_into_dag(
+        &self,
+        dag: &mut DAG,
+        ident_node_id_map: &mut AHashMap<SSAKey, usize>
+    ) -> usize {
+        let node_id = self.expr.compile_into_dag(dag, ident_node_id_map);
+        dag.set_entry_node_id(node_id);
+        node_id
     }
 }
 
 impl<'ast> Dissasemble for ExprStmt<'ast> {
     fn dissasemble(&self) -> String {
-        unsafe { self.expr.dissasemble() }
+        self.expr.dissasemble()
     }
 }

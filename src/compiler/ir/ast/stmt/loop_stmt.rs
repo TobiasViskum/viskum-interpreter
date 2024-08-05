@@ -1,6 +1,11 @@
-use crate::compiler::{ ds::symbol_table::SymbolTableRef, error_handler::ErrorHandler, Dissasemble };
+use crate::compiler::{
+    ds::symbol_table::SymbolTableRef,
+    error_handler::ErrorHandler,
+    ir::icfg::{ cfg::{ CFGNodeId, CFG }, icfg_builder::ICFGBuilder, ICFG },
+    traits::{ Dissasemble, LinearControlFlow, StmtTrait },
+};
 
-use super::{ ExprStmt, LinearControlFlow, ScopeStmt, StmtTrait };
+use super::{ ExprStmt, ScopeStmt };
 
 #[derive(Debug)]
 pub struct LoopStmt<'ast> {
@@ -16,7 +21,7 @@ impl<'ast> LoopStmt<'ast> {
 
 impl<'ast> Dissasemble for LoopStmt<'ast> {
     fn dissasemble(&self) -> String {
-        let mut string_builder = String::from("");
+        let mut string_builder = String::new();
         match &self.condition {
             Some(condition) => {
                 string_builder += format!("while {} {{\n", condition.dissasemble()).as_str();
@@ -34,6 +39,10 @@ impl<'ast> Dissasemble for LoopStmt<'ast> {
 }
 
 impl<'ast> StmtTrait for LoopStmt<'ast> {
+    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder) {
+        todo!()
+    }
+
     fn is_linear_control_flow(&self) -> bool {
         false
     }

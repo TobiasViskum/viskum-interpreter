@@ -8,6 +8,7 @@ mod fn_call_expr;
 // mod native_call_expr;
 mod grouping_expr;
 
+use ahash::AHashMap;
 pub use binary_expr::BinaryExpr;
 use grouping_expr::GroupingExpr;
 pub use unary_expr::UnaryExpr;
@@ -16,93 +17,17 @@ pub use identifier_expr::IdentifierExpr;
 pub use fn_call_expr::FnCallExpr;
 
 use crate::compiler::{
-    ds::{ symbol_table::SymbolTableRef, value::{ ops::{ BinaryOp, UnaryOp }, ValueType } },
-    error_handler::{ CompileError, InternalError, ReportedError, SrcCharsRange },
+    ds::{
+        symbol_table::{ SSAKey, SymbolTableRef },
+        value::{ ops::{ BinaryOp, UnaryOp }, ValueType },
+    },
+    error_handler::{ CompileError, ReportedError, SrcCharsRange },
     ir::icfg::dag::DAG,
     parser::token::TokenMetadata,
-    Dissasemble,
+    traits::{ Dissasemble, ExprTrait },
 };
 
 use super::AstArena;
-// pub use native_call_expr::NativeCallExpr;
-
-#[derive(Debug)]
-pub struct ExprResultOk {
-    value_type: ValueType,
-    can_constant_fold: bool,
-}
-
-impl ExprResultOk {
-    pub fn new(value_type: ValueType, can_constant_fold: bool) -> Self {
-        Self {
-            value_type,
-            can_constant_fold,
-        }
-    }
-
-    pub fn take_value_type(self) -> ValueType {
-        self.value_type
-    }
-
-    pub fn get_can_constant_fold(&self) -> bool {
-        self.can_constant_fold
-    }
-}
-
-#[derive(Debug)]
-pub struct ExprResultErr {
-    compile_errors: Vec<CompileError>,
-    internal_errors: Vec<InternalError>,
-}
-
-impl ExprResultErr {
-    pub fn new(compile_errors: Vec<CompileError>) -> Self {
-        Self { compile_errors, internal_errors: vec![] }
-    }
-
-    pub fn push_internal_error(&mut self, internal_error: InternalError) {
-        self.internal_errors.push(internal_error);
-    }
-
-    pub fn take_errors(self) -> Vec<CompileError> {
-        self.compile_errors
-    }
-}
-
-// #[derive(Debug)]
-// pub enum TypeCheckErr {
-//     CompileError(CompileError),
-//     InternalError(InternalError),
-// }
-
-// impl TypeCheckErr {
-//     pub fn new(compile_error: CompileError) -> Self {
-//         Self::CompileError(compile_error)
-//     }
-// }
-
-// impl From<TypeCheckErr> for ExprResultErr {
-//     fn from(value: TypeCheckErr) -> Self {
-//         match value {
-//             TypeCheckErr::CompileError(compile_error) => ExprResultErr::new(vec![compile_error]),
-//             TypeCheckErr::InternalError(internal_error) => {
-//                 let mut expr_result_error = ExprResultErr::new(vec![]);
-//                 expr_result_error.push_internal_error(internal_error);
-//                 expr_result_error
-//             }
-//         }
-//     }
-// }
-
-// pub type ExprEvaluateResult = Result<(Value, SrcCharsRange), TypeCheckErr>;
-
-pub trait ExprTrait where Self: Dissasemble + Debug {
-    fn type_check(&mut self, symbol_table_ref: &SymbolTableRef) -> Result<ValueType, CompileError>;
-
-    fn compile_to_dag_node(&self, dag: &mut DAG) -> usize;
-
-    fn collect_metadata(&self) -> SrcCharsRange;
-}
 
 #[derive(Debug)]
 pub struct ExprBuilder<'ast> {
@@ -143,7 +68,7 @@ impl<'ast> ExprBuilder<'ast> {
             }
         };
 
-        self.exprs.push(Expr::GroupingExpr(GroupingExpr::new(self.ast_arena.alloc_mut_expr(expr))));
+        self.exprs.push(Expr::GroupingExpr(GroupingExpr::new(self.ast_arena.alloc_expr(expr))));
 
         Ok(())
     }
@@ -176,7 +101,7 @@ impl<'ast> ExprBuilder<'ast> {
             }
         };
 
-        let unary_expr = UnaryExpr::new(op, self.ast_arena.alloc_mut_expr(rhs));
+        let unary_expr = UnaryExpr::new(op, self.ast_arena.alloc_expr(rhs));
 
         self.exprs.push(Expr::UnaryExpr(unary_expr));
 
@@ -237,9 +162,9 @@ impl<'ast> ExprBuilder<'ast> {
         };
 
         let binary_expr = BinaryExpr::new(
-            self.ast_arena.alloc_mut_expr(lhs),
+            self.ast_arena.alloc_expr(lhs),
             op,
-            self.ast_arena.alloc_mut_expr(rhs)
+            self.ast_arena.alloc_expr(rhs)
         );
 
         self.exprs.push(Expr::BinaryExpr(binary_expr));
@@ -331,14 +256,18 @@ impl<'ast> ExprTrait for Expr<'ast> {
         }
     }
 
-    fn compile_to_dag_node(&self, dag: &mut DAG) -> usize {
+    fn compile_into_dag(
+        &self,
+        dag: &mut DAG,
+        ident_node_id_map: &mut AHashMap<SSAKey, usize>
+    ) -> usize {
         match self {
-            Self::GroupingExpr(expr) => expr.compile_to_dag_node(dag),
-            Self::BinaryExpr(expr) => expr.compile_to_dag_node(dag),
-            Self::UnaryExpr(expr) => expr.compile_to_dag_node(dag),
-            Self::LiteralExpr(expr) => expr.compile_to_dag_node(dag),
-            Self::IdentifierExpr(expr) => expr.compile_to_dag_node(dag),
-            Self::FnCallExpr(expr) => expr.compile_to_dag_node(dag),
+            Self::GroupingExpr(expr) => expr.compile_into_dag(dag, ident_node_id_map),
+            Self::BinaryExpr(expr) => expr.compile_into_dag(dag, ident_node_id_map),
+            Self::UnaryExpr(expr) => expr.compile_into_dag(dag, ident_node_id_map),
+            Self::LiteralExpr(expr) => expr.compile_into_dag(dag, ident_node_id_map),
+            Self::IdentifierExpr(expr) => expr.compile_into_dag(dag, ident_node_id_map),
+            Self::FnCallExpr(expr) => expr.compile_into_dag(dag, ident_node_id_map),
             // Self::NativeCallExpr(expr) => expr.compile_to_dag_node(dag),
         }
     }

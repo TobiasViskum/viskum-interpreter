@@ -3,11 +3,12 @@ use std::rc::Rc;
 use crate::compiler::{
     ds::{ symbol_table::SymbolTableRef, value::ValueType },
     error_handler::ErrorHandler,
+    ir::icfg::{ cfg::{ CFGNodeId, CFG }, icfg_builder::ICFGBuilder, ICFG },
     parser::token::TokenMetadata,
-    Dissasemble,
+    traits::{ Dissasemble, LinearControlFlow, StmtTrait },
 };
 
-use super::{ FunctionArgument, LinearControlFlow, ScopeStmt, StmtTrait };
+use super::{ FunctionArgument, ScopeStmt };
 
 #[derive(Debug)]
 pub struct FunctionStmt<'ast> {
@@ -86,6 +87,10 @@ impl<'ast> Dissasemble for FunctionStmt<'ast> {
 }
 
 impl<'ast> StmtTrait for FunctionStmt<'ast> {
+    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder) {
+        todo!()
+    }
+
     fn is_linear_control_flow(&self) -> bool {
         false
     }
