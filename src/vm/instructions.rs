@@ -1,13 +1,13 @@
 use crate::compiler::Dissasemble;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Reg {
     Abs(usize),
     Rel(usize),
 }
 
 impl Reg {
-    pub(super) fn get_idx(&self) -> usize {
+    pub fn get_idx(&self) -> usize {
         match self {
             Self::Abs(reg) => *reg,
             Self::Rel(reg) => *reg,
@@ -76,6 +76,10 @@ pub enum Instruction {
         dst_reg: usize,
         src_reg: Reg,
     },
+    Copy {
+        dst_reg: usize,
+        src_reg: Reg,
+    },
 }
 
 fn instr_name(name: &str) -> String {
@@ -109,6 +113,7 @@ impl Instruction {
             Self::CmpLtInt { .. } => "CMP_LT_INT",
             Self::NegInt { .. } => "NEG_INT",
             Self::NotInt { .. } => "NOT_INT",
+            Self::Copy { .. } => "COPY",
         })
     }
 }
@@ -135,7 +140,9 @@ impl Dissasemble for Instruction {
                     arg_reg(src2_reg)
                 )
             }
-            Self::NegInt { dst_reg, src_reg } | Self::NotInt { dst_reg, src_reg } => {
+            | Self::NegInt { dst_reg, src_reg }
+            | Self::NotInt { dst_reg, src_reg }
+            | Self::Copy { dst_reg, src_reg } => {
                 format!(
                     "{} {} {}",
                     instr_name(self.to_op_name().as_str()),

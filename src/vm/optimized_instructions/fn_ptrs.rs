@@ -95,6 +95,10 @@ new_mod! {
     def_unary_op!(not_int, |rhs| {
         (!rhs) as i64
     });
+
+    def_unary_op!(copy, |rhs| {
+        rhs
+    });
 }
 
 new_mod! {

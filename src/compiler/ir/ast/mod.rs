@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use expr::Expr;
-use stmt::{ IfStmt, ScopeStmt, Stmt };
+use stmt::{ GotoNodeIds, IfStmt, BasicBlockStmt, Stmt };
 use typed_arena::Arena;
 
 use crate::compiler::{
@@ -62,27 +62,28 @@ impl<'ast> AstArena<'ast> {
 
 #[derive(Debug)]
 pub struct Ast<'ast> {
-    // ast_arena: Option<AstArena<'ast>>,
-    main_scope: ScopeStmt<'ast>,
+    main_scope: BasicBlockStmt<'ast>,
 }
 
 impl<'ast> Ast<'ast> {
-    pub fn new(main_scope: ScopeStmt<'ast>) -> Self {
+    pub fn new(main_scope: BasicBlockStmt<'ast>) -> Self {
         Self {
-            // ast_arena: None,
             main_scope,
         }
     }
 
     pub fn construct_icfg(self) -> ICFG {
         let mut icfg_builder = ICFGBuilder::new();
-        self.main_scope.compile_into_icfg(&mut icfg_builder);
+        let mut goto_node_ids = GotoNodeIds::new();
+        self.main_scope.compile_into_icfg(&mut icfg_builder, &mut goto_node_ids);
 
         icfg_builder.take_icfg()
     }
 
     pub fn type_check_and_constant_fold(&mut self, error_handler: &mut ErrorHandler) {
-        self.main_scope.validate_stmt(&self.main_scope.get_symbol_table_ref(), error_handler);
+        println!("1");
+
+        self.main_scope.validate_stmt(&mut self.main_scope.get_symbol_table_ref(), error_handler);
     }
 
     pub fn print(&self) {

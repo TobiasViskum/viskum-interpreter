@@ -7,6 +7,7 @@ mod parse_rule;
 mod precedence;
 mod stmt_methods;
 mod expr_methods;
+mod parser_macros;
 
 use std::rc::Rc;
 
@@ -22,7 +23,7 @@ use super::{
         value::{ ops::{ BinaryOp, ComparisonOp, UnaryOp }, Value },
     },
     error_handler::ErrorHandler,
-    ir::ast::{ stmt::ScopeStmt, Ast, AstArena },
+    ir::ast::{ stmt::BasicBlockStmt, Ast, AstArena },
     traits::SymbolTableAlloc,
 };
 
@@ -109,7 +110,7 @@ impl<'a> Parser<'a> {
     ) -> Ast<'b> {
         let symbol_table_ref = global_symbol_table.alloc_symbol_table(None);
 
-        let mut main_scope = ScopeStmt::new(symbol_table_ref);
+        let mut main_scope = BasicBlockStmt::new(symbol_table_ref);
 
         while !self.is_at_end() {
             match self.statement((ast_arena, symbol_table_ref)) {
@@ -126,29 +127,6 @@ impl<'a> Parser<'a> {
 
         Ast::new(main_scope)
     }
-
-    // pub fn parse_to_ast(&mut self, global_symbol_table: &mut GlobalSymbolTable) {
-    //     let arena = AstArena::new();
-
-    //     let mut symbol_table_ref = global_symbol_table.alloc_symbol_table(None);
-
-    //     let mut main_scope = ScopeStmt::new(symbol_table_ref);
-
-    //     while !self.is_at_end() {
-    //         match self.statement((&arena, &mut symbol_table_ref)) {
-    //             Ok(stmt) => main_scope.push_stmt(stmt),
-    //             Err(err) => {
-    //                 self.report_compile_error(err);
-    //             }
-    //         }
-
-    //         if self.panic_mode {
-    //             self.synchronize();
-    //         }
-    //     }
-
-    //     // Ast::new(main_scope, arena)
-    // }
 }
 
 create_tokens_and_parse_rules!(

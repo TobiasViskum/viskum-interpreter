@@ -1,6 +1,12 @@
 use crate::compiler::error_handler::{ CompileError, ReportedError };
 
-use super::{ parse_rule::ParseRule, token::Token, Parser, TokenType };
+use super::{
+    parse_rule::ParseRule,
+    parser_macros::{ current, previous },
+    token::Token,
+    Parser,
+    TokenType,
+};
 
 impl<'a> Parser<'a> {
     pub(super) fn advance(&mut self) {
@@ -34,23 +40,20 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn consume(&mut self, ttype: TokenType, msg: &str) -> Result<(), CompileError> {
-        if self.get_current().get_ttype() == &ttype {
+        if current!(self, ttype) == &ttype {
             self.advance();
             Ok(())
         } else {
-            if self.get_current().get_ttype() == &TokenType::TokenError {
-                let msg = self.get_current().get_message().unwrap().to_string();
-                let metadata = self.get_current().get_metadata();
+            if current!(self, ttype) == &TokenType::TokenError {
+                let msg = current!(self, msg).unwrap().to_string();
+                let metadata = current!(self, metadata);
                 self.advance();
                 Err(CompileError::new(ReportedError::new(msg, metadata.into())))
             } else {
                 self.advance();
                 Err(
                     CompileError::new(
-                        ReportedError::new(
-                            msg.to_string(),
-                            self.get_current().get_metadata().into()
-                        )
+                        ReportedError::new(msg.to_string(), current!(self, metadata).into())
                     )
                 )
             }
@@ -61,24 +64,17 @@ impl<'a> Parser<'a> {
         if self.is_at_end() {
             return true;
         }
-        let result = match self.get_current().get_ttype() {
+        let result = match current!(self, ttype) {
             TokenType::TokenSemicolon | TokenType::TokenEOF => true,
-            _ => {
-                let prev_line = self.get_previous().get_line();
-
-                if self.get_current().get_line() > prev_line {
-                    true
-                } else {
-                    false
-                }
-            }
+            _ => current!(self, line) > previous!(self, line),
         };
 
         result
     }
 
+    #[must_use]
     pub(super) fn consume_expr_end(&mut self) -> Result<(), CompileError> {
-        match self.get_current().get_ttype() {
+        match current!(self, ttype) {
             TokenType::TokenSemicolon => {
                 self.advance();
                 return Ok(());
@@ -87,14 +83,12 @@ impl<'a> Parser<'a> {
                 return Ok(());
             }
             _ => {
-                let prev_line = self.get_previous().get_line();
-
-                if self.get_current().get_line() <= prev_line {
-                    if self.get_current().get_ttype() == &TokenType::TokenError {
-                        let msg = self.get_current().get_message().unwrap().to_string();
+                if current!(self, line) <= previous!(self, line) {
+                    if current!(self, ttype) == &TokenType::TokenError {
+                        let msg = current!(self, msg).unwrap().to_string();
                         return Err(
                             CompileError::new(
-                                ReportedError::new(msg, self.get_current().get_metadata().into())
+                                ReportedError::new(msg, current!(self, metadata).into())
                             )
                         );
                     } else {
@@ -103,9 +97,9 @@ impl<'a> Parser<'a> {
                                 ReportedError::new(
                                     format!(
                                         "Unexpected end of expression. Expected new line or ';' but got {}",
-                                        self.get_current().get_lexeme(&self.source).get_lexeme_str()
+                                        current!(self, lexeme).get_lexeme_str()
                                     ),
-                                    self.get_current().get_metadata().into()
+                                    current!(self, metadata).into()
                                 )
                             )
                         );
@@ -130,7 +124,7 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn is_at_end(&self) -> bool {
-        self.get_current().get_ttype() == &TokenType::TokenEOF
+        current!(self, ttype) == &TokenType::TokenEOF
     }
 
     pub(super) fn get_parse_rule(&self, ttype: &TokenType) -> &ParseRule {
@@ -153,7 +147,7 @@ impl<'a> Parser<'a> {
     pub(super) fn is_ttype_in_stmt(&self, token_type: TokenType) -> bool {
         let mut i: usize = 0;
 
-        let start_line = self.get_current().get_line();
+        let start_line = current!(self, line);
 
         loop {
             i += 1;

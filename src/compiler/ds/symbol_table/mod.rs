@@ -1,109 +1,20 @@
-use std::{ cell::RefCell, fmt::Debug, rc::Rc };
+mod local_symbol_table;
+mod helper_structs;
 
 use ahash::AHashMap;
+pub use helper_structs::*;
+use typed_arena::Arena;
+
+use std::{ fmt::Debug, rc::Rc };
+
+use local_symbol_table::LocalSymbolTable;
 
 use crate::compiler::{
-    error_handler::{ CompileError, ReportedError },
-    ir::ast::{ expr::Expr, stmt::{ FunctionArgument, FunctionStmt, VarAssignStmt, VarDefStmt } },
     parser::token::TokenMetadata,
-    print_todo,
-    traits::{ Dissasemble, ExprTrait, SymbolTableActions, SymbolTableAlloc },
+    traits::{ Dissasemble, SymbolTableActions, SymbolTableAlloc },
 };
 
 use super::value::ValueType;
-
-#[derive(Debug)]
-pub enum SymbolState {
-    Unchanged,
-    MaybeChanged,
-}
-
-#[derive(Debug, Clone)]
-pub struct SymbolVariable {
-    value_type: ValueType,
-    is_mutable: bool,
-    metadata: TokenMetadata,
-}
-
-impl SymbolVariable {
-    pub fn new(value_type: ValueType, is_mutable: bool, metadata: TokenMetadata) -> Self {
-        Self { value_type, is_mutable, metadata }
-    }
-
-    pub fn get_value_type(&self) -> &ValueType {
-        &self.value_type
-    }
-    pub fn get_is_mutable(&self) -> bool {
-        self.is_mutable
-    }
-
-    pub fn get_metadata(&self) -> TokenMetadata {
-        self.metadata
-    }
-}
-
-#[derive(Debug)]
-pub struct SymbolFunction {
-    return_type: ValueType,
-    args: Vec<FunctionArgument>,
-    metadata: TokenMetadata,
-}
-
-impl SymbolFunction {
-    pub fn new(
-        return_type: ValueType,
-        args: Vec<FunctionArgument>,
-        metadata: TokenMetadata
-    ) -> Self {
-        Self { return_type, args, metadata }
-    }
-
-    pub fn get_return_type(&self) -> &ValueType {
-        &self.return_type
-    }
-
-    pub fn get_args(&self) -> &Vec<FunctionArgument> {
-        &self.args
-    }
-
-    pub fn get_metadata(&self) -> TokenMetadata {
-        self.metadata
-    }
-}
-
-#[derive(Debug)]
-pub enum Symbol {
-    Variable(SymbolVariable),
-    Function(SymbolFunction),
-}
-
-impl Symbol {
-    pub fn new_variable(value_type: ValueType, is_mutable: bool, metadata: TokenMetadata) -> Self {
-        Self::Variable(SymbolVariable::new(value_type, is_mutable, metadata))
-    }
-
-    pub fn new_function(
-        return_type: ValueType,
-        args: Vec<FunctionArgument>,
-        metadata: TokenMetadata
-    ) -> Self {
-        Self::Function(SymbolFunction::new(return_type, args, metadata))
-    }
-
-    pub fn try_value_type_as_var(&self) -> Result<ValueType, String> {
-        match self {
-            Self::Variable(symbol_var) => Ok(symbol_var.get_value_type().clone()),
-            Self::Function(symbol_fn) => {
-                Err(
-                    format!(
-                        "Expected {} arguments but got 0. Use parentheses to call the function: '(_)'",
-                        symbol_fn.get_args().len()
-                    )
-                )
-            }
-        }
-    }
-}
 
 #[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub struct SSAKey {
@@ -148,347 +59,29 @@ impl Dissasemble for SSAKey {
     }
 }
 
-#[derive(Debug)]
-struct Symbols {
-    symbols: AHashMap<SSAKey, (Symbol, SymbolState)>,
-}
-
-impl Symbols {
-    pub fn new() -> Self {
-        Self {
-            symbols: AHashMap::new(),
-        }
-    }
-
-    fn count_ident_occurences(&self, ident: &Rc<str>) -> usize {
-        self.symbols
-            .iter()
-            .filter(|&(key, _)| key.get_ident() == *ident)
-            .count()
-    }
-}
-
-impl Symbols {
-    fn lookup_with_key(&self, ssa_key: &SSAKey) -> Option<&Symbol> {
-        match self.symbols.get(ssa_key) {
-            Some((symbol, _)) => Some(symbol),
-            None => None,
-        }
-    }
-
-    fn lookup_as_fn(&self, ident: &Rc<str>) -> Result<&SymbolFunction, String> {
-        match self.lookup(ident) {
-            Some((_, symbol)) => {
-                match symbol {
-                    Symbol::Function(symbol_fn) => Ok(symbol_fn),
-                    Symbol::Variable(_) =>
-                        Err(
-                            format!("Undefined function: '{}'. A variable with a similar name exists.", ident)
-                        ),
-                }
-            }
-            None => { Err(format!("Undefined function: '{}'", ident)) }
-        }
-    }
-
-    fn lookup_as_var(&self, ident: &Rc<str>) -> Result<&SymbolVariable, String> {
-        match self.lookup(ident) {
-            Some((_, symbol)) => {
-                match symbol {
-                    Symbol::Variable(symbol_var) => Ok(symbol_var),
-                    Symbol::Function(_) =>
-                        Err(
-                            format!("Undefined variable: '{}'. A function with a similar name exists.", ident)
-                        ),
-                }
-            }
-            None => { Err(format!("Undefined variable: '{}'", ident)) }
-        }
-    }
-
-    fn lookup(&self, ident: &Rc<str>) -> Option<(&SSAKey, &Symbol)> {
-        self.symbols
-            .iter()
-            .filter(|symbol| symbol.0.ident == *ident)
-            .max_by_key(|(key, _)| key.subscript)
-            .and_then(|(ssa_key, (symbol, _))| Some((ssa_key, symbol)))
-    }
-
-    fn insert(&mut self, ssa_key: SSAKey, symbol: Symbol) -> SSAKey {
-        self.symbols.insert(ssa_key.clone(), (symbol, SymbolState::Unchanged));
-        ssa_key
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct SymbolTableRef {
-    raw_ptr: *mut LocalSymbolTable,
-}
-
-impl SymbolTableRef {
-    pub(in super::symbol_table) fn new(raw_ptr: *mut LocalSymbolTable) -> Self {
-        Self { raw_ptr }
-    }
-
-    pub fn get(&self) -> &LocalSymbolTable {
-        unsafe { &*self.raw_ptr }
-    }
-
-    pub fn get_mut(&self) -> &mut LocalSymbolTable {
-        unsafe { &mut *self.raw_ptr }
-    }
-}
-
-impl SymbolTableAlloc for SymbolTableRef {
-    fn alloc_symbol_table(&mut self, return_type: Option<ValueType>) -> SymbolTableRef {
-        unsafe { (*self.raw_ptr).alloc_symbol_table(return_type) }
-    }
-}
-
-#[derive(Debug)]
-pub struct LocalSymbolTable {
-    symbols: Symbols,
-    parent: Option<*mut Self>,
-    global_symbol_table: *mut GlobalSymbolTable,
-    fn_return_type: Option<ValueType>,
-}
-
-impl LocalSymbolTable {
-    pub fn new(
-        parent: Option<*mut Self>,
-        global_symbol_table: *mut GlobalSymbolTable,
-        fn_return_type: Option<ValueType>
-    ) -> Self {
-        Self {
-            symbols: Symbols::new(),
-            parent,
-            global_symbol_table,
-            fn_return_type,
-        }
-    }
-
-    pub fn get_is_in_fn(&self) -> bool {
-        self.fn_return_type.is_some()
-    }
-
-    pub fn get_fn_return_type(&self) -> Option<&ValueType> {
-        self.fn_return_type.as_ref()
-    }
-
-    pub fn insert_var(
-        &mut self,
-        name: Rc<str>,
-        value_type: ValueType,
-        is_mutable: bool,
-        metadata: TokenMetadata
-    ) {
-        let symbol = Symbol::new_variable(value_type, is_mutable, metadata);
-
-        let ssa_subscript = self.count_ident_occurences(&name) + 1;
-        self.symbols.insert(SSAKey::new(name, ssa_subscript), symbol);
-    }
-
-    fn count_ident_occurences(&self, ident: &Rc<str>) -> usize {
-        let ident_occurences_in_self = self.symbols.count_ident_occurences(ident);
-        let other_occuerences_count = match self.parent {
-            Some(parent) => unsafe { (*parent).count_ident_occurences(ident) }
-            None => unsafe { (*self.global_symbol_table).count_ident_occurences(ident) }
-        };
-        ident_occurences_in_self + other_occuerences_count
-    }
-
-    pub fn declare_fn(&mut self, fn_stmt: &FunctionStmt) -> Result<(), CompileError> {
-        let symbol = Symbol::new_function(
-            fn_stmt.get_return_type().clone(),
-            fn_stmt.get_args().clone(),
-            fn_stmt.get_metadata()
-        );
-
-        print_todo(
-            "Check if the body returns the provided return type. Also check that if the body returns something that the correct return type is provided"
-        );
-
-        self.insert(fn_stmt.get_name(), symbol);
-
-        Ok(())
-    }
-
-    pub fn assing_var(
-        &mut self,
-        var_assign_stmt: &mut VarAssignStmt
-    ) -> Result<SSAKey, CompileError> {
-        let symbol_table_ref = SymbolTableRef::new(self as *mut LocalSymbolTable);
-
-        let value_type = var_assign_stmt.get_mut_value_expr().type_check(&symbol_table_ref)?;
-
-        print_todo("Show correct subscript in assignment when dissasembling");
-        print_todo(
-            "To fix it keep a hash map in GlobalSymbolTable (AHashMap<Rc<str>, usize>), which counts the occurrences of each lexeme globally"
-        );
-
-        var_assign_stmt.get_mut_target_expr().type_check(&symbol_table_ref)?;
-
-        let ident_expr = match &*var_assign_stmt.get_target_expr().get_expr() {
-            Expr::IdentifierExpr(ident_expr) => ident_expr,
-            _ => panic!("Only assignment to lexemes is currently supported"),
-        };
-        let ident_expr_lexeme = ident_expr.get_lexeme();
-
-        let symbol_var = self
-            .lookup_as_var(&ident_expr_lexeme)
-            .or_else(|msg|
-                Err(CompileError::new(ReportedError::new(msg, ident_expr.collect_metadata())))
-            )?;
-
-        match symbol_var.get_is_mutable() {
-            true => {
-                if symbol_var.get_value_type().is(&value_type) {
-                    let ssa_key = self.insert(
-                        ident_expr_lexeme,
-                        Symbol::Variable(symbol_var.clone())
-                    );
-                    Ok(ssa_key)
-                } else {
-                    Err(
-                        CompileError::new(
-                            ReportedError::new(
-                                format!(
-                                    "Variable '{}' is of type '{}' but it is assigned to type '{}'",
-                                    ident_expr_lexeme,
-                                    symbol_var.get_value_type().dissasemble(),
-                                    value_type.dissasemble()
-                                ),
-                                {
-                                    let mut src_chars_range = var_assign_stmt
-                                        .get_target_expr()
-                                        .collect_metadata();
-                                    src_chars_range.merge(
-                                        &var_assign_stmt.get_value_expr().collect_metadata()
-                                    );
-                                    src_chars_range
-                                }
-                            )
-                        )
-                    )
-                }
-            }
-            false => {
-                Err(
-                    CompileError::new_multiple(
-                        vec![
-                            ReportedError::new(
-                                format!("Cannot assign a value to immutable variable '{}'", ident_expr_lexeme),
-                                {
-                                    let mut src_chars_range = var_assign_stmt
-                                        .get_target_expr()
-                                        .collect_metadata();
-                                    src_chars_range.merge(
-                                        &var_assign_stmt.get_value_expr().collect_metadata()
-                                    );
-                                    src_chars_range
-                                }
-                            ),
-                            ReportedError::new(
-                                format!("Consider changing this to `mut {}`", ident_expr_lexeme),
-                                symbol_var.get_metadata().into()
-                            )
-                        ]
-                    )
-                )
-            }
-        }
-    }
-
-    #[must_use = "Remember to set ssa_subscript"]
-    pub fn declare_var(&mut self, var_def_stmt: &mut VarDefStmt) -> Result<SSAKey, CompileError> {
-        let symbol_table_ref = SymbolTableRef::new(self as *mut LocalSymbolTable);
-
-        let value_type = var_def_stmt.get_resolved_value_type(&symbol_table_ref)?;
-
-        let symbol = Symbol::new_variable(
-            value_type,
-            var_def_stmt.get_is_mutable(),
-            var_def_stmt.get_metadata()
-        );
-
-        Ok(symbol_table_ref.get_mut().insert(var_def_stmt.get_name(), symbol))
-    }
-}
-
-impl SymbolTableAlloc for LocalSymbolTable {
-    fn alloc_symbol_table(&mut self, return_type: Option<ValueType>) -> SymbolTableRef {
-        unsafe {
-            let self_ptr = self as *mut LocalSymbolTable;
-            let allocated_table = (*self.global_symbol_table).alloc_empty(
-                Some(self_ptr),
-                return_type
-            );
-            SymbolTableRef::new(allocated_table)
-        }
-    }
-}
-
-impl SymbolTableActions for LocalSymbolTable {
-    fn insert(&mut self, ident: Rc<str>, symbol: Symbol) -> SSAKey {
-        let ssa_subscript = self.count_ident_occurences(&ident) + 1;
-        self.symbols.insert(SSAKey::new(ident, ssa_subscript), symbol)
-    }
-
-    fn lookup(&self, ident: &Rc<str>) -> Option<(&SSAKey, &Symbol)> {
-        match self.symbols.lookup(ident) {
-            Some(v) => Some(v),
-            None =>
-                match self.parent {
-                    Some(table) => unsafe { (*table).lookup(ident) }
-                    None => unsafe { (*self.global_symbol_table).lookup(ident) }
-                }
-        }
-    }
-
-    fn lookup_as_fn(&self, ident: &Rc<str>) -> Result<&SymbolFunction, String> {
-        match self.symbols.lookup_as_fn(ident) {
-            Ok(v) => Ok(v),
-            Err(_) =>
-                match self.parent {
-                    Some(table) => unsafe { (*table).lookup_as_fn(ident) }
-                    None => unsafe { (*self.global_symbol_table).lookup_as_fn(ident) }
-                }
-        }
-    }
-
-    fn lookup_as_var(&self, ident: &Rc<str>) -> Result<&SymbolVariable, String> {
-        match self.symbols.lookup_as_var(ident) {
-            Ok(v) => Ok(v),
-            Err(_) =>
-                match self.parent {
-                    Some(table) => unsafe { (*table).lookup_as_var(ident) }
-                    None => unsafe { (*self.global_symbol_table).lookup_as_var(ident) }
-                }
-        }
-    }
-
-    fn lookup_with_key(&self, ssa_key: &SSAKey) -> Option<&Symbol> {
-        match self.symbols.lookup_with_key(ssa_key) {
-            Some(v) => Some(v),
-            None =>
-                match self.parent {
-                    Some(table) => unsafe { (*table).lookup_with_key(ssa_key) }
-                    None => unsafe { (*self.global_symbol_table).lookup_with_key(ssa_key) }
-                }
-        }
-    }
-}
-
-#[derive(Debug)]
 pub struct GlobalSymbolTable {
-    allocated_symbol_tables: Vec<LocalSymbolTable>,
+    allocated_symbol_tables: Arena<LocalSymbolTable>,
+    ident_occurences: AHashMap<Rc<str>, usize>,
     symbols: Symbols,
+}
+
+impl Debug for GlobalSymbolTable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ident_occurences: {:?}\nsymbols:{:?}", self.ident_occurences, self.symbols)
+    }
+}
+
+macro_rules! clone_table_ref {
+    ($name:ident) => {
+        unsafe { &mut *($name as *mut LocalSymbolTable) }
+    };
 }
 
 impl GlobalSymbolTable {
     pub fn new() -> Self {
         Self {
-            allocated_symbol_tables: Vec::new(),
+            allocated_symbol_tables: Arena::new(),
+            ident_occurences: AHashMap::new(),
             symbols: Symbols::new(),
         }
     }
@@ -499,13 +92,37 @@ impl GlobalSymbolTable {
         return_type: Option<ValueType>
     ) -> *mut LocalSymbolTable {
         let global_ptr = self as *mut GlobalSymbolTable;
-        self.allocated_symbol_tables.push(LocalSymbolTable::new(parent, global_ptr, return_type));
+        let d1 = self.allocated_symbol_tables.alloc(
+            LocalSymbolTable::new(parent, global_ptr, return_type)
+        );
+        let d2 = clone_table_ref!(d1);
+        d1.insert(
+            "sdf".into(),
+            Symbol::Variable(
+                SymbolVariable::new(ValueType::Bool, true, TokenMetadata::new(1, 1, 1))
+            )
+        );
+        d2.insert(
+            "sdf".into(),
+            Symbol::Variable(
+                SymbolVariable::new(ValueType::Bool, true, TokenMetadata::new(1, 1, 1))
+            )
+        );
         let idx = self.allocated_symbol_tables.len() - 1;
-        self.allocated_symbol_tables.get_mut(idx).unwrap() as *mut LocalSymbolTable
+        todo!()
+        // self.allocated_symbol_tables.get_mut(idx).unwrap() as *mut LocalSymbolTable
     }
 
-    fn count_ident_occurences(&self, ident: &Rc<str>) -> usize {
-        self.symbols.count_ident_occurences(ident)
+    fn get_new_ident_subscript(&mut self, ident: &Rc<str>) -> usize {
+        let prev_highest_subscript = match self.ident_occurences.get(ident) {
+            Some(subscript) => *subscript,
+            None => 0,
+        };
+
+        let new_subscript = prev_highest_subscript + 1;
+        self.ident_occurences.insert(Rc::clone(ident), new_subscript);
+
+        new_subscript
     }
 }
 
@@ -518,7 +135,7 @@ impl SymbolTableAlloc for GlobalSymbolTable {
 
 impl SymbolTableActions for GlobalSymbolTable {
     fn insert(&mut self, ident: Rc<str>, symbol: Symbol) -> SSAKey {
-        let ssa_subscript = self.count_ident_occurences(&ident) + 1;
+        let ssa_subscript = self.get_new_ident_subscript(&ident);
         self.symbols.insert(SSAKey::new(ident, ssa_subscript), symbol)
     }
 

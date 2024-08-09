@@ -1,5 +1,8 @@
 # Viskum Interpreter
 
+## Another rewrite (hopefully last)
+- Make it expression based. Right now if-stmt, loop-stmt, (match-stmt) and other stmts can't be used inside expressions.
+
 ## Useful links
 
 - SSA: https://en.wikipedia.org/wiki/Static_single-assignment_form
@@ -25,3 +28,12 @@
 - MLIR: https://github.com/raviqqe/melior
 
 - I should probalby use LLVM. Write my own backend for LLVM which means I have to learn LLVM syntax (it would be cool if the language could both be interpreted and compiled :))
+
+## Project structure conventions (still deciding)
+
+- src/
+    - main.rs
+    - /big_struct
+        - mod.rs (This imports all dependencies in struct, and controls visibility)
+        - traits.rs
+        - types

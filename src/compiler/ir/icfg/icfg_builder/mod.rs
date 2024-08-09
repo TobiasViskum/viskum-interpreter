@@ -2,18 +2,22 @@ use ahash::AHashMap;
 
 use crate::compiler::{ ds::symbol_table::SSAKey, traits::LinearControlFlow, Dissasemble };
 
-use super::{ cfg::{ CFGNode, CFGNodeType, CFGProcessNode, CFG }, dag::DAG, ICFG };
+use super::{
+    cfg::{ CFGEdge, CFGNode, CFGNodeType, CFGProcessNode, CFGTerminateNode, CFG },
+    dag::DAG,
+    ICFG,
+};
 
 mod private_methods;
 
 #[derive(Debug)]
-pub struct LinearBasicBlock {
+pub struct LinearBasicBlockStmt {
     dag: DAG,
     ident_node_id_map: AHashMap<SSAKey, usize>,
     prev_dag_node_id: Option<usize>,
 }
 
-impl LinearBasicBlock {
+impl LinearBasicBlockStmt {
     pub fn new() -> Self {
         Self {
             dag: DAG::new(),
@@ -48,14 +52,17 @@ pub struct ICFGBuilder {
     icfg: ICFG,
     building_cfg: CFG,
     prev_node_id: Option<usize>,
-    building_linear_basic_block: Option<LinearBasicBlock>,
+    building_linear_basic_block: Option<LinearBasicBlockStmt>,
 }
 
 impl ICFGBuilder {
     pub fn new() -> Self {
+        let mut cfg = CFG::new();
+        cfg.push_node(CFGNode::new(CFGNodeType::TerminateNode(CFGTerminateNode::new_start())));
+
         Self {
             icfg: ICFG::new(),
-            building_cfg: CFG::new(),
+            building_cfg: cfg,
             prev_node_id: None,
             building_linear_basic_block: None,
         }
@@ -63,13 +70,20 @@ impl ICFGBuilder {
 
     pub fn take_icfg(mut self) -> ICFG {
         self.push_linear_block_if_exists();
+        self.building_cfg.print_nodes();
         self.icfg.push_cfg(self.building_cfg);
         self.icfg
     }
 
+    pub fn push_cfg_edge(&mut self, origin: usize, dest: usize) {
+        self.building_cfg.add_edge(origin, dest)
+    }
+
     pub fn push_cfg_node(&mut self, cfg_node: CFGNode) -> usize {
         self.push_linear_block_if_exists();
-        self.building_cfg.push_node(cfg_node)
+        let node_id = self.building_cfg.push_node(cfg_node);
+        self.prev_node_id = Some(node_id);
+        node_id
     }
 
     pub fn build_into_linear_basic_block(&mut self, linear_stmt: &dyn LinearControlFlow) {
@@ -84,8 +98,8 @@ impl ICFGBuilder {
         linear_basic_block.set_prev_dag_node_id(dag_node_id)
     }
 
-    pub fn print_icfg(&self) {
-        println!("{}", self.icfg.dissasemble())
+    pub fn get_current_cfg(&self) -> &CFG {
+        &self.building_cfg
     }
 
     pub fn get_prev_node_id(&self) -> Option<usize> {
@@ -96,23 +110,24 @@ impl ICFGBuilder {
         self.prev_node_id = Some(new_prev_node_id);
     }
 
-    // pub fn push_dag_into_basic_block(&mut self, dag: DAG) {
-    //     match self.building_cfg.last_mut_node() {
-    //         Some(node) => {
-    //             match node.get_mut_node_type() {
-    //                 CFGNodeType::ProcessNode(node) => {
-    //                     node.get_mut_dag();
-    //                 }
-    //                 _ => self.push_process_node_from_dag(dag),
-    //             };
-    //         }
-    //         _ => self.push_process_node_from_dag(dag),
-    //     };
-    // }
+    pub fn push_linear_block_if_exists(&mut self) -> Option<usize> {
+        match self.building_linear_basic_block.take() {
+            Some(linear_basic_block) => {
+                let dag = linear_basic_block.take_dag();
+                let linear_block_node_id = self.building_cfg.push_node(
+                    CFGNode::new(CFGNodeType::ProcessNode(CFGProcessNode::new(dag)))
+                );
+                Some(linear_block_node_id)
+            }
+            None => None,
+        }
+    }
 
-    // fn push_process_node_from_dag(&mut self, dag: DAG) {
-    //     self.building_cfg.push_node(
-    //         CFGNode::new(CFGNodeType::ProcessNode(CFGProcessNode::new(dag)))
-    //     );
-    // }
+    fn setup_or_get_mut_building_linear_basic_block(&mut self) -> &mut LinearBasicBlockStmt {
+        if self.building_linear_basic_block.is_none() {
+            self.building_linear_basic_block = Some(LinearBasicBlockStmt::new());
+        }
+
+        self.building_linear_basic_block.as_mut().unwrap()
+    }
 }

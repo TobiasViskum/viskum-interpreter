@@ -3,7 +3,10 @@ use crate::{
         ds::{ symbol_table::SymbolTableRef, value::ValueType },
         error_handler::{ CompileError, ReportedError },
         ir::ast::{
+            expr::IdentifierExpr,
             stmt::{
+                BasicBlockStmt,
+                BlockStmt,
                 BreakStmt,
                 ContinueStmt,
                 ExprStmt,
@@ -11,7 +14,6 @@ use crate::{
                 IfStmt,
                 LoopStmt,
                 ReturnStmt,
-                ScopeStmt,
                 Stmt,
                 VarAssignStmt,
                 VarDefStmt,
@@ -23,18 +25,23 @@ use crate::{
     macros::merge_chars_range,
 };
 
-use super::{ precedence::Precedence, TokenType::*, Parser, TokenType };
+use super::{
+    parser_macros::{ current, previous },
+    precedence::Precedence,
+    Parser,
+    TokenType::{ self, * },
+};
 
 type ReturnType<'b> = Result<Stmt<'b>, CompileError>;
 type Args<'b> = (&'b AstArena<'b>, SymbolTableRef);
 
 impl<'a> Parser<'a> {
     pub(super) fn statement<'b>(&mut self, (arena, symbol_table_ref): Args<'b>) -> ReturnType<'b> {
-        let curr = self.get_current().get_ttype();
+        let curr = current!(self, ttype);
 
         match curr {
             TokenLeftCurlyBrace =>
-                Ok(Stmt::ScopeStmt(self.block((arena, symbol_table_ref), None)?)),
+                Ok(Stmt::BasicBlockStmt(self.basic_block((arena, symbol_table_ref), None)?)),
             TokenMutable => self.mut_var_def((arena, symbol_table_ref)),
             TokenFunction => self.function((arena, symbol_table_ref)),
             TokenIf => Ok(Stmt::IfStmt(self.if_stmt((arena, symbol_table_ref))?)),
@@ -63,7 +70,7 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn return_stmt<'b>(&mut self, (arena, _): Args<'b>) -> ReturnType<'b> {
-        let metadata = self.get_current().get_metadata();
+        let metadata = current!(self, metadata);
 
         self.advance();
 
@@ -102,13 +109,18 @@ impl<'a> Parser<'a> {
         Ok(Stmt::LoopStmt(LoopStmt::new(None, body)))
     }
 
-    pub(super) fn var_assign<'b>(&mut self, (arena, _): Args<'b>) -> ReturnType<'b> {
-        let target_expr = ExprStmt::new(self.expression(Precedence::PrecCall, arena)?);
+    pub(super) fn var_assign<'b>(&mut self, (arena, symbol_table_ref): Args<'b>) -> ReturnType<'b> {
+        // Temporary block start (until chained assignments is supported: struct.value = some_value)
+        self.advance();
+        let (lexeme, token_metadata) = previous!(self, lexeme, metadata);
+        // Temporary block end
 
-        if !self.get_current().get_ttype().is(&TokenAssign) {
-            let mut token_vec = vec![self.get_previous().get_metadata()];
-            while !self.get_current().get_ttype().is(&TokenAssign) {
-                token_vec.push(self.get_current().get_metadata());
+        // let target_expr = ExprStmt::new(self.expression(Precedence::PrecCall, arena)?);
+
+        if !current!(self, ttype).is(&TokenAssign) {
+            let mut token_vec = vec![previous!(self, metadata)];
+            while !current!(self, ttype).is(&TokenAssign) {
+                token_vec.push(current!(self, metadata));
                 self.advance();
             }
 
@@ -133,16 +145,20 @@ impl<'a> Parser<'a> {
 
         self.consume_expr_end()?;
 
-        Ok(Stmt::VarAssignStmt(VarAssignStmt::new(target_expr, value)))
+        Ok(
+            Stmt::VarAssignStmt(
+                VarAssignStmt::new(
+                    IdentifierExpr::new(lexeme.take_lexeme_rc(), token_metadata),
+                    value
+                )
+            )
+        )
     }
 
     pub(super) fn var_def<'b>(&mut self, (arena, _): Args<'b>, is_mutable: bool) -> ReturnType<'b> {
         self.advance();
 
-        let (lexeme, token_metadata) = {
-            let token = self.get_previous();
-            (token.get_lexeme(&self.source), token.get_metadata())
-        };
+        let (lexeme, token_metadata) = previous!(self, lexeme, metadata);
 
         let found_type = match self.resolve_type() {
             Ok(found_type) => { found_type }
@@ -154,7 +170,7 @@ impl<'a> Parser<'a> {
                 TokenDefine,
                 format!(
                     "Expected ':=' in variable definition but got '{}'",
-                    self.get_current().get_lexeme(&self.source).get_lexeme_str()
+                    current!(self, lexeme).get_lexeme_str()
                 ).as_str()
             )?;
 
@@ -163,7 +179,7 @@ impl<'a> Parser<'a> {
                     CompileError::new(
                         ReportedError::new(
                             "Missing right hand side of variable definition".to_string(),
-                            self.get_previous().get_metadata().into()
+                            previous!(self, metadata).into()
                         )
                     )
                 );
@@ -193,39 +209,40 @@ impl<'a> Parser<'a> {
     pub fn mut_var_def<'b>(&mut self, (arena, symbol_table_ref): Args<'b>) -> ReturnType<'b> {
         self.advance();
 
-        match self.get_current().get_ttype() {
+        match current!(self, ttype) {
             TokenIdentifier => self.var_def((arena, symbol_table_ref), true),
             TokenFunction => {
                 panic!("Functions cannot be mutable");
             }
-            _ =>
-                panic!(
-                    "Unexpected: {}",
-                    self.get_current().get_lexeme(&self.source).get_lexeme_str()
-                ),
+            _ => panic!("Unexpected: {}", current!(self, lexeme).get_lexeme_str()),
         }
     }
 
     pub fn block<'b>(
         &mut self,
+        (arena, symbol_table_ref): Args<'b>,
+        return_type: Option<ValueType>
+    ) -> Result<BlockStmt<'b>, CompileError> {
+        Ok(BlockStmt::from_basic_block(self.basic_block((arena, symbol_table_ref), return_type)?))
+    }
+
+    pub fn basic_block<'b>(
+        &mut self,
         (arena, mut symbol_table_ref): Args<'b>,
         return_type: Option<ValueType>
-    ) -> Result<ScopeStmt<'b>, CompileError> {
+    ) -> Result<BasicBlockStmt<'b>, CompileError> {
         self.consume(
             TokenType::TokenLeftCurlyBrace,
-            format!(
-                "Expected '{{' but got: {}",
-                self.get_current().get_lexeme(&self.source).get_lexeme_str()
-            ).as_str()
+            format!("Expected '{{' but got: {}", current!(self, lexeme).get_lexeme_str()).as_str()
         )?;
 
         let symbol_table_ref = symbol_table_ref.alloc_symbol_table(return_type);
 
-        let mut scope_stmt = ScopeStmt::new(symbol_table_ref);
+        let mut scope_stmt = BasicBlockStmt::new(symbol_table_ref);
 
         while
             !self.is_at_end() &&
-            !matches!(self.get_current().get_ttype(), &TokenType::TokenRightCurlyBrace)
+            !matches!(current!(self, ttype), &TokenType::TokenRightCurlyBrace)
         {
             match self.statement((arena, symbol_table_ref)) {
                 Ok(stmt) => scope_stmt.push_stmt(stmt),
@@ -249,9 +266,9 @@ impl<'a> Parser<'a> {
 
         let true_block = self.block((arena, symbol_table_ref), None)?;
 
-        let false_block = if self.get_current().get_ttype().is(&TokenType::TokenElse) {
+        let false_block = if current!(self, ttype).is(&TokenType::TokenElse) {
             self.advance();
-            let if_stmt = if self.get_current().get_ttype().is(&TokenType::TokenIf) {
+            let if_stmt = if current!(self, ttype).is(&TokenType::TokenIf) {
                 self.if_stmt((arena, symbol_table_ref))?
             } else {
                 let true_block = self.block((arena, symbol_table_ref), None)?;
@@ -265,14 +282,10 @@ impl<'a> Parser<'a> {
         Ok(IfStmt::new(Some(condition), true_block, false_block))
     }
 
-    pub fn function<'b>(
-        &mut self,
-        (arena, symbol_table_ref): Args<'b>
-    ) -> Result<Stmt<'b>, CompileError> {
+    pub fn function<'b>(&mut self, (arena, symbol_table_ref): Args<'b>) -> ReturnType<'b> {
         self.advance();
 
-        let lexeme = self.get_current().get_lexeme(&self.source);
-        let metadata = self.get_current().get_metadata();
+        let (lexeme, metadata) = current!(self, lexeme, metadata);
 
         self.advance();
 
@@ -292,7 +305,7 @@ impl<'a> Parser<'a> {
             }
         ).unwrap_or(ValueType::Void);
 
-        let body = self.block((arena, symbol_table_ref), Some(return_type))?;
+        let body = self.basic_block((arena, symbol_table_ref), Some(return_type))?;
 
         let function_stmt = FunctionStmt::new(
             lexeme.take_lexeme_rc(),

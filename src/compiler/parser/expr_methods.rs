@@ -8,7 +8,7 @@ use crate::compiler::{
     },
 };
 
-use super::{ precedence::Precedence, Parser, TokenType::* };
+use super::{ parser_macros::{ current, previous }, precedence::Precedence, Parser, TokenType::* };
 
 type ReturnType = Result<(), CompileError>;
 
@@ -46,8 +46,10 @@ impl<'a> Parser<'a> {
         expr_builder: &mut ExprBuilder<'b>,
         arena: &'b AstArena<'b>
     ) -> ReturnType {
-        match self.get_current().get_ttype() {
-            TokenLeftParen => self.fn_call(expr_builder, arena)?,
+        let is_at_expr_end = self.is_at_expr_end();
+
+        match current!(self, ttype) {
+            TokenLeftParen if { !is_at_expr_end } => self.fn_call(expr_builder, arena)?,
             _ => self.ident_lookup(expr_builder, arena)?,
         }
 
@@ -211,27 +213,25 @@ impl<'a> Parser<'a> {
         expr_builder: &mut ExprBuilder<'b>,
         arena: &'b AstArena<'b>
     ) -> ReturnType {
-        let token = self.get_previous();
-        let lexeme = token.get_lexeme(&self.source);
-        let metadata = token.get_metadata();
+        let (lexeme, metadata) = previous!(self, lexeme, metadata);
 
         self.advance();
 
         let mut fn_args = vec![];
         while !self.is_at_expr_end() {
-            if self.get_current().get_ttype().is(&TokenRightParen) {
+            if current!(self, ttype).is(&TokenRightParen) {
                 break;
             }
             let arg = self.expression(Precedence::PrecAssignment.get_next(), arena)?;
 
             fn_args.push(ExprStmt::new(arg));
 
-            if !self.get_current().get_ttype().is(&TokenRightParen) {
+            if !current!(self, ttype).is(&TokenRightParen) {
                 self.consume(
                     TokenComma,
                     format!(
                         "Expected ',' between call arguments, but received: '{}'",
-                        self.get_current().get_lexeme(&self.source).get_lexeme_str()
+                        current!(self, lexeme).get_lexeme_str()
                     ).as_str()
                 )?;
             }
@@ -241,7 +241,7 @@ impl<'a> Parser<'a> {
             TokenRightParen,
             format!(
                 "Expected ')' in function call but got: '{}'",
-                self.get_current().get_lexeme(&self.source).get_lexeme_str()
+                current!(self, lexeme).get_lexeme_str()
             ).as_str()
         )?;
 
@@ -256,37 +256,28 @@ impl<'a> Parser<'a> {
     pub(super) fn ident_lookup<'b>(
         &mut self,
         expr_builder: &mut ExprBuilder<'b>,
-        arena: &'b AstArena<'b>
+        _: &'b AstArena<'b>
     ) -> ReturnType {
-        let token = self.get_previous();
-        let lexeme = token.get_lexeme(&self.source);
-
         expr_builder.emit_ident_lookup(
-            IdentifierExpr::new(lexeme.take_lexeme_rc(), token.get_metadata())
+            IdentifierExpr::new(previous!(self, lexeme).take_lexeme_rc(), previous!(self, metadata))
         );
 
         Ok(())
     }
 
-    pub(super) fn error(&mut self, expr_builder: &mut ExprBuilder) -> Result<(), CompileError> {
-        let error_token = self.get_previous();
-        let msg = error_token.get_message();
-
-        if let Some(msg) = msg {
+    pub(super) fn error(&mut self, _: &mut ExprBuilder) -> Result<(), CompileError> {
+        if let Some(msg) = previous!(self, msg) {
             Err(
                 CompileError::new(
-                    ReportedError::new(msg.to_string(), error_token.get_metadata().into())
+                    ReportedError::new(msg.to_string(), previous!(self, metadata).into())
                 )
             )
         } else {
             Err(
                 CompileError::new(
                     ReportedError::new(
-                        format!(
-                            "Unexpected token: {}",
-                            error_token.get_lexeme(&self.source).get_lexeme_str()
-                        ),
-                        error_token.get_metadata().into()
+                        format!("Unexpected token: {}", previous!(self, lexeme).get_lexeme_str()),
+                        previous!(self, metadata).into()
                     )
                 )
             )

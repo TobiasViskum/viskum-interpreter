@@ -37,19 +37,6 @@ impl CFG {
         self.edges.push(CFGEdge::new(origin, dest));
     }
 
-    pub fn add_edge_between_latest_nodes(&mut self) {
-        if self.nodes.len() < 2 {
-            return;
-        }
-
-        let origin = self.nodes.len() - 2;
-        let dest = self.nodes.len() - 1;
-
-        let edge = CFGEdge::new(origin, dest);
-
-        self.edges.push(edge);
-    }
-
     pub fn get_connected_nodes(&self, node_id: usize) -> Vec<usize> {
         let mut connected_nodes = vec![];
         for edge in self.edges.iter() {
@@ -67,6 +54,24 @@ impl CFG {
 
     pub fn get_last_added_node_id(&self) -> usize {
         self.nodes.len() - 1
+    }
+
+    pub fn print_nodes(&self) {
+        for (i, node) in self.nodes.iter().enumerate() {
+            let connected_nodes_str = format!("{:?}", self.get_connected_nodes(i))
+                .replace("[", "")
+                .replace("]", "");
+
+            let node_str = match node.get_node_type() {
+                CFGNodeType::DecisionNode(_) => format!("DecisionNode({})", connected_nodes_str),
+                CFGNodeType::DropNode(_) => format!("DropNode({})", connected_nodes_str),
+                CFGNodeType::GotoNode(_) => format!("GotoNode({})", connected_nodes_str),
+                CFGNodeType::ProcessNode(_) => format!("ProcessNode({})", connected_nodes_str),
+                CFGNodeType::ReturnNode(_) => format!("ReturnNode({})", connected_nodes_str),
+                CFGNodeType::TerminateNode(_) => format!("TerminateNode({})", connected_nodes_str),
+            };
+            println!("{}: {}", i, node_str);
+        }
     }
 
     // pub fn generate_instructions(&self, vm_builder: &mut VMBuilder) -> Vec<Instruction> {

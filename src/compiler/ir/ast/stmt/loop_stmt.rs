@@ -5,16 +5,16 @@ use crate::compiler::{
     traits::{ Dissasemble, LinearControlFlow, StmtTrait },
 };
 
-use super::{ ExprStmt, ScopeStmt };
+use super::{ BlockStmt, ExprStmt, GotoNodeIds, NodeIdsRange };
 
 #[derive(Debug)]
 pub struct LoopStmt<'ast> {
     condition: Option<ExprStmt<'ast>>,
-    body: ScopeStmt<'ast>,
+    body: BlockStmt<'ast>,
 }
 
 impl<'ast> LoopStmt<'ast> {
-    pub fn new(condition: Option<ExprStmt<'ast>>, body: ScopeStmt<'ast>) -> Self {
+    pub fn new(condition: Option<ExprStmt<'ast>>, body: BlockStmt<'ast>) -> Self {
         Self { condition, body }
     }
 }
@@ -39,7 +39,13 @@ impl<'ast> Dissasemble for LoopStmt<'ast> {
 }
 
 impl<'ast> StmtTrait for LoopStmt<'ast> {
-    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder) {
+    type ReturnTypeCompileIntoICFG = NodeIdsRange;
+
+    fn compile_into_icfg(
+        &self,
+        icfg_builder: &mut ICFGBuilder,
+        goto_node_ids: &mut GotoNodeIds
+    ) -> Self::ReturnTypeCompileIntoICFG {
         todo!()
     }
 
@@ -49,7 +55,7 @@ impl<'ast> StmtTrait for LoopStmt<'ast> {
 
     fn validate_stmt(
         &mut self,
-        symbol_table_ref: &SymbolTableRef,
+        symbol_table_ref: &mut SymbolTableRef,
         error_handler: &mut ErrorHandler
     ) {
         if let Some(condition) = &mut self.condition {

@@ -120,6 +120,9 @@ impl From<&Instruction> for OptimizedInstruction {
             Instruction::NotInt { dst_reg, src_reg } => {
                 make_unary_instruction!(not_int, dst_reg, src_reg)
             }
+            Instruction::Copy { dst_reg, src_reg } => {
+                make_unary_instruction!(copy, dst_reg, src_reg)
+            }
         }
     }
 }

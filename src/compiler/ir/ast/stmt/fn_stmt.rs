@@ -8,13 +8,13 @@ use crate::compiler::{
     traits::{ Dissasemble, LinearControlFlow, StmtTrait },
 };
 
-use super::{ FunctionArgument, ScopeStmt };
+use super::{ FunctionArgument, GotoNodeIds, NodeIdsRange, BasicBlockStmt };
 
 #[derive(Debug)]
 pub struct FunctionStmt<'ast> {
     name: Rc<str>,
     args: Vec<FunctionArgument>,
-    body: ScopeStmt<'ast>,
+    body: BasicBlockStmt<'ast>,
     return_type: ValueType,
     metadata: TokenMetadata,
 }
@@ -23,7 +23,7 @@ impl<'ast> FunctionStmt<'ast> {
     pub fn new(
         name: Rc<str>,
         args: Vec<FunctionArgument>,
-        body: ScopeStmt<'ast>,
+        body: BasicBlockStmt<'ast>,
         metadata: TokenMetadata
     ) -> Self {
         let return_type = body
@@ -54,7 +54,7 @@ impl<'ast> FunctionStmt<'ast> {
         &self.return_type
     }
 
-    pub fn get_body(&self) -> &ScopeStmt<'ast> {
+    pub fn get_body(&self) -> &BasicBlockStmt<'ast> {
         &self.body
     }
 
@@ -87,7 +87,13 @@ impl<'ast> Dissasemble for FunctionStmt<'ast> {
 }
 
 impl<'ast> StmtTrait for FunctionStmt<'ast> {
-    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder) {
+    type ReturnTypeCompileIntoICFG = NodeIdsRange;
+
+    fn compile_into_icfg(
+        &self,
+        icfg_builder: &mut ICFGBuilder,
+        goto_node_ids: &mut GotoNodeIds
+    ) -> Self::ReturnTypeCompileIntoICFG {
         todo!()
     }
 
@@ -95,18 +101,13 @@ impl<'ast> StmtTrait for FunctionStmt<'ast> {
         false
     }
 
-    fn validate_stmt(&mut self, _: &SymbolTableRef, error_handler: &mut ErrorHandler) {
-        let symbol_table_ref = &self.body.get_symbol_table_ref();
+    fn validate_stmt(&mut self, _: &mut SymbolTableRef, error_handler: &mut ErrorHandler) {
+        let symbol_table_ref = &mut self.body.get_symbol_table_ref();
 
         for arg in &self.args {
             symbol_table_ref
                 .get_mut()
-                .insert_var(
-                    Rc::clone(&arg.name),
-                    arg.value_type.clone(),
-                    arg.is_mutable,
-                    arg.metadata
-                );
+                .insert_var(&arg.name, arg.value_type.clone(), arg.is_mutable, arg.metadata);
         }
 
         self.body.validate_stmt(symbol_table_ref, error_handler);

@@ -1,10 +1,46 @@
-a := 2
-(4 * 5 - 10) / 2 + -6
-1 + 8
-2 == 2
+mut d := 1
+{
+    d = 1
+    {
+        d = 9
+    }
+    d = 2
+}
+2 + 9
 
+if a == 18 {
+    d = 99
+} else {
+    d = 0
+}
 
 /*
+a := 2 * 9
+b := 8 + 9 * a
+n := (4 * 5 - 10) / a + -6
+1 + 8
+c := 170 == b
+mut d := a
+k := d + 2
+d = a
+cc := d + a
+
+mut a := 2
+
+if a < 10 do a = 3 else a = 4
+
+while a <= 10 do
+    mut prev := a++
+    prev = 2
+end
+
+enum HelloWorld
+    str1 = 1,
+    str2 = 2,
+    str3 = 3
+    
+
+
 
 !!2 == !1
 a := 8 + 9 * 8 

@@ -8,14 +8,20 @@ use crate::{
     macros::merge_chars_range,
 };
 
-use super::{ precedence::Precedence, token::TokenMetadata, Parser, TokenType::* };
+use super::{
+    parser_macros::{ current, previous },
+    precedence::Precedence,
+    token::TokenMetadata,
+    Parser,
+    TokenType::*,
+};
 
 impl<'a> Parser<'a> {
     // pub(super) fn resolve_type(&mut self) -> Result<Option<ValueType>, >
 
     pub(super) fn resolve_type(&mut self) -> Result<Option<ValueType>, Vec<TokenMetadata>> {
         // loop {
-        //     match self.get_current().get_ttype() {
+        //     match current!(self, ttype) {
         //         TokenReference => {
         //             if let Some(value_type) = &mut value_type {
         //                 value_type.append_type();
@@ -29,7 +35,7 @@ impl<'a> Parser<'a> {
         //     }
         // }
 
-        let resolved_type = match self.get_current().get_ttype() {
+        let resolved_type = match current!(self, ttype) {
             TokenIdentifier => {
                 self.advance();
                 let type_lexeme = self.get_previous().get_lexeme(&&self.source);
@@ -65,7 +71,7 @@ impl<'a> Parser<'a> {
     ) -> Result<(), CompileError> {
         self.advance();
 
-        let parse_rule = self.get_parse_rule(self.get_previous().get_ttype());
+        let parse_rule = self.get_parse_rule(previous!(self, ttype));
 
         let prefix_rule = parse_rule.get_prefix();
 
@@ -73,20 +79,21 @@ impl<'a> Parser<'a> {
             prefix_rule(self, &mut expr_builder, arena)?;
 
             loop {
-                let current_ttype = self.get_current().get_ttype();
-                let current_precedence = self.get_parse_rule(current_ttype).get_precedence();
+                let current_precedence = self
+                    .get_parse_rule(current!(self, ttype))
+                    .get_precedence();
 
                 if (precedence as usize) > (*current_precedence as usize) {
                     break;
                 }
 
-                if self.get_previous().get_line() < self.get_current().get_line() {
+                if previous!(self, line) < current!(self, line) {
                     break;
                 }
 
                 self.advance();
 
-                let infix_rule = self.get_parse_rule(self.get_previous().get_ttype()).get_infix();
+                let infix_rule = self.get_parse_rule(previous!(self, ttype)).get_infix();
 
                 if let Some(infix_rule) = infix_rule {
                     infix_rule(self, &mut expr_builder, arena)?;
@@ -98,9 +105,9 @@ impl<'a> Parser<'a> {
                     ReportedError::new(
                         format!(
                             "Unexpected token: '{}' (no prefix rule)",
-                            self.get_previous().get_lexeme(&self.source).get_lexeme_str()
+                            previous!(self, lexeme).get_lexeme_str()
                         ),
-                        self.get_previous().get_metadata().into()
+                        previous!(self, metadata).into()
                     )
                 )
             );
@@ -115,10 +122,10 @@ impl<'a> Parser<'a> {
         self.consume(TokenLeftParen, "Expected '(' after function identifier")?;
 
         while !self.is_at_expr_end() {
-            if self.get_current().get_ttype().is(&TokenComma) {
+            if current!(self, ttype).is(&TokenComma) {
                 self.advance();
             }
-            if self.get_current().get_ttype().is(&TokenRightParen) {
+            if current!(self, ttype).is(&TokenRightParen) {
                 break;
             }
 
@@ -130,10 +137,9 @@ impl<'a> Parser<'a> {
                 ).as_str()
             )?;
 
-            let ident_lexeme = self.get_previous().get_lexeme(&&self.source);
-            let metadata = self.get_previous().get_metadata();
+            let (ident_lexeme, metadata) = previous!(self, lexeme, metadata);
 
-            let is_mutable = match self.get_current().get_ttype().is(&TokenMutable) {
+            let is_mutable = match current!(self, ttype).is(&TokenMutable) {
                 true => {
                     self.advance();
                     true
@@ -180,7 +186,7 @@ impl<'a> Parser<'a> {
     pub(super) fn resolve_function_return_type(
         &mut self
     ) -> Result<Option<ValueType>, CompileError> {
-        let return_type = match self.get_current().get_ttype() {
+        let return_type = match current!(self, ttype) {
             TokenLeftCurlyBrace => {
                 return Ok(None);
             }
@@ -225,7 +231,7 @@ impl<'a> Parser<'a> {
         self.exit_panic_mode();
 
         while !self.is_at_end() {
-            if self.get_previous().get_ttype() == &TokenSemicolon {
+            if previous!(self, ttype) == &TokenSemicolon {
                 return;
             }
             if self.get_previous().get_line() < self.get_current().get_line() {
@@ -233,7 +239,7 @@ impl<'a> Parser<'a> {
                 return;
             }
 
-            match self.get_current().get_ttype() {
+            match current!(self, ttype) {
                 TokenError => {
                     self.advance();
                 }

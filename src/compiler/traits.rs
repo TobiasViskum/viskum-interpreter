@@ -12,7 +12,7 @@ use super::{
         vm_builder::VMBuilder,
     },
     error_handler::{ CompileError, ErrorHandler, SrcCharsRange },
-    ir::icfg::{ dag::DAG, icfg_builder::ICFGBuilder },
+    ir::{ ast::stmt::{ GotoNodeIds, NodeIdsRange }, icfg::{ dag::DAG, icfg_builder::ICFGBuilder } },
 };
 
 pub trait Dissasemble {
@@ -53,7 +53,7 @@ pub trait ExprTrait where Self: Dissasemble + Debug {
     fn collect_metadata(&self) -> SrcCharsRange;
 }
 
-pub trait LinearControlFlow: StmtTrait {
+pub trait LinearControlFlow {
     fn compile_into_dag(
         &self,
         dag: &mut DAG,
@@ -62,11 +62,17 @@ pub trait LinearControlFlow: StmtTrait {
 }
 
 pub trait StmtTrait {
-    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder);
+    type ReturnTypeCompileIntoICFG;
+
+    fn compile_into_icfg(
+        &self,
+        icfg_builder: &mut ICFGBuilder,
+        goto_node_ids: &mut GotoNodeIds
+    ) -> Self::ReturnTypeCompileIntoICFG;
 
     fn validate_stmt(
         &mut self,
-        symbol_table_ref: &SymbolTableRef,
+        symbol_table_ref: &mut SymbolTableRef,
         error_handler: &mut ErrorHandler
     );
 
@@ -82,5 +88,9 @@ pub trait GenerateBytecode {
 }
 
 pub trait DAGNodeTrait {
+    type ConnectedNodes;
+
+    fn parse_connected_nodes(&self, connected_nodes: Vec<usize>) -> Self::ConnectedNodes;
+
     fn expected_connected_nodes(&self) -> usize;
 }

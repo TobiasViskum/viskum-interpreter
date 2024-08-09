@@ -15,6 +15,8 @@ use crate::compiler::{
     traits::{ Dissasemble, ExprTrait, LinearControlFlow, StmtTrait },
 };
 
+use super::{ GotoNodeIds, NodeIdsRange };
+
 #[derive(Debug)]
 pub struct ExprStmt<'ast> {
     expr: Expr<'ast>,
@@ -49,13 +51,20 @@ impl<'ast> ExprStmt<'ast> {
 }
 
 impl<'ast> StmtTrait for ExprStmt<'ast> {
-    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder) {
+    type ReturnTypeCompileIntoICFG = NodeIdsRange;
+
+    fn compile_into_icfg(
+        &self,
+        icfg_builder: &mut ICFGBuilder,
+        goto_node_ids: &mut GotoNodeIds
+    ) -> Self::ReturnTypeCompileIntoICFG {
         let mut dag = DAG::new();
         let mut ident_node_id_map = AHashMap::new();
         let entry_node_id = self.compile_into_dag(&mut dag, &mut ident_node_id_map);
         dag.set_entry_node_id(entry_node_id);
         let cfg_process_node = CFGNode::new(CFGNodeType::ProcessNode(CFGProcessNode::new(dag)));
-        icfg_builder.push_cfg_node(cfg_process_node);
+        let cfg_node = icfg_builder.push_cfg_node(cfg_process_node);
+        NodeIdsRange::new(cfg_node, cfg_node)
     }
 
     fn is_linear_control_flow(&self) -> bool {
@@ -64,10 +73,10 @@ impl<'ast> StmtTrait for ExprStmt<'ast> {
 
     fn validate_stmt(
         &mut self,
-        symbol_table_ref: &SymbolTableRef,
+        symbol_table_ref: &mut SymbolTableRef,
         error_handler: &mut ErrorHandler
     ) {
-        match self.expr.type_check(&symbol_table_ref) {
+        match self.expr.type_check(symbol_table_ref) {
             Ok(_) => {}
             Err(err) => error_handler.report_compile_error(err),
         }

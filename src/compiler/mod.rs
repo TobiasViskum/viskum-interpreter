@@ -55,7 +55,9 @@ impl Compiler {
     pub fn make_icfg(&mut self, src_chars: &Vec<char>, error_handler: &mut ErrorHandler) -> ICFG {
         let mut parser = Parser::new(&src_chars, error_handler);
         let arena = AstArena::new();
+        println!("I run 1");
         let mut ast = parser.parse_ast(&mut self.symbol_table, &arena);
+        println!("I run 2");
         ast.type_check_and_constant_fold(error_handler);
 
         ast.print();

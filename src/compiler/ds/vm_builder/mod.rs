@@ -49,6 +49,10 @@ impl VMBuilder {
         }
     }
 
+    pub fn alloc_var_reg(&mut self, ssa_key: SSAKey) -> usize {
+        todo!()
+    }
+
     // pub fn get_available_reg
 
     pub fn alloc_heap(&mut self, complex_const: ComplexConst) -> usize {

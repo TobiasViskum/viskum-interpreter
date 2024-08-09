@@ -4,33 +4,33 @@ use crate::compiler::{
     ds::symbol_table::{ SSAKey, SymbolTableRef },
     error_handler::ErrorHandler,
     ir::{
-        ast::expr::Expr,
+        ast::expr::{ Expr, IdentifierExpr },
         icfg::{ dag::{ DAGAssignNode, DAGNode, DAG }, icfg_builder::ICFGBuilder },
     },
     traits::{ Dissasemble, ExprTrait },
 };
 
-use super::{ ExprStmt, LinearControlFlow, StmtTrait };
+use super::{ ExprStmt, GotoNodeIds, LinearControlFlow, NodeIdsRange, StmtTrait };
 
 #[derive(Debug)]
 pub struct VarAssignStmt<'ast> {
-    target_expr: ExprStmt<'ast>,
+    target_expr: IdentifierExpr, // ExprStmt<'ast>,
     value: ExprStmt<'ast>,
 }
 
 impl<'ast> VarAssignStmt<'ast> {
-    pub fn new(target_expr: ExprStmt<'ast>, value: ExprStmt<'ast>) -> Self {
+    pub fn new(target_expr: IdentifierExpr, value: ExprStmt<'ast>) -> Self {
         Self {
             target_expr,
             value,
         }
     }
 
-    pub fn get_target_expr(&self) -> &ExprStmt<'ast> {
+    pub fn get_target_expr(&self) -> &IdentifierExpr /*&ExprStmt<'ast>*/ {
         &self.target_expr
     }
 
-    pub fn get_mut_target_expr(&mut self) -> &mut ExprStmt<'ast> {
+    pub fn get_mut_target_expr(&mut self) -> &mut IdentifierExpr /*&mut ExprStmt<'ast>*/ {
         &mut self.target_expr
     }
 
@@ -41,6 +41,10 @@ impl<'ast> VarAssignStmt<'ast> {
     pub fn get_value_expr(&mut self) -> &ExprStmt<'ast> {
         &self.value
     }
+
+    pub fn set_ssa_subscript(&mut self, subscript: usize) {
+        self.target_expr.set_ssa_subscript(subscript)
+    }
 }
 
 impl<'ast> Dissasemble for VarAssignStmt<'ast> {
@@ -50,7 +54,13 @@ impl<'ast> Dissasemble for VarAssignStmt<'ast> {
 }
 
 impl<'ast> StmtTrait for VarAssignStmt<'ast> {
-    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder) {
+    type ReturnTypeCompileIntoICFG = NodeIdsRange;
+
+    fn compile_into_icfg(
+        &self,
+        icfg_builder: &mut ICFGBuilder,
+        goto_node_ids: &mut GotoNodeIds
+    ) -> Self::ReturnTypeCompileIntoICFG {
         todo!()
     }
 
@@ -60,11 +70,13 @@ impl<'ast> StmtTrait for VarAssignStmt<'ast> {
 
     fn validate_stmt(
         &mut self,
-        symbol_table_ref: &SymbolTableRef,
+        symbol_table_ref: &mut SymbolTableRef,
         error_handler: &mut ErrorHandler
     ) {
         match symbol_table_ref.get_mut().assing_var(self) {
-            Ok(_) => {}
+            Ok(ssa_key) => {
+                self.set_ssa_subscript(ssa_key.get_subscript());
+            }
             Err(err) => error_handler.report_compile_error(err),
         }
     }
@@ -80,11 +92,7 @@ impl<'ast> LinearControlFlow for VarAssignStmt<'ast> {
         dag: &mut DAG,
         ident_node_id_map: &mut AHashMap<SSAKey, usize>
     ) -> usize {
-        let ident_expr = match self.target_expr.get_expr() {
-            Expr::IdentifierExpr(ident_expr) => ident_expr,
-            _ => panic!("Only identifiers are supported in assignment"),
-        };
-        let ident_node_id = ident_expr.compile_into_dag(dag, ident_node_id_map);
+        let ident_node_id = self.target_expr.compile_into_dag(dag, ident_node_id_map);
         let value_node_id = self.value.compile_into_dag(dag, ident_node_id_map);
 
         let assign_node_id = dag.push_node(DAGNode::AssignNode(DAGAssignNode));

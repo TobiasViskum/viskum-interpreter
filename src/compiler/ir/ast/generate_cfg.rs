@@ -205,7 +205,7 @@
 //                     cfg_helper.get_next_node_id
 //                 );
 //             }
-//             Stmt::ScopeStmt(scope_stmt) => {
+//             Stmt::BasicBlockStmt(scope_stmt) => {
 //                 cfg_helper.increase_scope();
 
 //                 for stmt in &scope_stmt.stmts {

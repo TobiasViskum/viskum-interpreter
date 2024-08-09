@@ -88,7 +88,7 @@ impl Ast {
                         }
                     );
                 }
-                Stmt::ScopeStmt(scope_stmt) => {
+                Stmt::BasicBlockStmt(scope_stmt) => {
                     scope_stmt.forward_declare(&mut ast_environment);
                 }
                 _ => {}
