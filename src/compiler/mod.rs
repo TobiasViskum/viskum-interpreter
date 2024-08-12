@@ -1,18 +1,24 @@
-pub(in crate::compiler) mod parser;
 pub(in crate::compiler) mod ds;
-pub(in crate::compiler) mod ir;
 pub(in crate::compiler) mod error_handler;
+pub(in crate::compiler) mod ir;
+pub(in crate::compiler) mod parser;
 pub(in crate::compiler) mod traits;
 
-pub use traits::Dissasemble;
 use colored::Colorize;
 use ds::{ symbol_table::GlobalSymbolTable, vm_builder::VMBuilder };
 use error_handler::ErrorHandler;
 use ir::{ ast::{ Ast, AstArena }, icfg::ICFG };
 use parser::Parser;
-use traits::GenerateBytecode;
+pub use traits::Dissasemble;
+use traits::LoadConstants;
 
-use crate::{ vm::optimized_instructions::{ optimize_instructions, OptimizedInstruction }, U16_MAX };
+use crate::{
+    vm::{
+        instructions::Instruction,
+        optimized_instructions::{ optimize_instructions, OptimizedInstruction },
+    },
+    U16_MAX,
+};
 
 pub fn print_todo(str: &str) {
     eprintln!("{} {}", "TODO:".red().bold(), str)
@@ -30,7 +36,9 @@ impl Compiler {
         }
     }
 
-    pub fn compile_entry(&mut self) -> ([i64; U16_MAX], Vec<OptimizedInstruction>) {
+    pub fn compile_entry(
+        &mut self
+    ) -> ([i64; U16_MAX], Vec<OptimizedInstruction>, Vec<Instruction>) {
         let file_content = self.get_entry_file_content();
         let src_chars = file_content.chars().collect::<Vec<_>>();
         let mut error_handler = ErrorHandler::new(file_content);
@@ -46,19 +54,33 @@ impl Compiler {
 
         let instructions = icfg.generate_instructions(&mut register_allocator);
 
-        instructions.iter().for_each(|instr| { println!("{}", instr.dissasemble()) });
+        instructions
+            .iter()
+            .enumerate()
+            .for_each(|(i, instr)| {
+                let idx_string = format!("#{}: ", i);
+                println!(
+                    "{}{}{}",
+                    idx_string,
+                    " ".repeat(6 - idx_string.len()),
+                    instr.dissasemble()
+                )
+            });
         println!();
 
-        (vm_builder.take_registers(), optimize_instructions(instructions))
+        (vm_builder.take_registers(), optimize_instructions(&instructions), instructions)
     }
 
     pub fn make_icfg(&mut self, src_chars: &Vec<char>, error_handler: &mut ErrorHandler) -> ICFG {
         let mut parser = Parser::new(&src_chars, error_handler);
         let arena = AstArena::new();
-        println!("I run 1");
+        println!("1");
         let mut ast = parser.parse_ast(&mut self.symbol_table, &arena);
-        println!("I run 2");
+
+        println!("2");
         ast.type_check_and_constant_fold(error_handler);
+
+        println!("3");
 
         ast.print();
 

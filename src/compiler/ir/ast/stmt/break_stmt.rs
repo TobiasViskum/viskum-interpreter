@@ -1,39 +1,35 @@
 use crate::compiler::{
     ds::symbol_table::SymbolTableRef,
-    error_handler::ErrorHandler,
+    error_handler::{ CompileError, ErrorHandler, ReportedError },
     ir::icfg::{
         cfg::{ CFGGotoNode, CFGNode, CFGNodeId, CFGNodeType, CFG },
         icfg_builder::ICFGBuilder,
         ICFG,
     },
+    parser::token::TokenMetadata,
+    print_todo,
     traits::{ Dissasemble, LinearControlFlow, StmtTrait },
 };
 
-use super::{ GotoNodeIds, NodeIdsRange };
+use super::GotoNodeIds;
 
 #[derive(Debug)]
-pub struct BreakStmt;
+pub struct BreakStmt {
+    metadata: TokenMetadata,
+}
 
 impl BreakStmt {
-    pub fn new() -> Self {
-        Self
+    pub fn new(metadata: TokenMetadata) -> Self {
+        Self { metadata }
     }
 }
 
 impl StmtTrait for BreakStmt {
-    type ReturnTypeCompileIntoICFG = NodeIdsRange;
-
-    fn compile_into_icfg(
-        &self,
-        icfg_builder: &mut ICFGBuilder,
-        goto_node_ids: &mut GotoNodeIds
-    ) -> Self::ReturnTypeCompileIntoICFG {
+    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder, goto_node_ids: &mut GotoNodeIds) {
         let break_node_id = icfg_builder.push_cfg_node(
             CFGNode::new(CFGNodeType::GotoNode(CFGGotoNode))
         );
         goto_node_ids.push_break_node_id(break_node_id);
-
-        NodeIdsRange::new(break_node_id, break_node_id)
     }
 
     fn is_linear_control_flow(&self) -> bool {
@@ -45,7 +41,13 @@ impl StmtTrait for BreakStmt {
         symbol_table_ref: &mut SymbolTableRef,
         error_handler: &mut ErrorHandler
     ) {
-        todo!()
+        print_todo("Check if break stmt is used outside of loop")
+        // let local_symbol_table = symbol_table_ref.get();
+        // if !local_symbol_table.is_is_in_loop() {
+        //     error_handler.report_compile_error(
+        //         CompileError::new(ReportedError::new(message, chars_range))
+        //     )
+        // }
     }
 
     fn as_linear_control_flow(&self) -> Option<&dyn LinearControlFlow> {
@@ -55,6 +57,6 @@ impl StmtTrait for BreakStmt {
 
 impl Dissasemble for BreakStmt {
     fn dissasemble(&self) -> String {
-        "break".to_string()
+        "break\n".to_string()
     }
 }

@@ -8,7 +8,7 @@ edition = "2021"
 
 [dependencies]
 indexmap = "2.2.5"
-proc_macros = { path = "./proc_macros"}
+proc_macros = { path = "./proc_macros" }
 colored = "2.1.0"
 ahash = "0.8.11"
 typed-arena = "2.0.2"

@@ -3,17 +3,23 @@ use std::rc::Rc;
 use ahash::AHashMap;
 
 use crate::compiler::{
-    ds::{ symbol_table::{ SSAKey, SymbolTableRef }, value::ValueType },
-    error_handler::{ CompileError, ErrorHandler, ReportedError, SrcCharsRange },
+    ds::{
+        symbol_table::{SSAKey, SymbolTableRef},
+        value::ValueType,
+    },
+    error_handler::{CompileError, ErrorHandler, ReportedError, SrcCharsRange},
     ir::{
         ast::expr::IdentifierExpr,
-        icfg::{ dag::{ DAGDefineNode, DAGNode, DAG }, icfg_builder::ICFGBuilder },
+        icfg::{
+            dag::{DAGDefineNode, DAGNode, DAG},
+            icfg_builder::ICFGBuilder,
+        },
     },
     parser::token::TokenMetadata,
-    traits::{ Dissasemble, ExprTrait },
+    traits::{Dissasemble, ExprTrait},
 };
 
-use super::{ ExprStmt, GotoNodeIds, LinearControlFlow, NodeIdsRange, StmtTrait };
+use super::{ExprStmt, GotoNodeIds, LinearControlFlow, StmtTrait};
 
 #[derive(Debug)]
 pub struct VarDefStmt<'ast> {
@@ -29,7 +35,7 @@ impl<'ast> VarDefStmt<'ast> {
         value_type: Option<ValueType>,
         is_mutable: bool,
         value: Option<ExprStmt<'ast>>,
-        token_metadata: TokenMetadata
+        token_metadata: TokenMetadata,
     ) -> Self {
         Self {
             ident_expr: IdentifierExpr::new(name, token_metadata),
@@ -41,7 +47,7 @@ impl<'ast> VarDefStmt<'ast> {
 
     pub fn get_resolved_value_type(
         &mut self,
-        symbol_table_ref: &SymbolTableRef
+        symbol_table_ref: &SymbolTableRef,
     ) -> Result<ValueType, CompileError> {
         let provided_value_type = self.value_type.as_ref();
         let value_type_based_on_value = match &mut self.value {
@@ -51,18 +57,14 @@ impl<'ast> VarDefStmt<'ast> {
 
         let value_type = match (provided_value_type.cloned(), value_type_based_on_value) {
             (None, None) => {
-                return Err(
-                    CompileError::new(
-                        ReportedError::new(
-                            format!(
-                                "The type of '{}' cannot be determined. Please provide a type: '{} ..'",
-                                self.get_name(),
-                                self.get_name()
-                            ),
-                            self.get_metadata().into()
-                        )
-                    )
-                );
+                return Err(CompileError::new(ReportedError::new(
+                    format!(
+                        "The type of '{}' cannot be determined. Please provide a type: '{} ..'",
+                        self.get_name(),
+                        self.get_name()
+                    ),
+                    self.get_metadata().into(),
+                )));
             }
             (Some(provided_type), None) => provided_type,
             (None, Some(found_type)) => found_type,
@@ -147,20 +149,19 @@ impl<'ast> Dissasemble for VarDefStmt<'ast> {
                 )
             }
             None => {
-                format!("{}{}{}\n", mutable_string, self.get_ssa_key().dissasemble(), value_string)
+                format!(
+                    "{}{}{}\n",
+                    mutable_string,
+                    self.get_ssa_key().dissasemble(),
+                    value_string
+                )
             }
         }
     }
 }
 
 impl<'ast> StmtTrait for VarDefStmt<'ast> {
-    type ReturnTypeCompileIntoICFG = NodeIdsRange;
-
-    fn compile_into_icfg(
-        &self,
-        icfg_builder: &mut ICFGBuilder,
-        goto_node_ids: &mut GotoNodeIds
-    ) -> Self::ReturnTypeCompileIntoICFG {
+    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder, goto_node_ids: &mut GotoNodeIds) {
         todo!()
     }
 
@@ -171,14 +172,12 @@ impl<'ast> StmtTrait for VarDefStmt<'ast> {
     fn validate_stmt(
         &mut self,
         symbol_table_ref: &mut SymbolTableRef,
-        error_handler: &mut ErrorHandler
+        error_handler: &mut ErrorHandler,
     ) {
-        println!("I run before (var-def)");
         match symbol_table_ref.get_mut().declare_var(self) {
             Ok(ssa_key) => self.set_ssa_subscript(ssa_key.get_subscript()),
             Err(err) => error_handler.report_compile_error(err),
         }
-        println!("I run after (var-def)")
     }
 
     fn as_linear_control_flow(&self) -> Option<&dyn LinearControlFlow> {
@@ -190,21 +189,18 @@ impl<'ast> LinearControlFlow for VarDefStmt<'ast> {
     fn compile_into_dag(
         &self,
         dag: &mut DAG,
-        ident_node_id_map: &mut AHashMap<SSAKey, usize>
+        ident_node_id_map: &mut AHashMap<SSAKey, usize>,
     ) -> usize {
-        let value_node_id = self.value
+        let value_node_id = self
+            .value
             .as_ref()
             .map(|expr| expr.compile_into_dag(dag, ident_node_id_map));
 
-        let define_node_id = dag.push_node(
-            DAGNode::DefineNode(
-                DAGDefineNode::new(
-                    self.ident_expr.get_ssa_key(),
-                    self.is_mutable,
-                    value_node_id.is_some()
-                )
-            )
-        );
+        let define_node_id = dag.push_node(DAGNode::DefineNode(DAGDefineNode::new(
+            self.ident_expr.get_ssa_key(),
+            self.is_mutable,
+            value_node_id.is_some(),
+        )));
 
         if let Some(value_node_id) = value_node_id {
             dag.add_edge(define_node_id, value_node_id);

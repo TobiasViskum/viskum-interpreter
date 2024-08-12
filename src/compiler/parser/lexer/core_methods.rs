@@ -44,7 +44,7 @@ impl<'a> Lexer<'a> {
                     TokenType::TokenIdentifier
                 }
             }
-            // 'w' => self.check_keyword(1, 4, "hile", TokenType::TokenWhile),
+            'w' => self.check_keyword(1, 4, "hile", TokenType::TokenWhile),
 
             _ => TokenType::TokenIdentifier,
         };

@@ -6,10 +6,11 @@ use crate::compiler::{
         icfg_builder::ICFGBuilder,
         ICFG,
     },
+    print_todo,
     traits::{ Dissasemble, LinearControlFlow, StmtTrait },
 };
 
-use super::{ GotoNodeIds, NodeIdsRange };
+use super::{ GotoNodeIds };
 
 #[derive(Debug)]
 pub struct ContinueStmt;
@@ -21,19 +22,11 @@ impl ContinueStmt {
 }
 
 impl StmtTrait for ContinueStmt {
-    type ReturnTypeCompileIntoICFG = NodeIdsRange;
-
-    fn compile_into_icfg(
-        &self,
-        icfg_builder: &mut ICFGBuilder,
-        goto_node_ids: &mut GotoNodeIds
-    ) -> Self::ReturnTypeCompileIntoICFG {
+    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder, goto_node_ids: &mut GotoNodeIds) {
         let continue_node_id = icfg_builder.push_cfg_node(
             CFGNode::new(CFGNodeType::GotoNode(CFGGotoNode))
         );
         goto_node_ids.push_continue_node_id(continue_node_id);
-
-        NodeIdsRange::new(continue_node_id, continue_node_id)
     }
 
     fn is_linear_control_flow(&self) -> bool {
@@ -45,7 +38,7 @@ impl StmtTrait for ContinueStmt {
         symbol_table_ref: &mut SymbolTableRef,
         error_handler: &mut ErrorHandler
     ) {
-        todo!()
+        print_todo("Check if continue stmt is used outside of loop")
     }
 
     fn as_linear_control_flow(&self) -> Option<&dyn LinearControlFlow> {

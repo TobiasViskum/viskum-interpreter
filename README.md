@@ -15,6 +15,9 @@
 - More optimizations:
   - https://www.javatpoint.com/machine-independent-optimization
 
+Other optimizations here:
+https://en.wikipedia.org/wiki/Static_single-assignment_form#Benefits
+
 ## TODO
 
 - Rewrite the way a directed acyclic graph works. All basic blocks (linear sequence of stmts that don't jump) should be in its own cfg node which is called the Process node. Right now each stmt gets its own node, which makes optimizations harder

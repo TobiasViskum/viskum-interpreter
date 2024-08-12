@@ -10,7 +10,7 @@ use crate::compiler::{
     traits::{ Dissasemble, ExprTrait },
 };
 
-use super::{ ExprStmt, GotoNodeIds, LinearControlFlow, NodeIdsRange, StmtTrait };
+use super::{ ExprStmt, GotoNodeIds, LinearControlFlow, StmtTrait };
 
 #[derive(Debug)]
 pub struct VarAssignStmt<'ast> {
@@ -54,13 +54,7 @@ impl<'ast> Dissasemble for VarAssignStmt<'ast> {
 }
 
 impl<'ast> StmtTrait for VarAssignStmt<'ast> {
-    type ReturnTypeCompileIntoICFG = NodeIdsRange;
-
-    fn compile_into_icfg(
-        &self,
-        icfg_builder: &mut ICFGBuilder,
-        goto_node_ids: &mut GotoNodeIds
-    ) -> Self::ReturnTypeCompileIntoICFG {
+    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder, goto_node_ids: &mut GotoNodeIds) {
         todo!()
     }
 

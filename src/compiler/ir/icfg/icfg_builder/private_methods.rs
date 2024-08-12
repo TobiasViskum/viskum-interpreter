@@ -6,5 +6,3 @@ use crate::compiler::{
 };
 
 use super::{ ICFGBuilder, LinearBasicBlockStmt };
-
-impl ICFGBuilder {}

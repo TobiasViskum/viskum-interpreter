@@ -14,24 +14,24 @@ macro_rules! def_op {
 }
 
 macro_rules! get_rel_reg {
-    ($vm:ident, $instruction:ident.$param:ident.$field:ident) => {
+    ($vm:ident, $instruction:ident.$reg:ident) => {
         *{
             let register_offset = $vm.read_register_offset();
-            ($vm.registers.get_unchecked((*$instruction).$param.$field + register_offset))
+            ($vm.registers.get_unchecked((*$instruction).$reg as usize + register_offset))
         }
     };
-    (mut $vm:ident, $instruction:ident.$param:ident.$field:ident) => {
+    (mut $vm:ident, $instruction:ident.$reg:ident) => {
         *{
             let register_offset = $vm.read_register_offset();
-            ($vm.registers.get_unchecked_mut((*$instruction).$param.$field + register_offset))
+            ($vm.registers.get_unchecked_mut((*$instruction).$reg as usize + register_offset))
         }
     };
 }
 
 macro_rules! get_abs_reg {
-    ($vm:ident, $instruction:ident.$param:ident.$field:ident) => {
+    ($vm:ident, $instruction:ident.$reg:ident) => {
         *{
-            ($vm.registers.get_unchecked((*$instruction).$param.$field))
+            ($vm.registers.get_unchecked((*$instruction).$reg as usize))
         }
     };
 }
@@ -55,8 +55,12 @@ macro_rules! new_mod {
 new_mod! {
     mod_name: util_fn_ptrs,
 
-    def_op!(halt(instruction, vm) {
+    def_op!(halt(_instruction, _vm) {
         // println!("Program done");
+    });
+
+    def_op!(goto(instruction, vm) {
+        next_op!((*instruction).param1.jmp, vm)
     });
 
     def_op!(push_fn_ptr(instruction, vm) {
@@ -69,8 +73,8 @@ new_mod! {
 
     macro_rules! unary_op_body {
         ($vm:ident, $instruction:ident, $code:block, $rhs:ident, $method:ident) => {
-            let $rhs = $method!($vm, $instruction.param2.reg_idx);
-            get_rel_reg!(mut $vm, $instruction.param1.reg_idx) = $code;
+            let $rhs = $method!($vm, $instruction.reg2);
+            get_rel_reg!(mut $vm, $instruction.reg1) = $code;
             next_op!($instruction.offset(1), $vm)
         }
     }
@@ -101,13 +105,70 @@ new_mod! {
     });
 }
 
+new_mod!(
+    mod_name: jmp_cmp_fn_ptrs,
+
+    macro_rules! jmp_cmp_op_body {
+        ($vm:ident, $instruction:ident, $code:block, $lhs:ident, $rhs:ident, $method1:ident, $method2:ident) => {
+            let ($lhs, $rhs) = (get_rel_reg!($vm, $instruction.reg1), get_rel_reg!($vm, $instruction.reg2));
+            match $code {
+                true => next_op!((*$instruction).param1.jmp, $vm),
+                false => next_op!((*$instruction).param1.jmp, $vm)
+            }
+        }
+    }
+
+    macro_rules! def_jmp_cmp_op {
+        ($name:ident, |$lhs:ident, $rhs:ident| $code:block) => {
+            paste::paste! {
+                def_op!([<$name _rr>](instruction, vm) {
+                    jmp_cmp_op_body!(vm, instruction, $code, $lhs, $rhs, get_rel_reg, get_rel_reg);
+                });
+                def_op!([<$name _ra>](instruction, vm) {
+                    jmp_cmp_op_body!(vm, instruction, $code, $lhs, $rhs, get_rel_reg, get_abs_reg);
+                });
+                def_op!([<$name _ar>](instruction, vm) {
+                    jmp_cmp_op_body!(vm, instruction, $code, $lhs, $rhs, get_abs_reg, get_rel_reg);
+                });
+                def_op!([<$name _aa>](instruction, vm) {
+                    jmp_cmp_op_body!(vm, instruction, $code, $lhs, $rhs, get_abs_reg, get_abs_reg);
+                });
+            }
+        }
+    }
+
+    def_jmp_cmp_op!(jmp_cmp_eq_int, |lhs, rhs| {
+        lhs == rhs
+    });
+
+    def_jmp_cmp_op!(jmp_cmp_ne_int, |lhs, rhs| {
+        lhs != rhs
+    });
+
+    def_jmp_cmp_op!(jmp_cmp_ge_int, |lhs, rhs| {
+        lhs >= rhs
+    });
+
+    def_jmp_cmp_op!(jmp_cmp_gt_int, |lhs, rhs| {
+        lhs > rhs
+    });
+
+    def_jmp_cmp_op!(jmp_cmp_le_int, |lhs, rhs| {
+        lhs <= rhs
+    });
+
+    def_jmp_cmp_op!(jmp_cmp_lt_int, |lhs, rhs| {
+        lhs < rhs
+    });
+);
+
 new_mod! {
     mod_name: binary_fn_ptrs,
 
     macro_rules! binary_op_body {
         ($vm:ident, $instruction:ident, $code:block, $lhs:ident, $rhs:ident, $method1:ident, $method2:ident) => {
-            let ($lhs, $rhs) = (get_rel_reg!($vm, $instruction.param2.reg_idx), get_rel_reg!($vm, $instruction.param3.reg_idx));
-            get_rel_reg!(mut $vm, $instruction.param1.reg_idx) = $code;
+            let ($lhs, $rhs) = ($method1!($vm, $instruction.reg2), $method2!($vm, $instruction.reg3));
+            get_rel_reg!(mut $vm, $instruction.reg1) = $code;
             next_op!($instruction.offset(1), $vm)
         }
     }

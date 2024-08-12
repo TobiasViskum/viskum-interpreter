@@ -15,7 +15,7 @@ use crate::compiler::{
     traits::{ Dissasemble, ExprTrait, LinearControlFlow, StmtTrait },
 };
 
-use super::{ GotoNodeIds, NodeIdsRange };
+use super::{ GotoNodeIds };
 
 #[derive(Debug)]
 pub struct ExprStmt<'ast> {
@@ -51,20 +51,14 @@ impl<'ast> ExprStmt<'ast> {
 }
 
 impl<'ast> StmtTrait for ExprStmt<'ast> {
-    type ReturnTypeCompileIntoICFG = NodeIdsRange;
-
-    fn compile_into_icfg(
-        &self,
-        icfg_builder: &mut ICFGBuilder,
-        goto_node_ids: &mut GotoNodeIds
-    ) -> Self::ReturnTypeCompileIntoICFG {
-        let mut dag = DAG::new();
-        let mut ident_node_id_map = AHashMap::new();
-        let entry_node_id = self.compile_into_dag(&mut dag, &mut ident_node_id_map);
-        dag.set_entry_node_id(entry_node_id);
-        let cfg_process_node = CFGNode::new(CFGNodeType::ProcessNode(CFGProcessNode::new(dag)));
-        let cfg_node = icfg_builder.push_cfg_node(cfg_process_node);
-        NodeIdsRange::new(cfg_node, cfg_node)
+    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder, goto_node_ids: &mut GotoNodeIds) {
+        unimplemented!("Should hopefully be compiled into DAG instead")
+        // let mut dag = DAG::new();
+        // let mut ident_node_id_map = AHashMap::new();
+        // let entry_node_id = self.compile_into_dag(&mut dag, &mut ident_node_id_map);
+        // dag.set_entry_node_id(entry_node_id);
+        // let cfg_process_node = CFGNode::new(CFGNodeType::ProcessNode(CFGProcessNode::new(dag)));
+        // let cfg_node = icfg_builder.push_cfg_node(cfg_process_node);
     }
 
     fn is_linear_control_flow(&self) -> bool {

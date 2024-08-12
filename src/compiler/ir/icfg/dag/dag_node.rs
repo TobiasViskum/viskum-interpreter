@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use crate::compiler::{
     ds::{ symbol_table::SSAKey, value::{ ops::{ BinaryOp, UnaryOp }, Value } },
-    traits::{ DAGNodeTrait, Dissasemble },
+    traits::{ DAGNodeTrait, Dissasemble, ParseConnectedNodes },
 };
 
 #[derive(Debug)]
@@ -16,7 +16,7 @@ impl DAGDropNode {
     }
 }
 
-impl DAGNodeTrait for DAGDropNode {
+impl ParseConnectedNodes for DAGDropNode {
     type ConnectedNodes = Vec<usize>;
 
     fn parse_connected_nodes(&self, mut connected_nodes: Vec<usize>) -> Self::ConnectedNodes {
@@ -26,7 +26,9 @@ impl DAGNodeTrait for DAGDropNode {
 
         connected_nodes
     }
+}
 
+impl DAGNodeTrait for DAGDropNode {
     fn expected_connected_nodes(&self) -> usize {
         self.drops_count
     }
@@ -41,7 +43,7 @@ impl Dissasemble for DAGDropNode {
 #[derive(Debug)]
 pub struct DAGGroupNode;
 
-impl DAGNodeTrait for DAGGroupNode {
+impl ParseConnectedNodes for DAGGroupNode {
     type ConnectedNodes = usize;
 
     fn parse_connected_nodes(&self, connected_nodes: Vec<usize>) -> Self::ConnectedNodes {
@@ -50,7 +52,9 @@ impl DAGNodeTrait for DAGGroupNode {
             None => panic!("Expected one node connected to DAGGroupNode"),
         }
     }
+}
 
+impl DAGNodeTrait for DAGGroupNode {
     fn expected_connected_nodes(&self) -> usize {
         1
     }
@@ -71,7 +75,7 @@ impl DAGBinaryNode {
     }
 }
 
-impl DAGNodeTrait for DAGBinaryNode {
+impl ParseConnectedNodes for DAGBinaryNode {
     type ConnectedNodes = (usize, usize);
 
     fn parse_connected_nodes(&self, connected_nodes: Vec<usize>) -> Self::ConnectedNodes {
@@ -80,7 +84,9 @@ impl DAGNodeTrait for DAGBinaryNode {
             _ => panic!("Expected two nodes connected to DAGBinaryNode"),
         }
     }
+}
 
+impl DAGNodeTrait for DAGBinaryNode {
     fn expected_connected_nodes(&self) -> usize {
         2
     }
@@ -107,7 +113,7 @@ impl DAGUnaryNode {
     }
 }
 
-impl DAGNodeTrait for DAGUnaryNode {
+impl ParseConnectedNodes for DAGUnaryNode {
     type ConnectedNodes = usize;
 
     fn parse_connected_nodes(&self, connected_nodes: Vec<usize>) -> Self::ConnectedNodes {
@@ -116,7 +122,9 @@ impl DAGNodeTrait for DAGUnaryNode {
             None => panic!("Expected one node connected to DAGUnaryNode"),
         }
     }
+}
 
+impl DAGNodeTrait for DAGUnaryNode {
     fn expected_connected_nodes(&self) -> usize {
         1
     }
@@ -147,13 +155,15 @@ impl DAGFnCallNode {
     }
 }
 
-impl DAGNodeTrait for DAGFnCallNode {
+impl ParseConnectedNodes for DAGFnCallNode {
     type ConnectedNodes = ();
 
     fn parse_connected_nodes(&self, connected_nodes: Vec<usize>) -> Self::ConnectedNodes {
         todo!()
     }
+}
 
+impl DAGNodeTrait for DAGFnCallNode {
     fn expected_connected_nodes(&self) -> usize {
         todo!()
     }
@@ -172,7 +182,7 @@ pub struct DAGDefineNode {
     is_initialized: bool,
 }
 
-impl DAGNodeTrait for DAGDefineNode {
+impl ParseConnectedNodes for DAGDefineNode {
     type ConnectedNodes = Option<usize>;
 
     fn parse_connected_nodes(&self, connected_nodes: Vec<usize>) -> Self::ConnectedNodes {
@@ -185,7 +195,9 @@ impl DAGNodeTrait for DAGDefineNode {
             false => None,
         }
     }
+}
 
+impl DAGNodeTrait for DAGDefineNode {
     fn expected_connected_nodes(&self) -> usize {
         1
     }
@@ -228,7 +240,7 @@ impl Dissasemble for DAGAssignNode {
     }
 }
 
-impl DAGNodeTrait for DAGAssignNode {
+impl ParseConnectedNodes for DAGAssignNode {
     type ConnectedNodes = (usize, usize);
 
     fn parse_connected_nodes(&self, connected_nodes: Vec<usize>) -> Self::ConnectedNodes {
@@ -237,7 +249,9 @@ impl DAGNodeTrait for DAGAssignNode {
             _ => panic!("Expected two nodes connected to DAGAssignNode"),
         }
     }
+}
 
+impl DAGNodeTrait for DAGAssignNode {
     fn expected_connected_nodes(&self) -> usize {
         2
     }
@@ -258,13 +272,15 @@ impl DAGConstNode {
     }
 }
 
-impl DAGNodeTrait for DAGConstNode {
+impl ParseConnectedNodes for DAGConstNode {
     type ConnectedNodes = ();
 
     fn parse_connected_nodes(&self, _: Vec<usize>) -> Self::ConnectedNodes {
         ()
     }
+}
 
+impl DAGNodeTrait for DAGConstNode {
     fn expected_connected_nodes(&self) -> usize {
         0
     }
@@ -295,13 +311,15 @@ impl DAGIdentNode {
     }
 }
 
-impl DAGNodeTrait for DAGIdentNode {
+impl ParseConnectedNodes for DAGIdentNode {
     type ConnectedNodes = ();
 
     fn parse_connected_nodes(&self, _: Vec<usize>) -> Self::ConnectedNodes {
         ()
     }
+}
 
+impl DAGNodeTrait for DAGIdentNode {
     fn expected_connected_nodes(&self) -> usize {
         0
     }

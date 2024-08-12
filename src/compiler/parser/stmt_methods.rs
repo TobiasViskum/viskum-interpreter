@@ -5,7 +5,6 @@ use crate::{
         ir::ast::{
             expr::IdentifierExpr,
             stmt::{
-                BasicBlockStmt,
                 BlockStmt,
                 BreakStmt,
                 ContinueStmt,
@@ -41,11 +40,12 @@ impl<'a> Parser<'a> {
 
         match curr {
             TokenLeftCurlyBrace =>
-                Ok(Stmt::BasicBlockStmt(self.basic_block((arena, symbol_table_ref), None)?)),
+                Ok(Stmt::BlockStmt(self.block((arena, symbol_table_ref), None)?)),
             TokenMutable => self.mut_var_def((arena, symbol_table_ref)),
             TokenFunction => self.function((arena, symbol_table_ref)),
             TokenIf => Ok(Stmt::IfStmt(self.if_stmt((arena, symbol_table_ref))?)),
             TokenLoop => self.loop_stmt((arena, symbol_table_ref)),
+            TokenWhile => self.while_stmt((arena, symbol_table_ref)),
             TokenBreak => self.break_stmt((arena, symbol_table_ref)),
             TokenContinue => self.continue_stmt((arena, symbol_table_ref)),
             TokenReturn => self.return_stmt((arena, symbol_table_ref)),
@@ -93,10 +93,23 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn break_stmt<'b>(&mut self, _: Args<'b>) -> ReturnType<'b> {
+        let metadata = current!(self, metadata);
         self.advance();
         self.consume_expr_end()?;
 
-        Ok(Stmt::BreakStmt(BreakStmt::new()))
+        Ok(Stmt::BreakStmt(BreakStmt::new(metadata)))
+    }
+
+    pub(super) fn while_stmt<'b>(&mut self, (arena, symbol_table_ref): Args<'b>) -> ReturnType<'b> {
+        self.advance();
+
+        let condition = ExprStmt::new(self.expression(Precedence::PrecAssignment, arena)?);
+
+        let body = self.block((arena, symbol_table_ref), None)?;
+
+        self.consume_expr_end()?;
+
+        Ok(Stmt::LoopStmt(LoopStmt::new(Some(condition), body)))
     }
 
     pub(super) fn loop_stmt<'b>(&mut self, (arena, symbol_table_ref): Args<'b>) -> ReturnType<'b> {
@@ -105,6 +118,8 @@ impl<'a> Parser<'a> {
         let body = self.block((arena, symbol_table_ref), None)?;
 
         self.consume_expr_end()?;
+
+        println!("current: {:?}", current!(self, ttype));
 
         Ok(Stmt::LoopStmt(LoopStmt::new(None, body)))
     }
@@ -220,17 +235,9 @@ impl<'a> Parser<'a> {
 
     pub fn block<'b>(
         &mut self,
-        (arena, symbol_table_ref): Args<'b>,
-        return_type: Option<ValueType>
-    ) -> Result<BlockStmt<'b>, CompileError> {
-        Ok(BlockStmt::from_basic_block(self.basic_block((arena, symbol_table_ref), return_type)?))
-    }
-
-    pub fn basic_block<'b>(
-        &mut self,
         (arena, mut symbol_table_ref): Args<'b>,
         return_type: Option<ValueType>
-    ) -> Result<BasicBlockStmt<'b>, CompileError> {
+    ) -> Result<BlockStmt<'b>, CompileError> {
         self.consume(
             TokenType::TokenLeftCurlyBrace,
             format!("Expected '{{' but got: {}", current!(self, lexeme).get_lexeme_str()).as_str()
@@ -238,7 +245,7 @@ impl<'a> Parser<'a> {
 
         let symbol_table_ref = symbol_table_ref.alloc_symbol_table(return_type);
 
-        let mut scope_stmt = BasicBlockStmt::new(symbol_table_ref);
+        let mut scope_stmt = BlockStmt::new(symbol_table_ref, true);
 
         while
             !self.is_at_end() &&
@@ -251,6 +258,7 @@ impl<'a> Parser<'a> {
                 }
             }
         }
+
         self.consume(TokenType::TokenRightCurlyBrace, "Expected '}' at the end of block")?;
 
         Ok(scope_stmt)
@@ -305,7 +313,7 @@ impl<'a> Parser<'a> {
             }
         ).unwrap_or(ValueType::Void);
 
-        let body = self.basic_block((arena, symbol_table_ref), Some(return_type))?;
+        let body = self.block((arena, symbol_table_ref), Some(return_type))?;
 
         let function_stmt = FunctionStmt::new(
             lexeme.take_lexeme_rc(),

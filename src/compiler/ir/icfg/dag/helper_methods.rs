@@ -8,7 +8,7 @@ use crate::{
             value::{ ops::{ BinaryOp, ComparisonOp, UnaryOp }, Value },
             vm_builder::VMBuilder,
         },
-        traits::DAGNodeTrait,
+        traits::{ DAGNodeTrait, ParseConnectedNodes },
     },
     vm::instructions::{ Instruction, Reg },
 };
@@ -46,13 +46,14 @@ impl DAG {
         node_id: usize,
         instructions: &mut Vec<Instruction>,
         register_allocator: &mut RegisterAllocator,
-        group_node: &DAGGroupNode
+        group_node: &DAGGroupNode,
+        is_condition: bool
     ) -> Reg {
         let connected_node_id = group_node.parse_connected_nodes(
             self.get_connected_node_ids(node_id)
         );
 
-        self.generate_instruction(connected_node_id, instructions, register_allocator)
+        self.generate_instruction(connected_node_id, instructions, register_allocator, is_condition)
     }
 
     pub(super) fn generate_unary_instruction(
@@ -60,7 +61,8 @@ impl DAG {
         node_id: usize,
         instructions: &mut Vec<Instruction>,
         register_allocator: &mut RegisterAllocator,
-        unary_node: &DAGUnaryNode
+        unary_node: &DAGUnaryNode,
+        is_condition: bool
     ) -> Reg {
         let connected_node_id = unary_node.parse_connected_nodes(
             self.get_connected_node_ids(node_id)
@@ -69,7 +71,8 @@ impl DAG {
         let src_reg = self.generate_instruction(
             connected_node_id,
             instructions,
-            register_allocator
+            register_allocator,
+            is_condition
         );
 
         let dst_reg = register_allocator.alloc_temp_reg();
@@ -89,15 +92,26 @@ impl DAG {
         node_id: usize,
         instructions: &mut Vec<Instruction>,
         register_allocator: &mut RegisterAllocator,
-        binary_node: &DAGBinaryNode
+        binary_node: &DAGBinaryNode,
+        is_condition: bool
     ) -> Reg {
         let (connected_node_id_1, connected_node_id_2) = binary_node.parse_connected_nodes(
             self.get_connected_node_ids(node_id)
         );
 
         let src_regs = (
-            self.generate_instruction(connected_node_id_1, instructions, register_allocator),
-            self.generate_instruction(connected_node_id_2, instructions, register_allocator),
+            self.generate_instruction(
+                connected_node_id_1,
+                instructions,
+                register_allocator,
+                is_condition
+            ),
+            self.generate_instruction(
+                connected_node_id_2,
+                instructions,
+                register_allocator,
+                is_condition
+            ),
         );
 
         let dst_reg = register_allocator.alloc_temp_reg();
@@ -132,48 +146,107 @@ impl DAG {
                 });
             }
             BinaryOp::ComparisonOp(comparison_op) => {
-                match comparison_op {
-                    ComparisonOp::Eq => {
-                        instructions.push(Instruction::CmpEqInt {
-                            dst_reg,
-                            src1_reg: src_regs.0,
-                            src2_reg: src_regs.1,
-                        });
+                if is_condition {
+                    register_allocator.free_temp_reg(Reg::Rel(dst_reg));
+                }
+
+                if is_condition {
+                    match comparison_op {
+                        ComparisonOp::Eq => {
+                            instructions.push(Instruction::JmpCmpEqInt {
+                                true_jmp_pos: 0,
+                                false_jmp_pos: 0,
+                                src1_reg: src_regs.0,
+                                src2_reg: src_regs.1,
+                            });
+                        }
+                        ComparisonOp::Ne => {
+                            instructions.push(Instruction::JmpCmpNeInt {
+                                true_jmp_pos: 0,
+                                false_jmp_pos: 0,
+                                src1_reg: src_regs.0,
+                                src2_reg: src_regs.1,
+                            });
+                        }
+                        ComparisonOp::Ge => {
+                            instructions.push(Instruction::JmpCmpGeInt {
+                                true_jmp_pos: 0,
+                                false_jmp_pos: 0,
+                                src1_reg: src_regs.0,
+                                src2_reg: src_regs.1,
+                            });
+                        }
+                        ComparisonOp::Gt => {
+                            instructions.push(Instruction::JmpCmpGtInt {
+                                true_jmp_pos: 0,
+                                false_jmp_pos: 0,
+                                src1_reg: src_regs.0,
+                                src2_reg: src_regs.1,
+                            });
+                        }
+                        ComparisonOp::Le => {
+                            instructions.push(Instruction::JmpCmpLeInt {
+                                true_jmp_pos: 0,
+                                false_jmp_pos: 0,
+                                src1_reg: src_regs.0,
+                                src2_reg: src_regs.1,
+                            });
+                        }
+                        ComparisonOp::Lt => {
+                            instructions.push(Instruction::JmpCmpLtInt {
+                                true_jmp_pos: 0,
+                                false_jmp_pos: 0,
+                                src1_reg: src_regs.0,
+                                src2_reg: src_regs.1,
+                            });
+                        }
                     }
-                    ComparisonOp::Ne => {
-                        instructions.push(Instruction::CmpNeInt {
-                            dst_reg,
-                            src1_reg: src_regs.0,
-                            src2_reg: src_regs.1,
-                        });
-                    }
-                    ComparisonOp::Ge => {
-                        instructions.push(Instruction::CmpGeInt {
-                            dst_reg,
-                            src1_reg: src_regs.0,
-                            src2_reg: src_regs.1,
-                        });
-                    }
-                    ComparisonOp::Gt => {
-                        instructions.push(Instruction::CmpGtInt {
-                            dst_reg,
-                            src1_reg: src_regs.0,
-                            src2_reg: src_regs.1,
-                        });
-                    }
-                    ComparisonOp::Le => {
-                        instructions.push(Instruction::CmpLeInt {
-                            dst_reg,
-                            src1_reg: src_regs.0,
-                            src2_reg: src_regs.1,
-                        });
-                    }
-                    ComparisonOp::Lt => {
-                        instructions.push(Instruction::CmpLtInt {
-                            dst_reg,
-                            src1_reg: src_regs.0,
-                            src2_reg: src_regs.1,
-                        });
+                    register_allocator.free_temp_reg(src_regs.0);
+                    register_allocator.free_temp_reg(src_regs.1);
+                } else {
+                    match comparison_op {
+                        ComparisonOp::Eq => {
+                            instructions.push(Instruction::CmpEqInt {
+                                dst_reg,
+                                src1_reg: src_regs.0,
+                                src2_reg: src_regs.1,
+                            });
+                        }
+                        ComparisonOp::Ne => {
+                            instructions.push(Instruction::CmpNeInt {
+                                dst_reg,
+                                src1_reg: src_regs.0,
+                                src2_reg: src_regs.1,
+                            });
+                        }
+                        ComparisonOp::Ge => {
+                            instructions.push(Instruction::CmpGeInt {
+                                dst_reg,
+                                src1_reg: src_regs.0,
+                                src2_reg: src_regs.1,
+                            });
+                        }
+                        ComparisonOp::Gt => {
+                            instructions.push(Instruction::CmpGtInt {
+                                dst_reg,
+                                src1_reg: src_regs.0,
+                                src2_reg: src_regs.1,
+                            });
+                        }
+                        ComparisonOp::Le => {
+                            instructions.push(Instruction::CmpLeInt {
+                                dst_reg,
+                                src1_reg: src_regs.0,
+                                src2_reg: src_regs.1,
+                            });
+                        }
+                        ComparisonOp::Lt => {
+                            instructions.push(Instruction::CmpLtInt {
+                                dst_reg,
+                                src1_reg: src_regs.0,
+                                src2_reg: src_regs.1,
+                            });
+                        }
                     }
                 }
             }
@@ -190,7 +263,8 @@ impl DAG {
         node_id: usize,
         instructions: &mut Vec<Instruction>,
         register_allocator: &mut RegisterAllocator,
-        define_node: &DAGDefineNode
+        define_node: &DAGDefineNode,
+        is_condition: bool
     ) -> Reg {
         let connected_node_id = define_node
             .parse_connected_nodes(self.get_connected_node_ids(node_id))
@@ -199,10 +273,11 @@ impl DAG {
         let src_reg = self.generate_instruction(
             connected_node_id,
             instructions,
-            register_allocator
+            register_allocator,
+            is_condition
         );
 
-        let ssa_key = define_node.get_ssa_key().clone();
+        let ssa_key = define_node.get_ssa_key().get_ident();
 
         match define_node.get_is_mutable() {
             true => {
@@ -222,7 +297,8 @@ impl DAG {
         node_id: usize,
         instructions: &mut Vec<Instruction>,
         register_allocator: &mut RegisterAllocator,
-        assign_node: &DAGAssignNode
+        assign_node: &DAGAssignNode,
+        is_condition: bool
     ) -> Reg {
         let connected_node_ids = assign_node.parse_connected_nodes(
             self.get_connected_node_ids(node_id)
@@ -236,11 +312,14 @@ impl DAG {
         let src_reg = self.generate_instruction(
             connected_node_ids.1,
             instructions,
-            register_allocator
+            register_allocator,
+            is_condition
         );
 
+        let var_reg = register_allocator.get_var_reg(ident_node.get_ssa_key().get_ident());
+
         instructions.push(Instruction::Copy {
-            dst_reg: register_allocator.alloc_var_reg(ident_node.get_ssa_key().clone()),
+            dst_reg: var_reg.get_idx(),
             src_reg: src_reg,
         });
 

@@ -14,7 +14,13 @@ pub use process_node::CFGProcessNode;
 pub use return_node::CFGReturnNode;
 pub use terminate_node::CFGTerminateNode;
 
-use crate::compiler::traits::Dissasemble;
+use crate::{
+    compiler::{
+        ds::register_allocator::RegisterAllocator,
+        traits::{ CFGNodeTrait, Dissasemble, ParseConnectedNodes },
+    },
+    vm::instructions::Instruction,
+};
 
 #[derive(Debug)]
 pub enum CFGNodeType {
@@ -25,8 +31,6 @@ pub enum CFGNodeType {
     TerminateNode(CFGTerminateNode),
     DropNode(CFGDropNode),
 }
-
-impl CFGNodeType {}
 
 impl Dissasemble for CFGNodeType {
     fn dissasemble(&self) -> String {
@@ -59,6 +63,10 @@ impl CFGNode {
             node_type,
             node_state: CFGNodeState::Dead,
         }
+    }
+
+    pub fn get_node_state(&self) -> CFGNodeState {
+        self.node_state
     }
 
     pub fn get_mut_node_type(&mut self) -> &mut CFGNodeType {

@@ -92,25 +92,10 @@ impl GlobalSymbolTable {
         return_type: Option<ValueType>
     ) -> *mut LocalSymbolTable {
         let global_ptr = self as *mut GlobalSymbolTable;
-        let d1 = self.allocated_symbol_tables.alloc(
+
+        self.allocated_symbol_tables.alloc(
             LocalSymbolTable::new(parent, global_ptr, return_type)
-        );
-        let d2 = clone_table_ref!(d1);
-        d1.insert(
-            "sdf".into(),
-            Symbol::Variable(
-                SymbolVariable::new(ValueType::Bool, true, TokenMetadata::new(1, 1, 1))
-            )
-        );
-        d2.insert(
-            "sdf".into(),
-            Symbol::Variable(
-                SymbolVariable::new(ValueType::Bool, true, TokenMetadata::new(1, 1, 1))
-            )
-        );
-        let idx = self.allocated_symbol_tables.len() - 1;
-        todo!()
-        // self.allocated_symbol_tables.get_mut(idx).unwrap() as *mut LocalSymbolTable
+        ) as *mut LocalSymbolTable
     }
 
     fn get_new_ident_subscript(&mut self, ident: &Rc<str>) -> usize {

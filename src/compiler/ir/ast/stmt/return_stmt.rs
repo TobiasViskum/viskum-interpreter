@@ -10,7 +10,7 @@ use crate::compiler::{
     traits::Dissasemble,
 };
 
-use super::{ ExprStmt, GotoNodeIds, LinearControlFlow, NodeIdsRange, StmtTrait };
+use super::{ ExprStmt, GotoNodeIds, LinearControlFlow, StmtTrait };
 
 #[derive(Debug)]
 pub struct ReturnStmt<'ast> {
@@ -34,19 +34,11 @@ impl<'ast> Dissasemble for ReturnStmt<'ast> {
 }
 
 impl<'ast> StmtTrait for ReturnStmt<'ast> {
-    type ReturnTypeCompileIntoICFG = NodeIdsRange;
-
-    fn compile_into_icfg(
-        &self,
-        icfg_builder: &mut ICFGBuilder,
-        goto_node_ids: &mut GotoNodeIds
-    ) -> Self::ReturnTypeCompileIntoICFG {
+    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder, goto_node_ids: &mut GotoNodeIds) {
         let return_node_id = icfg_builder.push_cfg_node(
             CFGNode::new(CFGNodeType::ReturnNode(CFGReturnNode))
         );
         goto_node_ids.push_return_node_id(return_node_id);
-
-        NodeIdsRange::new(return_node_id, return_node_id)
     }
 
     fn is_linear_control_flow(&self) -> bool {

@@ -8,7 +8,7 @@ use crate::compiler::{
     Dissasemble,
 };
 
-use super::{ GotoNodeIds, NodeIdsRange };
+use super::{ GotoNodeIds };
 
 #[derive(Debug)]
 pub struct DropStmt {
@@ -30,13 +30,7 @@ impl DropStmt {
 }
 
 impl StmtTrait for DropStmt {
-    type ReturnTypeCompileIntoICFG = NodeIdsRange;
-
-    fn compile_into_icfg(
-        &self,
-        icfg_builder: &mut ICFGBuilder,
-        goto_node_ids: &mut GotoNodeIds
-    ) -> Self::ReturnTypeCompileIntoICFG {
+    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder, goto_node_ids: &mut GotoNodeIds) {
         todo!()
     }
 

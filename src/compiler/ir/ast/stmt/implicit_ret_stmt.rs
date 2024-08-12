@@ -8,7 +8,7 @@ use crate::compiler::{
     Dissasemble,
 };
 
-use super::{ ExprStmt, GotoNodeIds, NodeIdsRange };
+use super::{ ExprStmt, GotoNodeIds };
 
 #[derive(Debug)]
 pub struct ImplicitRetStmt<'ast> {
@@ -30,13 +30,7 @@ impl<'ast> ImplicitRetStmt<'ast> {
 }
 
 impl<'ast> StmtTrait for ImplicitRetStmt<'ast> {
-    type ReturnTypeCompileIntoICFG = NodeIdsRange;
-
-    fn compile_into_icfg(
-        &self,
-        icfg_builder: &mut ICFGBuilder,
-        goto_node_ids: &mut GotoNodeIds
-    ) -> Self::ReturnTypeCompileIntoICFG {
+    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder, goto_node_ids: &mut GotoNodeIds) {
         todo!()
     }
 

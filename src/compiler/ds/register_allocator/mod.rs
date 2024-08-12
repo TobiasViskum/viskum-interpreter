@@ -1,18 +1,18 @@
-use std::collections::{ BTreeSet, BinaryHeap };
+use std::{ collections::{ BTreeSet, BinaryHeap }, rc::Rc };
 
 use ahash::{ AHashMap, AHashSet };
 use indexmap::IndexSet;
 
 use crate::{ compiler::{ ir::icfg::dag::DAGNode, print_todo }, vm::instructions::Reg };
 
-use super::{ symbol_table::SSAKey, value::SimpleConst };
+use super::value::SimpleConst;
 
 #[derive(Debug)]
 pub struct RegisterAllocator<'a> {
     register_offet: usize,
     used_regs: BTreeSet<usize>,
     allocated_const_registers: &'a AHashMap<SimpleConst, usize>,
-    allocated_var_registers: AHashMap<SSAKey, Reg>,
+    allocated_var_registers: AHashMap<Rc<str>, Reg>,
 }
 
 impl<'a> RegisterAllocator<'a> {
@@ -30,26 +30,26 @@ impl<'a> RegisterAllocator<'a> {
 
     pub fn free_from_dag_node(&mut self, dag_node: &DAGNode) {
         if let DAGNode::IdentNode(ident_node) = dag_node {
-            let ident = ident_node.get_ssa_key();
-            if let Some(removed_var_reg) = self.allocated_var_registers.remove(ident) {
+            let ident = ident_node.get_ssa_key().get_ident();
+            if let Some(removed_var_reg) = self.allocated_var_registers.remove(&ident) {
                 self.free_temp_reg(removed_var_reg);
             }
         }
     }
 
-    pub fn alloc_var_reg(&mut self, ssa_key: SSAKey) -> usize {
+    pub fn alloc_var_reg(&mut self, ident: Rc<str>) -> usize {
         let allocated_var_reg = self.alloc_reg();
 
         self.allocated_var_registers.insert(
-            ssa_key,
+            ident,
             Reg::Rel(allocated_var_reg + self.register_offet)
         );
 
         allocated_var_reg + self.register_offet
     }
 
-    pub fn mark_reg_as_var(&mut self, ssa_key: SSAKey, reg: Reg) {
-        self.allocated_var_registers.insert(ssa_key, reg);
+    pub fn mark_reg_as_var(&mut self, ident: Rc<str>, reg: Reg) {
+        self.allocated_var_registers.insert(ident, reg);
     }
 
     pub fn alloc_temp_reg(&mut self) -> usize {
@@ -84,9 +84,9 @@ impl<'a> RegisterAllocator<'a> {
         }
     }
 
-    pub fn get_var_reg(&self, ident_ssa: &SSAKey) -> Reg {
+    pub fn get_var_reg(&self, ident: Rc<str>) -> Reg {
         let reg = self.allocated_var_registers
-            .get(&ident_ssa)
+            .get(&ident)
             .copied()
             .expect("Expected ssa_key in allocated_var_registers, but it was not found");
 

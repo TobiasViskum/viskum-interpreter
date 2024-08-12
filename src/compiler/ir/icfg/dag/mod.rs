@@ -6,7 +6,7 @@ pub use dag_node::*;
 use crate::{
     compiler::{
         ds::{ register_allocator::{ self, RegisterAllocator }, vm_builder::VMBuilder },
-        traits::{ DAGNodeTrait, Dissasemble, GenerateBytecode },
+        traits::{ DAGNodeTrait, Dissasemble, LoadConstants },
     },
     vm::{ self, instructions::{ Instruction, Reg } },
 };
@@ -103,11 +103,12 @@ impl DAG {
         connected_nodes
     }
 
-    pub fn generate_instruction(
+    fn generate_instruction(
         &self,
         node_id: usize,
         instructions: &mut Vec<Instruction>,
-        register_allocator: &mut RegisterAllocator
+        register_allocator: &mut RegisterAllocator,
+        is_condition: bool
     ) -> Reg {
         let node = self.nodes.get(node_id).expect("Expected dag node");
 
@@ -119,7 +120,8 @@ impl DAG {
             let possibly_dead_reg = self.generate_instruction(
                 *next_stmt_node_id,
                 instructions,
-                register_allocator
+                register_allocator,
+                is_condition
             );
             register_allocator.free_temp_reg(possibly_dead_reg);
         }
@@ -140,7 +142,8 @@ impl DAG {
                     node_id,
                     instructions,
                     register_allocator,
-                    binary_node
+                    binary_node,
+                    is_condition
                 )
             }
             DAGNode::UnaryNode(unary_node) => {
@@ -148,7 +151,8 @@ impl DAG {
                     node_id,
                     instructions,
                     register_allocator,
-                    unary_node
+                    unary_node,
+                    is_condition
                 )
             }
             DAGNode::GroupNode(group_node) => {
@@ -156,7 +160,8 @@ impl DAG {
                     node_id,
                     instructions,
                     register_allocator,
-                    group_node
+                    group_node,
+                    is_condition
                 )
             }
 
@@ -165,7 +170,8 @@ impl DAG {
                     node_id,
                     instructions,
                     register_allocator,
-                    assign_node
+                    assign_node,
+                    is_condition
                 )
             }
             DAGNode::DefineNode(define_node) => {
@@ -173,14 +179,15 @@ impl DAG {
                     node_id,
                     instructions,
                     register_allocator,
-                    define_node
+                    define_node,
+                    is_condition
                 )
             }
             DAGNode::ConstNode(const_node) => {
                 self.generate_const_instruction(register_allocator, const_node.get_value())
             }
             DAGNode::IdentNode(ident_node) => {
-                register_allocator.get_var_reg(ident_node.get_ssa_key())
+                register_allocator.get_var_reg(ident_node.get_ssa_key().get_ident())
             }
 
             DAGNode::FnCallNode(fn_call_node) => { todo!() }
@@ -188,9 +195,39 @@ impl DAG {
 
         dst_reg
     }
+
+    pub fn generate_instructions_as_condition(
+        &self,
+        instructions: &mut Vec<Instruction>,
+        register_allocator: &mut RegisterAllocator
+    ) {
+        let possibly_dead_reg = self.generate_instruction(
+            self.entry_node_id,
+            instructions,
+            register_allocator,
+            true
+        );
+
+        register_allocator.free_temp_reg(possibly_dead_reg);
+    }
+
+    pub fn generate_instructions(
+        &self,
+        instructions: &mut Vec<Instruction>,
+        register_allocator: &mut RegisterAllocator
+    ) {
+        let possibly_dead_reg = self.generate_instruction(
+            self.entry_node_id,
+            instructions,
+            register_allocator,
+            false
+        );
+
+        register_allocator.free_temp_reg(possibly_dead_reg);
+    }
 }
 
-impl GenerateBytecode for DAG {
+impl LoadConstants for DAG {
     fn load_constants(&self, vm_builder: &mut VMBuilder) {
         self.nodes.iter().for_each(|node| {
             if let DAGNode::ConstNode(const_node) = node {
@@ -201,23 +238,6 @@ impl GenerateBytecode for DAG {
                 }
             }
         })
-    }
-
-    fn generate_instructions(
-        &self,
-        register_allocator: &mut RegisterAllocator
-    ) -> Vec<Instruction> {
-        let mut instructions = vec![];
-
-        let possibly_dead_reg = self.generate_instruction(
-            self.entry_node_id,
-            &mut instructions,
-            register_allocator
-        );
-
-        register_allocator.free_temp_reg(possibly_dead_reg);
-
-        instructions
     }
 }
 

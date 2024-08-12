@@ -8,13 +8,13 @@ use crate::compiler::{
     traits::{ Dissasemble, LinearControlFlow, StmtTrait },
 };
 
-use super::{ FunctionArgument, GotoNodeIds, NodeIdsRange, BasicBlockStmt };
+use super::{ FunctionArgument, GotoNodeIds, BlockStmt };
 
 #[derive(Debug)]
 pub struct FunctionStmt<'ast> {
     name: Rc<str>,
     args: Vec<FunctionArgument>,
-    body: BasicBlockStmt<'ast>,
+    body: BlockStmt<'ast>,
     return_type: ValueType,
     metadata: TokenMetadata,
 }
@@ -23,7 +23,7 @@ impl<'ast> FunctionStmt<'ast> {
     pub fn new(
         name: Rc<str>,
         args: Vec<FunctionArgument>,
-        body: BasicBlockStmt<'ast>,
+        body: BlockStmt<'ast>,
         metadata: TokenMetadata
     ) -> Self {
         let return_type = body
@@ -54,7 +54,7 @@ impl<'ast> FunctionStmt<'ast> {
         &self.return_type
     }
 
-    pub fn get_body(&self) -> &BasicBlockStmt<'ast> {
+    pub fn get_body(&self) -> &BlockStmt<'ast> {
         &self.body
     }
 
@@ -80,20 +80,18 @@ impl<'ast> Dissasemble for FunctionStmt<'ast> {
             "".to_string()
         }).as_str();
 
+        string_builder += "{\n";
         string_builder += self.body.dissasemble().as_str();
+        string_builder += "}\n";
 
         string_builder
     }
 }
 
 impl<'ast> StmtTrait for FunctionStmt<'ast> {
-    type ReturnTypeCompileIntoICFG = NodeIdsRange;
-
-    fn compile_into_icfg(
-        &self,
-        icfg_builder: &mut ICFGBuilder,
-        goto_node_ids: &mut GotoNodeIds
-    ) -> Self::ReturnTypeCompileIntoICFG {
+    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder, goto_node_ids: &mut GotoNodeIds) {
+        let d = self;
+        // icfg_builder.push_fn_stmt(self);
         todo!()
     }
 

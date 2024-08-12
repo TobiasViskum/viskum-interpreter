@@ -1,12 +1,38 @@
-state<i8> count = state(0)
+mut d := 0
 
-reIncr:
+fn hello() {
+    mut i := 0
 
-count++
+    while i < 100 {
+        i = i + 1
+    }
+}
 
-if count < 10 { goto reIncr }
+loop {
+    d = d + 1
+    if d == 10 {
+        break
+    } else {
+        mut a := 0
 
-count = 0
+        while a <= 15 {
+            a = a + 1
+        }
+    }
+}
 
-stdout.println("Hello")
 
+/*
+mut d := 0
+a := 18
+if a == 18 {
+    d = 9
+} else {
+    d = 3
+}
+d = 0
+
+
+
+
+*/

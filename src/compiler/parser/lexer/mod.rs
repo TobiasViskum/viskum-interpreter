@@ -27,6 +27,8 @@ impl<'a> Lexer<'a> {
             self.scan_token();
         }
 
+        self.make_eof_token();
+
         self.tokens
     }
 
@@ -41,10 +43,7 @@ impl<'a> Lexer<'a> {
             None => {}
         }
 
-        if self.current == self.source.len() {
-            self.make_eof_token();
-            return;
-        } else if self.current > self.source.len() {
+        if self.current >= self.source.len() {
             return;
         }
 

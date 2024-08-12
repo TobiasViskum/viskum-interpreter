@@ -1,27 +1,35 @@
+use ahash::AHashMap;
+
 use crate::compiler::{
     ds::symbol_table::{ SSAKey, SymbolTableRef },
     error_handler::ErrorHandler,
-    ir::icfg::{ cfg::{ CFGNodeId, CFG }, dag::DAG, icfg_builder::ICFGBuilder, ICFG },
+    ir::icfg::{
+        cfg::{ CFGNode, CFGNodeId, CFGNodeType, CFGProcessNode, CFG },
+        dag::DAG,
+        icfg_builder::ICFGBuilder,
+        ICFG,
+    },
     print_todo,
     traits::{ Dissasemble, LinearControlFlow, StmtTrait },
 };
 
-use super::{ BlockStmt, GotoNodeIds, NodeIdsRange, Stmt, Stmts };
+use super::{ BasicBlockStmt, GotoNodeIds, Stmt, Stmts };
 
 #[derive(Debug)]
-pub struct BasicBlockStmt<'ast> {
+pub struct BlockStmt<'ast> {
     stmts: Stmts<'ast>,
     symbol_table_ref: SymbolTableRef,
-    // forwards_declarations: Stmts, // TypeDefStmt, FnStmt, (ClassStmt)
 }
 
-impl<'ast> BasicBlockStmt<'ast> {
-    pub fn new(symbol_table_ref: SymbolTableRef) -> Self {
-        Self {
-            stmts: Stmts::new(),
-            symbol_table_ref,
-            // symbol_table_ref,
-        }
+impl<'ast> BlockStmt<'ast> {
+    pub fn from_basic_block(basic_block: BasicBlockStmt<'ast>) -> Self {
+        todo!()
+        // let (stmts, symbol_table_ref) = basic_block.take();
+
+        // Self {
+        //     stmts,
+        //     symbol_table_ref,
+        // }
     }
 
     pub fn get_symbol_table_ref(&self) -> SymbolTableRef {
@@ -36,13 +44,9 @@ impl<'ast> BasicBlockStmt<'ast> {
     pub fn get_stmts(&self) -> &Stmts<'ast> {
         &self.stmts
     }
-
-    pub fn take(self) -> (Stmts<'ast>, SymbolTableRef) {
-        (self.stmts, self.symbol_table_ref)
-    }
 }
 
-impl<'ast> Dissasemble for BasicBlockStmt<'ast> {
+impl<'ast> Dissasemble for BlockStmt<'ast> {
     fn dissasemble(&self) -> String {
         let mut string_builder = String::from("{\n");
         string_builder += self.stmts.dissasemble().as_str();
@@ -51,23 +55,19 @@ impl<'ast> Dissasemble for BasicBlockStmt<'ast> {
     }
 }
 
-impl<'ast> StmtTrait for BasicBlockStmt<'ast> {
-    type ReturnTypeCompileIntoICFG = Option<NodeIdsRange>;
+impl<'ast> StmtTrait for BlockStmt<'ast> {
+    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder, goto_node_ids: &mut GotoNodeIds) {
+        self.stmts.compile_into_icfg(icfg_builder, goto_node_ids);
+        icfg_builder.push_linear_block_if_exists();
 
-    fn compile_into_icfg(
-        &self,
-        icfg_builder: &mut ICFGBuilder,
-        goto_node_ids: &mut GotoNodeIds
-    ) -> Self::ReturnTypeCompileIntoICFG {
-        self.stmts.compile_into_icfg(icfg_builder, goto_node_ids)
+        let latest_node_id = icfg_builder.get_current_cfg_node_id();
     }
 
     fn is_linear_control_flow(&self) -> bool {
         self.stmts.is_linear_control_flow()
     }
 
-    fn validate_stmt(&mut self, d: &mut SymbolTableRef, error_handler: &mut ErrorHandler) {
-        println!("2");
+    fn validate_stmt(&mut self, _: &mut SymbolTableRef, error_handler: &mut ErrorHandler) {
         self.stmts.validate_stmt(&mut self.get_symbol_table_ref(), error_handler);
     }
 
@@ -76,7 +76,7 @@ impl<'ast> StmtTrait for BasicBlockStmt<'ast> {
     }
 }
 
-impl<'ast> LinearControlFlow for BasicBlockStmt<'ast> {
+impl<'ast> LinearControlFlow for BlockStmt<'ast> {
     fn compile_into_dag(
         &self,
         dag: &mut DAG,

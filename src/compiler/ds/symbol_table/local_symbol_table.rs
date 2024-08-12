@@ -17,24 +17,27 @@ use super::{
 };
 
 #[derive(Debug)]
-pub struct ScopedSymbolTable<'com> {
+pub struct LocalSymbolTable {
     symbols: Symbols,
-    parent: Option<&'com Self>,
-    global_symbol_table: &'com mut GlobalSymbolTable,
+    parent: Option<*mut Self>,
+    global_symbol_table: *mut GlobalSymbolTable,
     fn_return_type: Option<ValueType>,
+    // is_in_loop: bool,
 }
 
-impl<'com> ScopedSymbolTable<'com> {
+impl LocalSymbolTable {
     pub fn new(
-        parent: Option<&'com Self>,
-        global_symbol_table: &'com mut GlobalSymbolTable,
+        parent: Option<*mut Self>,
+        global_symbol_table: *mut GlobalSymbolTable,
         fn_return_type: Option<ValueType>
+        // is_in_loop: bool
     ) -> Self {
         Self {
             symbols: Symbols::new(),
             parent,
             global_symbol_table,
             fn_return_type,
+            // is_in_loop,
         }
     }
 
@@ -68,7 +71,7 @@ impl<'com> ScopedSymbolTable<'com> {
     }
 
     pub fn get_new_ident_subscript(&mut self, ident: &Rc<str>) -> usize {
-        self.global_symbol_table.get_new_ident_subscript(ident)
+        unsafe { (*self.global_symbol_table).get_new_ident_subscript(ident) }
     }
 
     pub fn declare_fn(&mut self, fn_stmt: &FunctionStmt) -> Result<(), CompileError> {
@@ -101,7 +104,7 @@ impl<'com> ScopedSymbolTable<'com> {
 
         let symbol_var = self
             .lookup_as_var(&ident_expr_lexeme)
-            .or_else(|msg|
+            .or_else(|msg| {
                 Err(
                     CompileError::new(
                         ReportedError::new(
@@ -110,7 +113,7 @@ impl<'com> ScopedSymbolTable<'com> {
                         )
                     )
                 )
-            )?;
+            })?;
 
         match symbol_var.get_is_mutable() {
             true => {
@@ -144,7 +147,7 @@ impl<'com> ScopedSymbolTable<'com> {
                     )
                 }
             }
-            false => {
+            false =>
                 Err(
                     CompileError::new_multiple(
                         vec![
@@ -166,14 +169,12 @@ impl<'com> ScopedSymbolTable<'com> {
                             )
                         ]
                     )
-                )
-            }
+                ),
         }
     }
 
     #[must_use]
     pub fn declare_var(&mut self, var_def_stmt: &mut VarDefStmt) -> Result<SSAKey, CompileError> {
-        println!("Declaring var");
         let mut symbol_table_ref = SymbolTableRef::new(self as *mut LocalSymbolTable);
 
         let value_type = var_def_stmt.get_resolved_value_type(&symbol_table_ref)?;
@@ -184,13 +185,7 @@ impl<'com> ScopedSymbolTable<'com> {
             var_def_stmt.get_metadata()
         );
 
-        println!("Almost declared var");
-
-        println!("Deref: {:?}", symbol_table_ref.get_mut());
-
         let ssa_key = symbol_table_ref.get_mut().insert(var_def_stmt.get_name(), symbol);
-
-        println!("Declared var");
 
         Ok(ssa_key)
     }
@@ -199,15 +194,11 @@ impl<'com> ScopedSymbolTable<'com> {
 impl SymbolTableAlloc for LocalSymbolTable {
     fn alloc_symbol_table(&mut self, return_type: Option<ValueType>) -> SymbolTableRef {
         unsafe {
-            println!("Before alloc");
             let self_ptr = self as *mut LocalSymbolTable;
-            println!("Deref: {:?}", *self_ptr);
-            println!("After alloc");
             let allocated_table = (*self.global_symbol_table).alloc_empty(
                 Some(self_ptr),
                 return_type
             );
-            println!("Deref_table: {:?}", *allocated_table);
             // Here I've created the SymbolTableRef
             SymbolTableRef::new(allocated_table)
         }

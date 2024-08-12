@@ -13,6 +13,7 @@ use std::rc::Rc;
 
 use lexer::Lexer;
 use parse_rule::ParseRule;
+use parser_macros::current;
 use token::Token;
 
 use crate::macros::create_tokens_and_parse_rules;
@@ -23,7 +24,7 @@ use super::{
         value::{ ops::{ BinaryOp, ComparisonOp, UnaryOp }, Value },
     },
     error_handler::ErrorHandler,
-    ir::ast::{ stmt::BasicBlockStmt, Ast, AstArena },
+    ir::ast::{ stmt::BlockStmt, Ast, AstArena },
     traits::SymbolTableAlloc,
 };
 
@@ -86,7 +87,7 @@ pub struct Parser<'a> {
     error_handler: &'a mut ErrorHandler,
     current: usize,
     tokens: Vec<Token>,
-    parse_rules: &'static [ParseRule; 40],
+    parse_rules: &'static [ParseRule; 41],
 }
 
 impl<'a> Parser<'a> {
@@ -110,9 +111,10 @@ impl<'a> Parser<'a> {
     ) -> Ast<'b> {
         let symbol_table_ref = global_symbol_table.alloc_symbol_table(None);
 
-        let mut main_scope = BasicBlockStmt::new(symbol_table_ref);
+        let mut main_scope = BlockStmt::new(symbol_table_ref, true);
 
         while !self.is_at_end() {
+            // println!("I run, {} {:?}", self.is_at_end(), current!(self, ttype));
             match self.statement((ast_arena, symbol_table_ref)) {
                 Ok(stmt) => main_scope.push_stmt(stmt),
                 Err(err) => {
@@ -185,6 +187,7 @@ create_tokens_and_parse_rules!(
     [TokenBreak]                = { None,           None,           PrecNone        },
     [TokenContinue]             = { None,           None,           PrecNone        },
     [TokenLoop]                 = { None,           None,           PrecNone        },
+    [TokenWhile]                = { None,           None,           PrecNone        },
 
     [TokenError]                = { None,           None,           PrecNone        },
     [TokenEOF]                  = { None,           None,           PrecNone        },

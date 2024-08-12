@@ -12,7 +12,7 @@ use super::{
         vm_builder::VMBuilder,
     },
     error_handler::{ CompileError, ErrorHandler, SrcCharsRange },
-    ir::{ ast::stmt::{ GotoNodeIds, NodeIdsRange }, icfg::{ dag::DAG, icfg_builder::ICFGBuilder } },
+    ir::{ ast::stmt::{ GotoNodeIds }, icfg::{ dag::DAG, icfg_builder::ICFGBuilder } },
 };
 
 pub trait Dissasemble {
@@ -62,13 +62,7 @@ pub trait LinearControlFlow {
 }
 
 pub trait StmtTrait {
-    type ReturnTypeCompileIntoICFG;
-
-    fn compile_into_icfg(
-        &self,
-        icfg_builder: &mut ICFGBuilder,
-        goto_node_ids: &mut GotoNodeIds
-    ) -> Self::ReturnTypeCompileIntoICFG;
+    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder, goto_node_ids: &mut GotoNodeIds);
 
     fn validate_stmt(
         &mut self,
@@ -81,16 +75,19 @@ pub trait StmtTrait {
     fn as_linear_control_flow(&self) -> Option<&dyn LinearControlFlow>;
 }
 
-pub trait GenerateBytecode {
+pub trait LoadConstants {
     fn load_constants(&self, vm_builder: &mut VMBuilder);
-
-    fn generate_instructions(&self, vm_builder: &mut RegisterAllocator) -> Vec<Instruction>;
 }
 
-pub trait DAGNodeTrait {
+pub trait ParseConnectedNodes {
     type ConnectedNodes;
 
     fn parse_connected_nodes(&self, connected_nodes: Vec<usize>) -> Self::ConnectedNodes;
+}
 
+pub trait DAGNodeTrait: ParseConnectedNodes {
     fn expected_connected_nodes(&self) -> usize;
+}
+pub trait CFGNodeTrait: ParseConnectedNodes {
+    fn generate_instructions(&self, register_allocator: &mut RegisterAllocator) -> Vec<Instruction>;
 }
