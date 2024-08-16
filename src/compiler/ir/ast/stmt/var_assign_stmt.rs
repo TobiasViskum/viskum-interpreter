@@ -5,7 +5,7 @@ use crate::compiler::{
     error_handler::ErrorHandler,
     ir::{
         ast::expr::{ Expr, IdentifierExpr },
-        icfg::{ dag::{ DAGAssignNode, DAGNode, DAG }, icfg_builder::ICFGBuilder },
+        icfg::{ dag::{ DAGAssignNode, DAGNode, DAG }, icfg_builder::{ CFGBuilder }, ICFG },
     },
     traits::{ Dissasemble, ExprTrait },
 };
@@ -54,7 +54,12 @@ impl<'ast> Dissasemble for VarAssignStmt<'ast> {
 }
 
 impl<'ast> StmtTrait for VarAssignStmt<'ast> {
-    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder, goto_node_ids: &mut GotoNodeIds) {
+    fn compile_into_icfg(
+        &self,
+        icfg: &mut ICFG,
+        cfg_builder: &mut CFGBuilder,
+        goto_node_ids: &mut GotoNodeIds
+    ) {
         todo!()
     }
 

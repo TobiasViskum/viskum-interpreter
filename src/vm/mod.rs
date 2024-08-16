@@ -4,26 +4,26 @@ use ahash::{ AHashMap, AHashSet };
 use instructions::{ Instruction, Reg };
 use optimized_instructions::OptimizedInstruction;
 
-use crate::U16_MAX;
+use crate::{ U16_MAX, U8_MAX };
 
 pub mod instructions;
 pub mod optimized_instructions;
 
 pub struct VM {
-    registers: [i64; U16_MAX],
+    registers: [i64; U8_MAX],
     register_offset: usize,
-    stack_frames: [StackFrame; U16_MAX],
+    stack_frames: [StackFrame; U8_MAX],
     stack_frame_idx: usize,
     heap: Heap,
 }
 
 impl VM {
-    pub fn new(registers: [i64; U16_MAX]) -> Self {
+    pub fn new(registers: [i64; U8_MAX]) -> Self {
         Self {
             registers,
             register_offset: 0,
             heap: Heap::new(),
-            stack_frames: [StackFrame::empty(); U16_MAX],
+            stack_frames: [StackFrame::empty(); U8_MAX],
             stack_frame_idx: 0,
         }
     }

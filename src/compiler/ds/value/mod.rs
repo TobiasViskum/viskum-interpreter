@@ -2,6 +2,7 @@ pub(in crate::compiler) mod ops;
 
 use std::rc::Rc;
 
+use llvm_builder::{ LLVMType, Operand, RawOperand, Type, TypeI32 };
 use ops::{ BinaryOp, ComparisonOp, UnaryOp };
 
 use crate::{
@@ -44,9 +45,9 @@ pub enum ValueType {
     Bool,
     Void,
     String,
-    Deref(Box<Self>),
-    Ref(Box<Self>),
-    MutableRef(Box<Self>),
+    // Deref(Box<Self>),
+    // Ref(Box<Self>),
+    // MutableRef(Box<Self>),
 }
 
 impl Dissasemble for ValueType {
@@ -56,9 +57,9 @@ impl Dissasemble for ValueType {
             Self::Bool => "bool".to_string(),
             Self::Void => "()".to_string(),
             Self::String => "string".to_string(),
-            Self::Deref(boxed) => format!("*{}", boxed.dissasemble()),
-            Self::Ref(boxed) => format!("&{}", boxed.dissasemble()),
-            Self::MutableRef(boxed) => format!("&mut {}", boxed.dissasemble()),
+            // Self::Deref(boxed) => format!("*{}", boxed.dissasemble()),
+            // Self::Ref(boxed) => format!("&{}", boxed.dissasemble()),
+            // Self::MutableRef(boxed) => format!("&mut {}", boxed.dissasemble()),
         }
     }
 }
@@ -82,31 +83,31 @@ impl ValueType {
         match op {
             UnaryOp::Neg => self.try_neg(),
             UnaryOp::Not => self.try_not(),
-            UnaryOp::Ref => Ok(Self::Ref(Box::new(self.clone()))),
-            UnaryOp::Deref => Ok(Self::Deref(Box::new(self.clone()))),
-            UnaryOp::MutRef => Ok(Self::MutableRef(Box::new(self.clone()))),
+            // UnaryOp::Ref => Ok(Self::Ref(Box::new(self.clone()))),
+            // UnaryOp::Deref => Ok(Self::Deref(Box::new(self.clone()))),
+            // UnaryOp::MutRef => Ok(Self::MutableRef(Box::new(self.clone()))),
         }
     }
 
-    pub fn get_minified(value_type: &Self) -> Self {
-        let mut minified_type = value_type.clone();
-        match minified_type {
-            ValueType::Deref(inner) => {
-                match *inner {
-                    ValueType::Ref(contained) => {
-                        minified_type = Self::get_minified(&contained);
-                        minified_type
-                    }
-                    ValueType::Deref(_) => {
-                        minified_type = Self::get_minified(&inner);
-                        minified_type
-                    }
-                    t => t,
-                }
-            }
-            _ => minified_type,
-        }
-    }
+    // pub fn get_minified(value_type: &Self) -> Self {
+    //     let mut minified_type = value_type.clone();
+    //     match minified_type {
+    //         ValueType::Deref(inner) => {
+    //             match *inner {
+    //                 ValueType::Ref(contained) => {
+    //                     minified_type = Self::get_minified(&contained);
+    //                     minified_type
+    //                 }
+    //                 ValueType::Deref(_) => {
+    //                     minified_type = Self::get_minified(&inner);
+    //                     minified_type
+    //                 }
+    //                 t => t,
+    //             }
+    //         }
+    //         _ => minified_type,
+    //     }
+    // }
 
     pub fn try_binary(&self, other: &ValueType, binary_op: BinaryOp) -> Result<Self, String> {
         match binary_op {
@@ -220,10 +221,10 @@ pub enum Value {
     Int(i64),
     Bool(bool),
     String(Rc<str>),
-    Ref(Box<Self>),
-    MutableRef(Box<Self>),
-    Deref(Box<Self>),
-    Mutable(Box<Self>),
+    // Ref(Box<Self>),
+    // MutableRef(Box<Self>),
+    // Deref(Box<Self>),
+    // Mutable(Box<Self>),
     Void,
 }
 
@@ -234,10 +235,10 @@ impl Dissasemble for Value {
             Self::Bool(bool) => bool.to_string(),
             Self::String(str) => str.to_string(),
             Self::Void => "()".to_string(),
-            Self::Deref(contained) => format!("*{}", contained.dissasemble()),
-            Self::Ref(contained) => format!("&{}", contained.dissasemble()),
-            Self::MutableRef(contained) => format!("&mut {}", contained.dissasemble()),
-            Self::Mutable(contained) => format!("mut {}", contained.dissasemble()),
+            // Self::Deref(contained) => format!("*{}", contained.dissasemble()),
+            // Self::Ref(contained) => format!("&{}", contained.dissasemble()),
+            // Self::MutableRef(contained) => format!("&mut {}", contained.dissasemble()),
+            // Self::Mutable(contained) => format!("mut {}", contained.dissasemble()),
         }
     }
 }
@@ -249,6 +250,13 @@ impl Default for Value {
 }
 
 impl Value {
+    pub fn get_llvm_operand(&self) -> Operand {
+        match self {
+            Self::Int(int) => { Operand::Raw(RawOperand::TypeI32(TypeI32::new(*int as i32))) }
+            _ => { unimplemented!() }
+        }
+    }
+
     pub fn get_as_simple_const(&self) -> Option<SimpleConst> {
         match self {
             Self::Int(int) => Some(SimpleConst::Int(*int)),
@@ -273,10 +281,10 @@ impl Value {
             Value::Bool(_) => ValueType::Bool,
             Value::String(_) => ValueType::String,
             Value::Void => ValueType::Void,
-            Value::Ref(boxed) => { ValueType::Ref(Box::new(boxed.to_value_type())) }
-            Value::MutableRef(boxed) => { ValueType::Ref(Box::new(boxed.to_value_type())) }
-            Value::Deref(boxed) => { ValueType::Ref(Box::new(boxed.to_value_type())) }
-            Value::Mutable(boxed) => { ValueType::Ref(Box::new(boxed.to_value_type())) }
+            // Value::Ref(boxed) => { ValueType::Ref(Box::new(boxed.to_value_type())) }
+            // Value::MutableRef(boxed) => { ValueType::Ref(Box::new(boxed.to_value_type())) }
+            // Value::Deref(boxed) => { ValueType::Ref(Box::new(boxed.to_value_type())) }
+            // Value::Mutable(boxed) => { ValueType::Ref(Box::new(boxed.to_value_type())) }
         }
     }
 

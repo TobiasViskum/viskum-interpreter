@@ -2,8 +2,8 @@ use crate::compiler::{
     ds::symbol_table::SymbolTableRef,
     error_handler::ErrorHandler,
     ir::icfg::{
-        cfg::{ CFGDecisionNode, CFGGotoNode, CFGNode, CFGNodeId, CFGNodeType, CFG },
-        icfg_builder::ICFGBuilder,
+        cfg::{ CFGDecisionNode, CFGGotoNode, CFGLabelNode, CFGNode, CFGNodeId, CFGNodeType, CFG },
+        icfg_builder::CFGBuilder,
         ICFG,
     },
     traits::{ Dissasemble, LinearControlFlow, StmtTrait },
@@ -44,46 +44,63 @@ impl<'ast> Dissasemble for LoopStmt<'ast> {
 }
 
 impl<'ast> StmtTrait for LoopStmt<'ast> {
-    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder, goto_node_ids: &mut GotoNodeIds) {
+    fn compile_into_icfg(
+        &self,
+        icfg: &mut ICFG,
+        cfg_builder: &mut CFGBuilder,
+        goto_node_ids: &mut GotoNodeIds
+    ) {
         let condition = self.condition.as_ref().map(|expr| expr.compile_to_dag());
 
+        let label_node_id_before_loop = cfg_builder.push_cfg_node(
+            CFGNode::new(CFGNodeType::LabelNode(CFGLabelNode))
+        );
+        cfg_builder.push_cfg_edge(label_node_id_before_loop, cfg_builder.get_next_cfg_node_id());
+
         let decision_node_id = if let Some(condition) = condition {
-            let decision_node_id = icfg_builder.push_cfg_node(
+            let decision_node_id = cfg_builder.push_cfg_node(
                 CFGNode::new(CFGNodeType::DecisionNode(CFGDecisionNode::new(condition)))
             );
-            icfg_builder.push_cfg_edge(decision_node_id, icfg_builder.get_next_cfg_node_id());
+
+            cfg_builder.push_cfg_edge(decision_node_id, cfg_builder.get_next_cfg_node_id());
             Some(decision_node_id)
         } else {
             None
         };
 
         let first_loop_node_id = if decision_node_id.is_some() {
-            icfg_builder.get_current_cfg_node_id()
+            cfg_builder.get_current_cfg_node_id() - 1
         } else {
-            icfg_builder.get_next_cfg_node_id()
+            cfg_builder.get_next_cfg_node_id()
         };
 
         let break_node_ids_in_prev_block = goto_node_ids.take_break_node_ids();
         let continue_node_ids_in_prev_block = goto_node_ids.take_continue_node_ids();
 
-        self.body.compile_into_icfg(icfg_builder, goto_node_ids);
-        icfg_builder.push_linear_block_if_exists();
+        let label_node_id_true_block = cfg_builder.push_cfg_node(
+            CFGNode::new(CFGNodeType::LabelNode(CFGLabelNode))
+        );
+        cfg_builder.push_cfg_edge(label_node_id_true_block, cfg_builder.get_next_cfg_node_id());
+        self.body.compile_into_icfg(icfg, cfg_builder, goto_node_ids);
+        cfg_builder.push_linear_block_if_exists();
 
-        icfg_builder.push_cfg_node(CFGNode::new(CFGNodeType::GotoNode(CFGGotoNode)));
-        let goto_node_id = icfg_builder.get_current_cfg_node_id();
-        icfg_builder.push_cfg_edge(goto_node_id, first_loop_node_id);
+        cfg_builder.push_cfg_node(CFGNode::new(CFGNodeType::GotoNode(CFGGotoNode)));
+        let goto_node_id = cfg_builder.get_current_cfg_node_id();
+        cfg_builder.push_cfg_edge(goto_node_id, first_loop_node_id);
+        let label_node_id_after_loop = cfg_builder.push_cfg_node(
+            CFGNode::new(CFGNodeType::LabelNode(CFGLabelNode))
+        );
+        cfg_builder.push_cfg_edge(label_node_id_after_loop, cfg_builder.get_next_cfg_node_id());
 
-        let after_loop_node_id = icfg_builder.get_next_cfg_node_id();
-
-        if let Some(decisicion_node_id) = decision_node_id {
-            icfg_builder.push_cfg_edge(decisicion_node_id, after_loop_node_id);
+        if let Some(decision_node_id) = decision_node_id {
+            cfg_builder.push_cfg_edge(decision_node_id, label_node_id_after_loop);
         }
 
         for break_node_id in goto_node_ids.take_break_node_ids().iter() {
-            icfg_builder.push_cfg_edge(*break_node_id, after_loop_node_id);
+            cfg_builder.push_cfg_edge(*break_node_id, label_node_id_after_loop);
         }
         for continue_node_id in goto_node_ids.take_continue_node_ids().iter() {
-            icfg_builder.push_cfg_edge(*continue_node_id, first_loop_node_id);
+            cfg_builder.push_cfg_edge(*continue_node_id, first_loop_node_id);
         }
 
         goto_node_ids.replace_break_node_ids(break_node_ids_in_prev_block);

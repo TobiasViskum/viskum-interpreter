@@ -8,14 +8,14 @@ use crate::compiler::{
     ir::icfg::{
         cfg::{ CFGNode, CFGNodeId, CFGNodeType, CFGProcessNode, CFG },
         dag::DAG,
-        icfg_builder::ICFGBuilder,
+        icfg_builder::{ CFGBuilder },
         ICFG,
     },
     print_todo,
     traits::{ Dissasemble, LinearControlFlow, StmtTrait },
 };
 
-use super::{ DropStmt, GotoNodeIds, Stmt, Stmts };
+use super::{ GotoNodeIds, Stmt, Stmts };
 
 pub enum ScopeEnv {
     BasicBlock,
@@ -107,17 +107,22 @@ impl<'ast> Dissasemble for BlockStmt<'ast> {
 }
 
 impl<'ast> StmtTrait for BlockStmt<'ast> {
-    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder, goto_node_ids: &mut GotoNodeIds) {
+    fn compile_into_icfg(
+        &self,
+        icfg: &mut ICFG,
+        cfg_builder: &mut CFGBuilder,
+        goto_node_ids: &mut GotoNodeIds
+    ) {
         self.stmts.iter().for_each(|stmt| {
             if let Some(linear_stmt) = stmt.as_linear_control_flow() {
-                icfg_builder.build_into_linear_basic_block(linear_stmt)
+                cfg_builder.build_into_linear_basic_block(linear_stmt)
             } else {
-                icfg_builder.push_linear_block_if_exists();
-                stmt.compile_into_icfg(icfg_builder, goto_node_ids)
+                cfg_builder.push_linear_block_if_exists();
+                stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids)
             }
         });
         if self.is_basic_block {
-            icfg_builder.push_linear_block_if_exists()
+            cfg_builder.push_linear_block_if_exists()
         }
     }
 

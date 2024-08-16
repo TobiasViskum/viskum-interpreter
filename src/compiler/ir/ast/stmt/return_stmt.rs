@@ -3,7 +3,7 @@ use crate::compiler::{
     error_handler::{ CompileError, ErrorHandler, ReportedError },
     ir::icfg::{
         cfg::{ CFGNode, CFGNodeId, CFGNodeType, CFGReturnNode, CFG },
-        icfg_builder::ICFGBuilder,
+        icfg_builder::{ CFGBuilder },
         ICFG,
     },
     parser::token::TokenMetadata,
@@ -34,8 +34,13 @@ impl<'ast> Dissasemble for ReturnStmt<'ast> {
 }
 
 impl<'ast> StmtTrait for ReturnStmt<'ast> {
-    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder, goto_node_ids: &mut GotoNodeIds) {
-        let return_node_id = icfg_builder.push_cfg_node(
+    fn compile_into_icfg(
+        &self,
+        icfg: &mut ICFG,
+        cfg_builder: &mut CFGBuilder,
+        goto_node_ids: &mut GotoNodeIds
+    ) {
+        let return_node_id = cfg_builder.push_cfg_node(
             CFGNode::new(CFGNodeType::ReturnNode(CFGReturnNode))
         );
         goto_node_ids.push_return_node_id(return_node_id);

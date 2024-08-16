@@ -18,6 +18,7 @@ use crate::{
         optimized_instructions::{ optimize_instructions, OptimizedInstruction },
     },
     U16_MAX,
+    U8_MAX,
 };
 
 pub fn print_todo(str: &str) {
@@ -38,7 +39,7 @@ impl Compiler {
 
     pub fn compile_entry(
         &mut self
-    ) -> ([i64; U16_MAX], Vec<OptimizedInstruction>, Vec<Instruction>) {
+    ) -> ([i64; U8_MAX], Vec<OptimizedInstruction>, Vec<Instruction>) {
         let file_content = self.get_entry_file_content();
         let src_chars = file_content.chars().collect::<Vec<_>>();
         let mut error_handler = ErrorHandler::new(file_content);
@@ -46,6 +47,10 @@ impl Compiler {
         let icfg = self.make_icfg(&src_chars, &mut error_handler);
 
         icfg.print();
+
+        // let llvm_builder = icfg.build_llvm();
+        // println!("{}", llvm_builder.build());
+        // llvm_builder.output();
 
         let mut vm_builder = VMBuilder::new();
         icfg.load_constants(&mut vm_builder);
@@ -74,13 +79,9 @@ impl Compiler {
     pub fn make_icfg(&mut self, src_chars: &Vec<char>, error_handler: &mut ErrorHandler) -> ICFG {
         let mut parser = Parser::new(&src_chars, error_handler);
         let arena = AstArena::new();
-        println!("1");
         let mut ast = parser.parse_ast(&mut self.symbol_table, &arena);
 
-        println!("2");
         ast.type_check_and_constant_fold(error_handler);
-
-        println!("3");
 
         ast.print();
 

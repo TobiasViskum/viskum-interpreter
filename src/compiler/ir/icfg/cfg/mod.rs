@@ -4,10 +4,15 @@ mod cfg_edge;
 use ahash::AHashMap;
 pub use cfg_node::*;
 pub use cfg_edge::*;
+use llvm_builder::{ Function, LLVMBuilder, Module, Type, TypeI32 };
 
 use crate::{
     compiler::{
-        ds::{ register_allocator::{ self, RegisterAllocator }, vm_builder::VMBuilder },
+        ds::{
+            register_allocator::{ self, RegisterAllocator },
+            value::ValueType,
+            vm_builder::VMBuilder,
+        },
         traits::{ CFGNodeTrait, Dissasemble, LoadConstants, ParseConnectedNodes },
     },
     vm::instructions::Instruction,
@@ -19,13 +24,17 @@ pub type CFGNodeId = usize;
 pub struct CFG {
     nodes: Vec<CFGNode>,
     edges: Vec<CFGEdge>,
+    fn_name: String,
+    ret_type: ValueType,
 }
 
 impl CFG {
-    pub fn new() -> Self {
+    pub fn new(fn_name: String, ret_type: ValueType) -> Self {
         Self {
             nodes: Vec::new(),
             edges: Vec::new(),
+            fn_name,
+            ret_type,
         }
     }
 
@@ -78,6 +87,7 @@ impl CFG {
                 CFGNodeType::ProcessNode(_) => format!("ProcessNode({})", connected_nodes_str),
                 CFGNodeType::ReturnNode(_) => format!("ReturnNode({})", connected_nodes_str),
                 CFGNodeType::TerminateNode(_) => format!("TerminateNode({})", connected_nodes_str),
+                CFGNodeType::LabelNode(_) => format!("LabelNode({})", connected_nodes_str),
             };
             println!("{}: {}", i, node_str);
         }
@@ -101,6 +111,27 @@ impl LoadConstants for CFG {
 }
 
 impl CFG {
+    pub fn get_fn_info(&self) -> (&String, ValueType) {
+        (&self.fn_name, self.ret_type.clone())
+    }
+
+    pub fn build_llvm(&self, llvm_builder: &mut LLVMBuilder, func: &mut Function) {
+        for cfg_node_type in self.nodes.iter().map(|node| node.get_node_type()) {
+            match cfg_node_type {
+                CFGNodeType::ProcessNode(process_node) => {
+                    process_node.build_llvm(func, llvm_builder);
+                }
+                CFGNodeType::DecisionNode(decision_node) => {
+                    decision_node.build_llvm(func, llvm_builder);
+                }
+                CFGNodeType::TerminateNode(_) => {}
+                _ => {
+                    panic!("CFGNode not supported");
+                }
+            }
+        }
+    }
+
     pub fn generate_instructions(
         &self,
         register_allocator: &mut RegisterAllocator
@@ -108,6 +139,9 @@ impl CFG {
         let mut instructions = vec![];
         for cfg_node_type in self.nodes.iter().map(|node| node.get_node_type()) {
             let node_instructions = match cfg_node_type {
+                CFGNodeType::LabelNode(label_node) => {
+                    label_node.generate_instructions(register_allocator)
+                }
                 CFGNodeType::ProcessNode(process_node) => {
                     process_node.generate_instructions(register_allocator)
                 }
@@ -180,112 +214,6 @@ impl CFG {
 
         instructions
     }
-
-    // fn generate_instruction(
-    //     &self,
-    //     instructions: &mut Vec<Instruction>,
-    //     register_allocator: &mut RegisterAllocator,
-    //     cfg_node_id_to_instr_id: &mut AHashMap<usize, usize>,
-    //     node_id: usize
-    // ) {
-    //     let node = &self.nodes[node_id];
-
-    //     // if node.get_node_state() == CFGNodeState::Dead {
-    //     //     return;
-    //     // }
-
-    //     // if let Some(goto_instr_ids) = cfg_node_id_to_goto_instr_id.get(&node_id) {
-    //     //     let instr_len = instructions.len();
-
-    //     //     for goto_instr_id in goto_instr_ids.iter() {
-    //     //         if let Instruction::Goto { jmp_pos } = &mut instructions[*goto_instr_id] {
-    //     //             *jmp_pos = instr_len;
-    //     //         }
-    //     //     }
-
-    //     //     cfg_node_id_to_goto_instr_id.remove(&node_id);
-    //     // }
-
-    //     println!("Node id: {}", node_id);
-    //     cfg_node_id_to_instr_id.insert(node_id, instructions.len());
-
-    //     let connected_nodes = self.get_connected_nodes(node_id);
-
-    //     match node.get_node_type() {
-    //         CFGNodeType::ProcessNode(process_node) => {
-    //             process_node.generate_instructions(register_allocator);
-
-    //             process_node.get_dag().generate_instructions(instructions, register_allocator);
-    //             let connected_node_id = process_node.parse_connected_nodes(connected_nodes);
-
-    //             self.generate_instruction(
-    //                 instructions,
-    //                 register_allocator,
-    //                 cfg_node_id_to_instr_id,
-    //                 connected_node_id
-    //             )
-    //         }
-    //         CFGNodeType::GotoNode(_) => {
-    //             instructions.push(Instruction::Goto { jmp_pos: 0 });
-    //         }
-    //         CFGNodeType::TerminateNode(terminate_node) => {
-    //             if terminate_node.is_start() {
-    //                 let connected_node_id = terminate_node.parse_connected_nodes(connected_nodes);
-    //                 self.generate_instruction(
-    //                     instructions,
-    //                     register_allocator,
-    //                     cfg_node_id_to_instr_id,
-    //                     connected_node_id
-    //                 )
-    //             }
-    //         }
-    //         CFGNodeType::DecisionNode(decision_node) => {
-    //             let (true_node_id, false_node_id) = {
-    //                 decision_node.parse_connected_nodes(connected_nodes)
-    //             };
-
-    //             let has_condition = decision_node.get_condition().is_some();
-
-    //             dag.generate_instructions_as_condition(instructions, register_allocator);
-
-    //             let jmp_cmp_instr_id = instructions.len() - 1;
-
-    //             let true_instr_id = instructions.len();
-
-    //             self.generate_instruction(
-    //                 instructions,
-    //                 register_allocator,
-    //                 cfg_node_id_to_instr_id,
-    //                 true_node_id
-    //             );
-
-    //             let false_instr_id = instructions.len();
-
-    //             self.generate_instruction(
-    //                 instructions,
-    //                 register_allocator,
-    //                 cfg_node_id_to_instr_id,
-    //                 false_node_id
-    //             );
-
-    //             if has_condition {
-    //                 match &mut instructions[jmp_cmp_instr_id] {
-    //                     | Instruction::JmpCmpEqInt { true_jmp_pos, false_jmp_pos, .. }
-    //                     | Instruction::JmpCmpNeInt { true_jmp_pos, false_jmp_pos, .. }
-    //                     | Instruction::JmpCmpGeInt { true_jmp_pos, false_jmp_pos, .. }
-    //                     | Instruction::JmpCmpGtInt { true_jmp_pos, false_jmp_pos, .. }
-    //                     | Instruction::JmpCmpLeInt { true_jmp_pos, false_jmp_pos, .. }
-    //                     | Instruction::JmpCmpLtInt { true_jmp_pos, false_jmp_pos, .. } => {
-    //                         *true_jmp_pos = true_instr_id;
-    //                         *false_jmp_pos = false_instr_id;
-    //                     }
-    //                     instr => panic!("Expected JmpCmp instruction. Found {:?}", instr),
-    //                 }
-    //             }
-    //         }
-    //         _ => {}
-    //     }
-    // }
 }
 
 impl Dissasemble for CFG {

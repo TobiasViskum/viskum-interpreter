@@ -1,16 +1,12 @@
 use std::fmt::Debug;
 
 use expr::Expr;
-use stmt::{BlockStmt, GotoNodeIds, IfStmt, Stmt};
+use stmt::{ BlockStmt, GotoNodeIds, IfStmt, Stmt };
 use typed_arena::Arena;
 
-use crate::compiler::{
-    error_handler::ErrorHandler,
-    ir::icfg::icfg_builder::ICFGBuilder,
-    traits::{Dissasemble, StmtTrait},
-};
+use crate::compiler::{ error_handler::ErrorHandler, traits::{ Dissasemble, StmtTrait } };
 
-use super::icfg::{cfg::CFG, ICFG};
+use super::icfg::{ cfg::CFG, icfg_builder::CFGBuilder, ICFG };
 
 pub mod expr;
 pub mod stmt;
@@ -50,10 +46,11 @@ impl<'ast> AstArena<'ast> {
         let allocated_if_stmt = self.arena.alloc(AstArenaItem::Stmt(Stmt::IfStmt(if_stmt)));
 
         match allocated_if_stmt {
-            AstArenaItem::Stmt(stmt) => match stmt {
-                Stmt::IfStmt(if_stmt) => if_stmt,
-                _ => panic!("Expected if_stmt in alloc_if_stmt"),
-            },
+            AstArenaItem::Stmt(stmt) =>
+                match stmt {
+                    Stmt::IfStmt(if_stmt) => if_stmt,
+                    _ => panic!("Expected if_stmt in alloc_if_stmt"),
+                }
             _ => panic!("Expected stmt in alloc_if_stmt"),
         }
     }
@@ -70,17 +67,22 @@ impl<'ast> Ast<'ast> {
     }
 
     pub fn construct_icfg(self) -> ICFG {
-        let mut icfg_builder = ICFGBuilder::new();
+        let mut cfg_builder = CFGBuilder::new();
         let mut goto_node_ids = GotoNodeIds::new();
-        self.main_scope
-            .compile_into_icfg(&mut icfg_builder, &mut goto_node_ids);
 
-        icfg_builder.take_icfg()
+        let mut icfg = ICFG::new();
+        self.main_scope.compile_into_icfg(&mut icfg, &mut cfg_builder, &mut goto_node_ids);
+
+        let cfg = cfg_builder.end_entry_cfg();
+        let entry_cfg_id = icfg.push_cfg(cfg);
+
+        icfg.set_entry_cfg(entry_cfg_id);
+
+        icfg
     }
 
     pub fn type_check_and_constant_fold(&mut self, error_handler: &mut ErrorHandler) {
-        self.main_scope
-            .validate_stmt(&mut self.main_scope.get_symbol_table_ref(), error_handler);
+        self.main_scope.validate_stmt(&mut self.main_scope.get_symbol_table_ref(), error_handler);
     }
 
     pub fn print(&self) {

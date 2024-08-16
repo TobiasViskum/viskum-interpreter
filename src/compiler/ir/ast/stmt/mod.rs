@@ -1,7 +1,7 @@
 mod block_stmt;
 mod break_stmt;
 mod continue_stmt;
-mod drop_stmt;
+// mod drop_stmt;
 mod expr_stmt;
 mod fn_stmt;
 mod if_stmt;
@@ -22,7 +22,7 @@ pub use var_assign_stmt::VarAssignStmt;
 pub use var_def_stmt::VarDefStmt;
 // pub use block_stmt::BlockStmt;
 pub use continue_stmt::ContinueStmt;
-pub use drop_stmt::DropStmt;
+// pub use drop_stmt::DropStmt;
 pub use fn_stmt::FunctionStmt;
 pub use if_stmt::IfStmt;
 pub use loop_stmt::LoopStmt;
@@ -34,7 +34,7 @@ use crate::compiler::{
     ir::icfg::{
         cfg::{ CFGNode, CFGNodeId, CFGNodeType, CFGProcessNode, CFG },
         dag::DAG,
-        icfg_builder::ICFGBuilder,
+        icfg_builder::{ CFGBuilder },
         ICFG,
     },
     parser::token::TokenMetadata,
@@ -169,7 +169,12 @@ impl<'ast> Stmts<'ast> {
 }
 
 impl<'ast> StmtTrait for Stmts<'ast> {
-    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder, goto_node_ids: &mut GotoNodeIds) {
+    fn compile_into_icfg(
+        &self,
+        icfg: &mut ICFG,
+        cfg_builder: &mut CFGBuilder,
+        goto_node_ids: &mut GotoNodeIds
+    ) {
         self.stmts.iter().for_each(|stmt| {
             if let Some(linear_stmt) = stmt.as_linear_control_flow() {
             }
@@ -262,9 +267,9 @@ impl<'ast> StmtTrait for Stmts<'ast> {
         let scope_symbol_table = symbol_table_ref.get();
 
         let all_vars_in_scope = scope_symbol_table.get_all_vars();
-        if all_vars_in_scope.len() > 0 {
-            self.stmts.push_back(Stmt::DropStmt(DropStmt::new(all_vars_in_scope)))
-        }
+        // if all_vars_in_scope.len() > 0 {
+        //     self.stmts.push_back(Stmt::DropStmt(DropStmt::new(all_vars_in_scope)))
+        // }
     }
 
     fn is_linear_control_flow(&self) -> bool {
@@ -317,7 +322,7 @@ pub enum Stmt<'ast> {
     BreakStmt(BreakStmt),
     ContinueStmt(ContinueStmt),
     ReturnStmt(ReturnStmt<'ast>),
-    DropStmt(DropStmt),
+    // DropStmt(DropStmt),
     IfStmt(IfStmt<'ast>),
     LoopStmt(LoopStmt<'ast>),
 }
@@ -335,37 +340,46 @@ impl<'ast> Dissasemble for Stmt<'ast> {
             Self::ReturnStmt(return_stmt) => return_stmt.dissasemble(),
             Self::IfStmt(if_stmt) => if_stmt.dissasemble(),
             Self::LoopStmt(loop_stmt) => loop_stmt.dissasemble(),
-            Self::DropStmt(drop_stmt) => drop_stmt.dissasemble(),
+            // Self::DropStmt(drop_stmt) => drop_stmt.dissasemble(),
         }
     }
 }
 
 impl<'ast> StmtTrait for Stmt<'ast> {
-    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder, goto_node_ids: &mut GotoNodeIds) {
+    fn compile_into_icfg(
+        &self,
+        icfg: &mut ICFG,
+        cfg_builder: &mut CFGBuilder,
+        goto_node_ids: &mut GotoNodeIds
+    ) {
         match self {
-            Self::ExprStmt(expr_stmt) => expr_stmt.compile_into_icfg(icfg_builder, goto_node_ids),
+            Self::ExprStmt(expr_stmt) =>
+                expr_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids),
             Self::VarDefStmt(var_def_stmt) => {
-                var_def_stmt.compile_into_icfg(icfg_builder, goto_node_ids)
+                var_def_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids)
             }
             Self::VarAssignStmt(var_assign_stmt) => {
-                var_assign_stmt.compile_into_icfg(icfg_builder, goto_node_ids)
+                var_assign_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids)
             }
             Self::BlockStmt(scope_stmt) => {
-                scope_stmt.compile_into_icfg(icfg_builder, goto_node_ids)
+                scope_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids)
             }
-            Self::FunctionStmt(fn_stmt) => fn_stmt.compile_into_icfg(icfg_builder, goto_node_ids),
+            Self::FunctionStmt(fn_stmt) =>
+                fn_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids),
             Self::BreakStmt(break_stmt) => {
-                break_stmt.compile_into_icfg(icfg_builder, goto_node_ids)
+                break_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids)
             }
             Self::ContinueStmt(continue_stmt) => {
-                continue_stmt.compile_into_icfg(icfg_builder, goto_node_ids)
+                continue_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids)
             }
             Self::ReturnStmt(return_stmt) => {
-                return_stmt.compile_into_icfg(icfg_builder, goto_node_ids)
+                return_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids)
             }
-            Self::IfStmt(if_stmt) => if_stmt.compile_into_icfg(icfg_builder, goto_node_ids),
-            Self::LoopStmt(loop_stmt) => loop_stmt.compile_into_icfg(icfg_builder, goto_node_ids),
-            Self::DropStmt(drop_stmt) => drop_stmt.compile_into_icfg(icfg_builder, goto_node_ids),
+            Self::IfStmt(if_stmt) => if_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids),
+            Self::LoopStmt(loop_stmt) =>
+                loop_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids),
+            // Self::DropStmt(drop_stmt) =>
+            //     drop_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids),
         }
     }
 
@@ -397,7 +411,7 @@ impl<'ast> StmtTrait for Stmt<'ast> {
             }
             Self::IfStmt(if_stmt) => if_stmt.validate_stmt(symbol_table_ref, error_handler),
             Self::LoopStmt(loop_stmt) => loop_stmt.validate_stmt(symbol_table_ref, error_handler),
-            Self::DropStmt(drop_stmt) => drop_stmt.validate_stmt(symbol_table_ref, error_handler),
+            // Self::DropStmt(drop_stmt) => drop_stmt.validate_stmt(symbol_table_ref, error_handler),
         }
     }
 
@@ -413,7 +427,7 @@ impl<'ast> StmtTrait for Stmt<'ast> {
             Self::ReturnStmt(return_stmt) => return_stmt.is_linear_control_flow(),
             Self::IfStmt(if_stmt) => if_stmt.is_linear_control_flow(),
             Self::LoopStmt(loop_stmt) => loop_stmt.is_linear_control_flow(),
-            Self::DropStmt(drop_stmt) => drop_stmt.is_linear_control_flow(),
+            // Self::DropStmt(drop_stmt) => drop_stmt.is_linear_control_flow(),
         }
     }
 
@@ -429,7 +443,7 @@ impl<'ast> StmtTrait for Stmt<'ast> {
             Self::ReturnStmt(return_stmt) => return_stmt.as_linear_control_flow(),
             Self::IfStmt(if_stmt) => if_stmt.as_linear_control_flow(),
             Self::LoopStmt(loop_stmt) => loop_stmt.as_linear_control_flow(),
-            Self::DropStmt(drop_stmt) => drop_stmt.as_linear_control_flow(),
+            // Self::DropStmt(drop_stmt) => drop_stmt.as_linear_control_flow(),
         }
     }
 }

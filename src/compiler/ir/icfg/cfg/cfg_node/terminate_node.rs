@@ -1,3 +1,5 @@
+use llvm_builder::{ Function, LLVMBuilder };
+
 use crate::{
     compiler::{
         ds::register_allocator::RegisterAllocator,
@@ -20,6 +22,10 @@ pub struct CFGTerminateNode {
 impl CFGNodeTrait for CFGTerminateNode {
     fn generate_instructions(&self, _: &mut RegisterAllocator) -> Vec<Instruction> {
         if !self.is_start() { vec![Instruction::Halt] } else { vec![] }
+    }
+
+    fn build_llvm(&self, func: &mut Function, llvm_builder: &mut LLVMBuilder) {
+        unimplemented!()
     }
 }
 

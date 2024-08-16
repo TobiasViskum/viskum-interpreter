@@ -1,11 +1,11 @@
 mod compiler;
 mod macros;
 mod vm;
-
 use compiler::Compiler;
 use vm::VM;
 
 pub const U16_MAX: usize = u16::MAX as usize;
+pub const U8_MAX: usize = u8::MAX as usize;
 
 fn main() {
     /*
@@ -47,6 +47,8 @@ fn main() {
         println!("{:#?}", vm.print_regs());
     } else {
         drop(dbg_instructions);
-        VM::new(registers).run(instructions);
+        let mut vm = VM::new(registers);
+        vm.run(instructions);
+        println!("{:#?}", vm.print_regs());
     }
 }

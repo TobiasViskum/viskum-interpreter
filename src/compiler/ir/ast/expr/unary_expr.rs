@@ -94,9 +94,9 @@ impl<'ast> ExprTrait for UnaryExpr<'ast> {
         match rhs_type.try_unary(self.op) {
             Ok(v) => {
                 match self.op {
-                    UnaryOp::MutRef => {
-                        self.check_if_mutable_ref_to_immutable_var(symbol_table_ref).and(Ok(v))
-                    }
+                    // UnaryOp::MutRef => {
+                    //     self.check_if_mutable_ref_to_immutable_var(symbol_table_ref).and(Ok(v))
+                    // }
                     _ => Ok(v),
                 }
             }

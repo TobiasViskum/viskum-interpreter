@@ -5,6 +5,7 @@ mod return_node;
 mod terminate_node;
 mod connect_node;
 mod drop_node;
+mod label_node;
 
 use colored::Colorize;
 pub use decision_node::CFGDecisionNode;
@@ -13,6 +14,7 @@ pub use goto_node::CFGGotoNode;
 pub use process_node::CFGProcessNode;
 pub use return_node::CFGReturnNode;
 pub use terminate_node::CFGTerminateNode;
+pub use label_node::CFGLabelNode;
 
 use crate::{
     compiler::{
@@ -29,6 +31,7 @@ pub enum CFGNodeType {
     GotoNode(CFGGotoNode),
     ReturnNode(CFGReturnNode),
     TerminateNode(CFGTerminateNode),
+    LabelNode(CFGLabelNode),
     DropNode(CFGDropNode),
 }
 
@@ -39,6 +42,7 @@ impl Dissasemble for CFGNodeType {
             Self::DecisionNode(node) => node.dissasemble(),
             Self::GotoNode(node) => node.dissasemble(),
             Self::ReturnNode(node) => node.dissasemble(),
+            Self::LabelNode(node) => node.dissasemble(),
             Self::TerminateNode(node) => node.dissasemble(),
             Self::DropNode(node) => node.dissasemble(),
         }

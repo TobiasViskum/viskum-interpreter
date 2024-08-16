@@ -53,6 +53,10 @@ impl<'a> Lexer<'a> {
         rest: &str,
         ttype: TokenType
     ) -> TokenType {
+        if self.start + start + length > self.source.len() - 1 {
+            return TokenType::TokenIdentifier;
+        }
+
         let search_lexeme = self.source[self.start + start..self.start + start + length]
             .iter()
             .collect::<String>();
@@ -65,6 +69,10 @@ impl<'a> Lexer<'a> {
     }
 
     pub(super) fn is_keyword(&self, start: usize, length: usize, rest: &str) -> bool {
+        if self.start + start + length > self.source.len() - 1 {
+            return false;
+        }
+
         let search_lexeme = self.source[self.start + start..self.start + start + length]
             .iter()
             .collect::<String>();

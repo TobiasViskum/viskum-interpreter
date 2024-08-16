@@ -14,10 +14,9 @@ use crate::{
 };
 
 use super::{
+    dag_nodes::DAGBinaryNode,
     DAGAssignNode,
-    DAGBinaryNode,
     DAGDefineNode,
-    DAGDropNode,
     DAGGroupNode,
     DAGNode,
     DAGUnaryNode,
@@ -25,22 +24,6 @@ use super::{
 };
 
 impl DAG {
-    pub(super) fn generate_drop_instruction(
-        &self,
-        node_id: usize,
-        _: &mut Vec<Instruction>,
-        register_allocator: &mut RegisterAllocator,
-        drop_node: &DAGDropNode
-    ) {
-        let connected_node_ids = drop_node.parse_connected_nodes(
-            self.get_connected_node_ids(node_id)
-        );
-
-        for connected_node_id in connected_node_ids {
-            register_allocator.free_from_dag_node(&self.nodes[connected_node_id]);
-        }
-    }
-
     pub(super) fn generate_group_instruction(
         &self,
         node_id: usize,

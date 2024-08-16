@@ -102,10 +102,8 @@ macro_rules! def_binary_try_method {
     ) => {
         
         fn $method_name(&self, other: &Self) -> Result<Self, String> {
-            let minified_lhs = Self::get_minified(self);
-            let minified_rhs = Self::get_minified(other);
 
-            match (minified_lhs, minified_rhs) {
+            match (self, other) {
                 $(
                     (Self::$lhs_type, Self::$rhs_type) => {
                         Ok(Self::$ret_type)
@@ -120,10 +118,8 @@ macro_rules! def_binary_try_method {
     ($method_name:ident, $op:expr, { $(($lhs_type:ident, $rhs_type:ident)),+ $(,)? }) => {
         
         pub fn $method_name(&self, other: &Self) -> Result<Self, String> {
-            let minified_lhs = Self::get_minified(self);
-            let minified_rhs = Self::get_minified(other);
 
-            match (minified_lhs, minified_rhs) {
+            match (self, other) {
                 $(
                     (Self::$lhs_type, Self::$rhs_type) => {
                         Ok(Self::$lhs_type)
@@ -139,8 +135,7 @@ macro_rules! def_binary_try_method {
 macro_rules! def_unary_try_method {
     ($method_name:ident, $op:expr => $ret_type:ident, { $($rhs_type:ident),+ $(,)? }) => {
         pub fn $method_name(&self) -> Result<Self, String> {
-            let minified_rhs = Self::get_minified(self);
-            match minified_rhs {
+            match self {
                 $(
                   Self::$rhs_type => {
                     Ok(Self::$ret_type)
@@ -153,8 +148,8 @@ macro_rules! def_unary_try_method {
 
     ($method_name:ident, $op:expr, { $($rhs_type:ident),+ $(,)? }) => {
         pub fn $method_name(&self) -> Result<Self, String> {
-            let minified_rhs = Self::get_minified(self);
-            match minified_rhs {
+
+            match self {
                 $(
                   Self::$rhs_type => {
                     Ok(Self::$rhs_type)

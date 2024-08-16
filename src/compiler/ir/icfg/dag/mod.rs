@@ -1,12 +1,15 @@
 mod dag_node;
+mod dag_nodes;
 mod helper_methods;
 
 pub use dag_node::*;
+pub use dag_nodes::*;
+use llvm_builder::{ Function, LLVMBuilder, LLVMType, Operand, Type, TypeI32, Var };
 
 use crate::{
     compiler::{
         ds::{ register_allocator::{ self, RegisterAllocator }, vm_builder::VMBuilder },
-        traits::{ DAGNodeTrait, Dissasemble, LoadConstants },
+        traits::{ DAGNodeGenerateLLVM, DAGNodeTrait, Dissasemble, LoadConstants },
     },
     vm::{ self, instructions::{ Instruction, Reg } },
 };
@@ -37,7 +40,6 @@ pub enum DAGNode {
     UnaryNode(DAGUnaryNode),
     GroupNode(DAGGroupNode),
     FnCallNode(DAGFnCallNode),
-    DropNode(DAGDropNode),
     DefineNode(DAGDefineNode),
     AssignNode(DAGAssignNode),
     ConstNode(DAGConstNode),
@@ -50,7 +52,6 @@ impl DAGNode {
             Self::BinaryNode(binary_node) => binary_node.expected_connected_nodes(),
             Self::UnaryNode(unary_node) => unary_node.expected_connected_nodes(),
             Self::GroupNode(group_node) => group_node.expected_connected_nodes(),
-            Self::DropNode(drop_node) => drop_node.expected_connected_nodes(),
             Self::FnCallNode(fn_call_node) => fn_call_node.expected_connected_nodes(),
             Self::DefineNode(define_node) => define_node.expected_connected_nodes(),
             Self::AssignNode(assign_node) => assign_node.expected_connected_nodes(),
@@ -127,16 +128,6 @@ impl DAG {
         }
 
         let dst_reg = match node {
-            DAGNode::DropNode(drop_node) => {
-                self.generate_drop_instruction(
-                    node_id,
-                    instructions,
-                    register_allocator,
-                    drop_node
-                );
-
-                Reg::Abs(9999)
-            }
             DAGNode::BinaryNode(binary_node) => {
                 self.generate_binary_instruction(
                     node_id,
@@ -211,6 +202,45 @@ impl DAG {
         register_allocator.free_temp_reg(possibly_dead_reg);
     }
 
+    pub fn build_llvm(&self, func: &mut Function, llvm_builder: &mut LLVMBuilder) {
+        let operand = self.generate_llvm::<TypeI32>(self.entry_node_id, func, llvm_builder);
+    }
+
+    fn generate_llvm<T>(
+        &self,
+        node_id: usize,
+        func: &mut Function,
+        llvm_builder: &mut LLVMBuilder
+    ) -> Operand
+        where T: LLVMType
+    {
+        let node = self.nodes.get(node_id).expect("Expected dag node");
+
+        if
+            let Some(next_stmt_node_id) = self
+                .get_connected_node_ids(node_id)
+                .get(node.expected_connected_nodes())
+        {
+            self.generate_llvm::<T>(*next_stmt_node_id, func, llvm_builder);
+        }
+
+        match node {
+            DAGNode::BinaryNode(binary_node) => {
+                binary_node.generate_llvm::<T>(node_id, func, llvm_builder, self)
+            }
+            DAGNode::ConstNode(const_node) => {
+                const_node.generate_llvm::<T>(node_id, func, llvm_builder, self)
+            }
+            DAGNode::DefineNode(define_node) => {
+                define_node.generate_llvm::<T>(node_id, func, llvm_builder, self)
+            }
+            DAGNode::IdentNode(ident_node) => {
+                ident_node.generate_llvm::<T>(node_id, func, llvm_builder, self)
+            }
+            _ => panic!("SDf"),
+        }
+    }
+
     pub fn generate_instructions(
         &self,
         instructions: &mut Vec<Instruction>,
@@ -259,9 +289,6 @@ impl DAG {
         let mut connected_nodes = self.get_connected_node_ids(node_id);
 
         match &self.nodes[node_id] {
-            DAGNode::DropNode(drop_node) => {
-                self.dissasemble_drop_node(drop_node, &mut connected_nodes)
-            }
             DAGNode::BinaryNode(binary_node) => {
                 self.dissasemble_binary_node(binary_node, &mut connected_nodes)
             }
@@ -285,39 +312,6 @@ impl DAG {
                 self.dissasemble_const_or_ident_node(node, &mut connected_nodes)
             }
         }
-    }
-
-    fn dissasemble_drop_node(
-        &self,
-        drop_node: &DAGDropNode,
-        connected_nodes: &mut Vec<usize>
-    ) -> String {
-        let mut string_builder = if
-            connected_nodes.len() == drop_node.expected_connected_nodes() + 1
-        {
-            let mut string_builder = dissasemble_next!(self, connected_nodes);
-            string_builder += "\n";
-            string_builder
-        } else {
-            String::new()
-        };
-
-        string_builder += "drop(";
-
-        let mut i = 0;
-        while let Some(node_id) = connected_nodes.pop() {
-            if i != 0 {
-                string_builder += ", ";
-            }
-
-            string_builder += self.dissasemble_node(node_id).as_str();
-
-            i += 1;
-        }
-
-        string_builder += ")";
-
-        string_builder
     }
 
     fn dissasemble_const_or_ident_node<T>(

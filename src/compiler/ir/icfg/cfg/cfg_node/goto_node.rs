@@ -1,3 +1,5 @@
+use llvm_builder::{ Function, LLVMBuilder };
+
 use crate::{
     compiler::{
         ds::register_allocator::RegisterAllocator,
@@ -12,6 +14,10 @@ pub struct CFGGotoNode;
 impl CFGNodeTrait for CFGGotoNode {
     fn generate_instructions(&self, _: &mut RegisterAllocator) -> Vec<Instruction> {
         vec![Instruction::Goto { jmp_pos: 0 }]
+    }
+
+    fn build_llvm(&self, func: &mut Function, llvm_builder: &mut LLVMBuilder) {
+        unimplemented!()
     }
 }
 

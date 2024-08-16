@@ -1,3 +1,5 @@
+use llvm_builder::{ Function, LLVMBuilder, Module };
+
 use crate::{
     compiler::{
         ds::register_allocator::RegisterAllocator,
@@ -20,6 +22,10 @@ impl CFGNodeTrait for CFGProcessNode {
         let mut instructions = vec![];
         self.dag.generate_instructions(&mut instructions, register_allocator);
         instructions
+    }
+
+    fn build_llvm(&self, func: &mut Function, llvm_builder: &mut LLVMBuilder) {
+        self.dag.build_llvm(func, llvm_builder)
     }
 }
 

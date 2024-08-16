@@ -34,6 +34,16 @@ impl OpTrait for BinaryOp {
             _ => true,
         }
     }
+
+    fn build_llvm(&self) -> String {
+        match self {
+            Self::Add => "add".to_string(),
+            Self::Sub => "sub".to_string(),
+            Self::Div => "div".to_string(),
+            Self::Mul => "mul".to_string(),
+            Self::ComparisonOp(cmp) => cmp.build_llvm(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -67,15 +77,26 @@ impl OpTrait for ComparisonOp {
     fn get_can_constant_fold(&self) -> bool {
         true
     }
+
+    fn build_llvm(&self) -> String {
+        match self {
+            Self::Eq => "eq".to_string(),
+            Self::Ne => "ne".to_string(),
+            Self::Gt => "sgt".to_string(),
+            Self::Ge => "sge".to_string(),
+            Self::Le => "sle".to_string(),
+            Self::Lt => "slt".to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum UnaryOp {
     Neg,
     Not,
-    Ref,
-    MutRef,
-    Deref,
+    // Ref,
+    // MutRef,
+    // Deref,
 }
 
 impl Dissasemble for UnaryOp {
@@ -83,17 +104,21 @@ impl Dissasemble for UnaryOp {
         match self {
             Self::Neg => "-".to_string(),
             Self::Not => "!".to_string(),
-            Self::Ref => "&".to_string(),
-            Self::MutRef => "&mut ".to_string(),
-            Self::Deref => "*".to_string(),
+            // Self::Ref => "&".to_string(),
+            // Self::MutRef => "&mut ".to_string(),
+            // Self::Deref => "*".to_string(),
         }
     }
 }
 
 impl OpTrait for UnaryOp {
+    fn build_llvm(&self) -> String {
+        unimplemented!()
+    }
+
     fn get_op_len(&self) -> usize {
         match self {
-            Self::MutRef => self.dissasemble().len() - 1,
+            // Self::MutRef => self.dissasemble().len() - 1,
             _ => self.dissasemble().len(),
         }
     }

@@ -1,6 +1,7 @@
 use std::{ fmt::Debug, rc::Rc };
 
 use ahash::AHashMap;
+use llvm_builder::{ Function, LLVMBuilder, LLVMType, Operand };
 
 use crate::vm::instructions::Instruction;
 
@@ -12,7 +13,7 @@ use super::{
         vm_builder::VMBuilder,
     },
     error_handler::{ CompileError, ErrorHandler, SrcCharsRange },
-    ir::{ ast::stmt::{ GotoNodeIds }, icfg::{ dag::DAG, icfg_builder::ICFGBuilder } },
+    ir::{ ast::stmt::GotoNodeIds, icfg::{ dag::DAG, icfg_builder::{ CFGBuilder }, ICFG } },
 };
 
 pub trait Dissasemble {
@@ -39,6 +40,8 @@ pub trait OpTrait: Dissasemble + Debug + Clone + Copy {
     fn get_op_len(&self) -> usize;
 
     fn get_can_constant_fold(&self) -> bool;
+
+    fn build_llvm(&self) -> String;
 }
 
 pub trait ExprTrait where Self: Dissasemble + Debug {
@@ -62,7 +65,12 @@ pub trait LinearControlFlow {
 }
 
 pub trait StmtTrait {
-    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder, goto_node_ids: &mut GotoNodeIds);
+    fn compile_into_icfg(
+        &self,
+        icfg: &mut ICFG,
+        cfg_builder: &mut CFGBuilder,
+        goto_node_ids: &mut GotoNodeIds
+    );
 
     fn validate_stmt(
         &mut self,
@@ -88,6 +96,19 @@ pub trait ParseConnectedNodes {
 pub trait DAGNodeTrait: ParseConnectedNodes {
     fn expected_connected_nodes(&self) -> usize;
 }
+
+pub trait DAGNodeGenerateLLVM: DAGNodeTrait {
+    fn generate_llvm<T>(
+        &self,
+        node_id: usize,
+        func: &mut Function,
+        llvm_builder: &mut LLVMBuilder,
+        dag: &DAG
+    ) -> Operand
+        where T: LLVMType;
+}
 pub trait CFGNodeTrait: ParseConnectedNodes {
     fn generate_instructions(&self, register_allocator: &mut RegisterAllocator) -> Vec<Instruction>;
+
+    fn build_llvm(&self, func: &mut Function, llvm_builder: &mut LLVMBuilder);
 }

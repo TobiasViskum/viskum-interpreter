@@ -6,9 +6,12 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 
+[workspace]
+members = ["llvm_builder"]
+
 [dependencies]
 indexmap = "2.2.5"
-proc_macros = { path = "./proc_macros" }
+llvm_builder = { path = "./llvm_builder" }
 colored = "2.1.0"
 ahash = "0.8.11"
 typed-arena = "2.0.2"

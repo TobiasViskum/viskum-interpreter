@@ -111,9 +111,17 @@ new_mod!(
     macro_rules! jmp_cmp_op_body {
         ($vm:ident, $instruction:ident, $code:block, $lhs:ident, $rhs:ident, $method1:ident, $method2:ident) => {
             let ($lhs, $rhs) = (get_rel_reg!($vm, $instruction.reg1), get_rel_reg!($vm, $instruction.reg2));
+            // This branchless is apparently no faster that the branch with the match
+            // let mask = !-($code as i64);
+            // let ptr1 = (*$instruction).param1.jmp;
+            // let ptr2 = (*$instruction).param2.jmp;
+            // let target_ptr = (((ptr1 as i64) & !mask) | ((ptr2 as i64) & mask)) as *const OptimizedInstruction;
+            // next_op!(target_ptr, $vm);
+
+            // Here is the match
             match $code {
                 true => next_op!((*$instruction).param1.jmp, $vm),
-                false => next_op!((*$instruction).param1.jmp, $vm)
+                false => next_op!((*$instruction).param2.jmp, $vm)
             }
         }
     }

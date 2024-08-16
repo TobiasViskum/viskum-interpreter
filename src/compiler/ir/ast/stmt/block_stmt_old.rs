@@ -56,7 +56,12 @@ impl<'ast> Dissasemble for BlockStmt<'ast> {
 }
 
 impl<'ast> StmtTrait for BlockStmt<'ast> {
-    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder, goto_node_ids: &mut GotoNodeIds) {
+    fn compile_into_icfg(
+        &self,
+        icfg: &mut ICFG,
+        cfg_builder: &mut CFGBuilder,
+        goto_node_ids: &mut GotoNodeIds
+    ) {
         self.stmts.compile_into_icfg(icfg_builder, goto_node_ids);
         icfg_builder.push_linear_block_if_exists();
 

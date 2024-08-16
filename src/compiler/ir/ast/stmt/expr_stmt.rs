@@ -8,7 +8,7 @@ use crate::compiler::{
         icfg::{
             cfg::{ CFGNode, CFGNodeId, CFGNodeType, CFGProcessNode, CFG },
             dag::DAG,
-            icfg_builder::ICFGBuilder,
+            icfg_builder::{ CFGBuilder },
             ICFG,
         },
     },
@@ -51,7 +51,12 @@ impl<'ast> ExprStmt<'ast> {
 }
 
 impl<'ast> StmtTrait for ExprStmt<'ast> {
-    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder, goto_node_ids: &mut GotoNodeIds) {
+    fn compile_into_icfg(
+        &self,
+        icfg: &mut ICFG,
+        cfg_builder: &mut CFGBuilder,
+        goto_node_ids: &mut GotoNodeIds
+    ) {
         unimplemented!("Should hopefully be compiled into DAG instead")
         // let mut dag = DAG::new();
         // let mut ident_node_id_map = AHashMap::new();

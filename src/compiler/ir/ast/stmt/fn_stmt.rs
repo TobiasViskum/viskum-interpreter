@@ -3,7 +3,7 @@ use std::rc::Rc;
 use crate::compiler::{
     ds::{ symbol_table::SymbolTableRef, value::ValueType },
     error_handler::ErrorHandler,
-    ir::icfg::{ cfg::{ CFGNodeId, CFG }, icfg_builder::ICFGBuilder, ICFG },
+    ir::icfg::{ cfg::{ CFGNodeId, CFG }, icfg_builder::{ CFGBuilder }, ICFG },
     parser::token::TokenMetadata,
     traits::{ Dissasemble, LinearControlFlow, StmtTrait },
 };
@@ -89,8 +89,18 @@ impl<'ast> Dissasemble for FunctionStmt<'ast> {
 }
 
 impl<'ast> StmtTrait for FunctionStmt<'ast> {
-    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder, goto_node_ids: &mut GotoNodeIds) {
-        let d = self;
+    fn compile_into_icfg(
+        &self,
+        icfg: &mut ICFG,
+        cfg_builder: &mut CFGBuilder,
+        goto_node_ids: &mut GotoNodeIds
+    ) {
+        let mut fn_cfg_builder = CFGBuilder::new();
+
+        let cfg = fn_cfg_builder.end_cfg();
+
+        let cfg_id = icfg.push_cfg(cfg);
+
         // icfg_builder.push_fn_stmt(self);
         todo!()
     }

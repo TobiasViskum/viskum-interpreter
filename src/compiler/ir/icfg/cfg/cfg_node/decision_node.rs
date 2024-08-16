@@ -1,3 +1,5 @@
+use llvm_builder::{ Function, LLVMBuilder };
+
 use crate::{
     compiler::{
         ds::register_allocator::RegisterAllocator,
@@ -20,6 +22,10 @@ impl CFGNodeTrait for CFGDecisionNode {
         let mut instructions = vec![];
         self.condition.generate_instructions_as_condition(&mut instructions, register_allocator);
         instructions
+    }
+
+    fn build_llvm(&self, func: &mut Function, llvm_builder: &mut LLVMBuilder) {
+        unimplemented!()
     }
 }
 

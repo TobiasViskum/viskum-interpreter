@@ -2,8 +2,8 @@ use crate::compiler::{
     ds::symbol_table::SymbolTableRef,
     error_handler::ErrorHandler,
     ir::icfg::{
-        cfg::{ CFGDecisionNode, CFGGotoNode, CFGNode, CFGNodeId, CFGNodeType, CFG },
-        icfg_builder::ICFGBuilder,
+        cfg::{ CFGDecisionNode, CFGGotoNode, CFGLabelNode, CFGNode, CFGNodeId, CFGNodeType, CFG },
+        icfg_builder::CFGBuilder,
         ICFG,
     },
     print_todo,
@@ -58,40 +58,57 @@ impl<'ast> Dissasemble for IfStmt<'ast> {
 }
 
 impl<'ast> StmtTrait for IfStmt<'ast> {
-    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder, goto_node_ids: &mut GotoNodeIds) {
+    fn compile_into_icfg(
+        &self,
+        icfg: &mut ICFG,
+        cfg_builder: &mut CFGBuilder,
+        goto_node_ids: &mut GotoNodeIds
+    ) {
         let condition = self.condition.as_ref().map(|expr| expr.compile_to_dag());
 
         if let Some(condition) = condition {
-            let decision_node_id = icfg_builder.push_cfg_node(
+            let label_node_id = cfg_builder.push_cfg_node(
+                CFGNode::new(CFGNodeType::LabelNode(CFGLabelNode))
+            );
+            let decision_node_id = cfg_builder.push_cfg_node(
                 CFGNode::new(CFGNodeType::DecisionNode(CFGDecisionNode::new(condition)))
             );
+            cfg_builder.push_cfg_edge(label_node_id, decision_node_id);
 
             let true_branch_id = decision_node_id + 1;
-            self.true_block.compile_into_icfg(icfg_builder, goto_node_ids);
+            let label_node_id = cfg_builder.push_cfg_node(
+                CFGNode::new(CFGNodeType::LabelNode(CFGLabelNode))
+            );
+            cfg_builder.push_cfg_edge(label_node_id, cfg_builder.get_next_cfg_node_id());
+            self.true_block.compile_into_icfg(icfg, cfg_builder, goto_node_ids);
 
-            icfg_builder.push_cfg_edge(decision_node_id, true_branch_id);
+            cfg_builder.push_cfg_edge(decision_node_id, true_branch_id);
 
             if self.false_block.is_some() {
-                let goto_node_id = icfg_builder.push_cfg_node(
+                let goto_node_id = cfg_builder.push_cfg_node(
                     CFGNode::new(CFGNodeType::GotoNode(CFGGotoNode))
                 );
 
+                let label_node_id = cfg_builder.push_cfg_node(
+                    CFGNode::new(CFGNodeType::LabelNode(CFGLabelNode))
+                );
                 let false_branch_id = self.false_block
                     .as_ref()
                     .map(|if_stmt| {
-                        let false_branch_id = icfg_builder.get_next_cfg_node_id();
-                        if_stmt.compile_into_icfg(icfg_builder, goto_node_ids);
+                        let false_branch_id = cfg_builder.get_next_cfg_node_id();
+                        if_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids);
                         false_branch_id
                     })
-                    .unwrap_or(icfg_builder.get_next_cfg_node_id());
-                icfg_builder.push_cfg_edge(decision_node_id, false_branch_id);
-                icfg_builder.push_cfg_edge(goto_node_id, icfg_builder.get_next_cfg_node_id());
+                    .unwrap_or(cfg_builder.get_next_cfg_node_id());
+                cfg_builder.push_cfg_edge(label_node_id, false_branch_id);
+                cfg_builder.push_cfg_edge(decision_node_id, label_node_id);
+                cfg_builder.push_cfg_edge(goto_node_id, cfg_builder.get_next_cfg_node_id());
             } else {
-                icfg_builder.push_cfg_edge(decision_node_id, icfg_builder.get_next_cfg_node_id());
+                cfg_builder.push_cfg_edge(decision_node_id, cfg_builder.get_next_cfg_node_id());
             }
         } else {
-            self.true_block.compile_into_icfg(icfg_builder, goto_node_ids);
-            icfg_builder.push_linear_block_if_exists()
+            self.true_block.compile_into_icfg(icfg, cfg_builder, goto_node_ids);
+            cfg_builder.push_linear_block_if_exists()
         }
     }
 

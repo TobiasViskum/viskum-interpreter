@@ -1,6 +1,6 @@
 use ahash::{ AHashMap, AHashSet };
 
-use crate::{ vm::Heap, U16_MAX };
+use crate::{ vm::Heap, U16_MAX, U8_MAX };
 
 use super::{
     register_allocator::RegisterAllocator,
@@ -24,8 +24,8 @@ impl VMBuilder {
         }
     }
 
-    pub fn take_registers(&self) -> [i64; U16_MAX] {
-        let mut registers = [-2937i64; U16_MAX];
+    pub fn take_registers(&self) -> [i64; U8_MAX] {
+        let mut registers = [-2937i64; U8_MAX];
         for (simple_const, const_reg) in self.allocated_const_registers.iter() {
             registers[*const_reg] = simple_const.get_as_i64();
         }

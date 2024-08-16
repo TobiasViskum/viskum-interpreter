@@ -3,7 +3,7 @@ use ahash::AHashMap;
 use crate::compiler::{
     ds::symbol_table::{ SSAKey, SymbolTableRef },
     error_handler::ErrorHandler,
-    ir::icfg::{ dag::{ DAGDropNode, DAGIdentNode, DAGNode, DAG }, icfg_builder::ICFGBuilder },
+    ir::icfg::{ dag::{ DAGIdentNode, DAGNode, DAG }, icfg_builder::{ CFGBuilder }, ICFG },
     traits::{ LinearControlFlow, StmtTrait },
     Dissasemble,
 };
@@ -30,7 +30,12 @@ impl<'ast> ImplicitRetStmt<'ast> {
 }
 
 impl<'ast> StmtTrait for ImplicitRetStmt<'ast> {
-    fn compile_into_icfg(&self, icfg_builder: &mut ICFGBuilder, goto_node_ids: &mut GotoNodeIds) {
+    fn compile_into_icfg(
+        &self,
+        icfg: &mut ICFG,
+        cfg_builder: &mut CFGBuilder,
+        goto_node_ids: &mut GotoNodeIds
+    ) {
         todo!()
     }
 
