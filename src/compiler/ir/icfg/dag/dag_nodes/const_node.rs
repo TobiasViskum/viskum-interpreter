@@ -1,7 +1,10 @@
+use llvm_builder::{ Function, LLVMBuilder, LLVMType, Module };
+
 use crate::compiler::{
     ds::value::Value,
     ir::icfg::dag::DAG,
-    traits::{ DAGNodeGenerateLLVM, DAGNodeTrait, ParseConnectedNodes },
+    print_todo,
+    traits::{ AllocLLVM, DAGNodeGenerateLLVM, DAGNodeTrait, ParseConnectedNodes },
     Dissasemble,
 };
 
@@ -21,6 +24,17 @@ impl DAGConstNode {
 }
 
 impl DAGNodeGenerateLLVM for DAGConstNode {
+    fn alloc_llvm<T>(
+        &self,
+        _llvm_builder: &mut LLVMBuilder,
+        module: &mut Module,
+        _func: &mut Function
+    )
+        where T: LLVMType
+    {
+        print_todo("Alloc strings here")
+    }
+
     fn generate_llvm<T>(
         &self,
         node_id: usize,

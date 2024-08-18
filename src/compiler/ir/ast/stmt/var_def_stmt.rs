@@ -7,7 +7,11 @@ use crate::compiler::{
     error_handler::{ CompileError, ErrorHandler, ReportedError, SrcCharsRange },
     ir::{
         ast::expr::IdentifierExpr,
-        icfg::{ dag::{ DAGDefineNode, DAGNode, DAG }, icfg_builder::{ CFGBuilder }, ICFG },
+        icfg::{
+            dag::{ DAGDefineNode, DAGNode, DAG },
+            icfg_builder::{ CFGBuilder, ICFGBuilder },
+            ICFG,
+        },
     },
     parser::token::TokenMetadata,
     traits::{ Dissasemble, ExprTrait },
@@ -156,7 +160,7 @@ impl<'ast> Dissasemble for VarDefStmt<'ast> {
 impl<'ast> StmtTrait for VarDefStmt<'ast> {
     fn compile_into_icfg(
         &self,
-        icfg: &mut ICFG,
+        icfg_builder: &mut ICFGBuilder,
         cfg_builder: &mut CFGBuilder,
         goto_node_ids: &mut GotoNodeIds
     ) {

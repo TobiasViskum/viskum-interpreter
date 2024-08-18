@@ -45,6 +45,10 @@ impl LLVMBuilder {
         // Command::new("clang").arg("file.ll").arg("-o").arg("file").output().unwrap();
     }
 
+    pub fn get_latest_ssa_key(&self) -> usize {
+        self.next_ssa_key - 1
+    }
+
     pub fn req_var_ssa_key(&mut self, ident: Rc<str>) -> usize {
         let ssa_key = self.req_ssa_key();
         self.idents.insert(ident, ssa_key);

@@ -1,15 +1,21 @@
-mod dag_node;
 mod dag_nodes;
 mod helper_methods;
 
-pub use dag_node::*;
+// pub use dag_node::*;
 pub use dag_nodes::*;
-use llvm_builder::{ Function, LLVMBuilder, LLVMType, Operand, Type, TypeI32, Var };
+use llvm_builder::{ Function, LLVMBuilder, LLVMType, Module, Operand, Type, TypeI32, Var };
 
 use crate::{
     compiler::{
         ds::{ register_allocator::{ self, RegisterAllocator }, vm_builder::VMBuilder },
-        traits::{ DAGNodeGenerateLLVM, DAGNodeTrait, Dissasemble, LoadConstants },
+        traits::{
+            AllocLLVM,
+            DAGNodeGenerateLLVM,
+            DAGNodeTrait,
+            Dissasemble,
+            GenerateLLVM,
+            LoadConstants,
+        },
     },
     vm::{ self, instructions::{ Instruction, Reg } },
 };
@@ -39,7 +45,7 @@ pub enum DAGNode {
     BinaryNode(DAGBinaryNode),
     UnaryNode(DAGUnaryNode),
     GroupNode(DAGGroupNode),
-    FnCallNode(DAGFnCallNode),
+    // FnCallNode(DAGFnCallNode),
     DefineNode(DAGDefineNode),
     AssignNode(DAGAssignNode),
     ConstNode(DAGConstNode),
@@ -52,7 +58,7 @@ impl DAGNode {
             Self::BinaryNode(binary_node) => binary_node.expected_connected_nodes(),
             Self::UnaryNode(unary_node) => unary_node.expected_connected_nodes(),
             Self::GroupNode(group_node) => group_node.expected_connected_nodes(),
-            Self::FnCallNode(fn_call_node) => fn_call_node.expected_connected_nodes(),
+            // Self::FnCallNode(fn_call_node) => fn_call_node.expected_connected_nodes(),
             Self::DefineNode(define_node) => define_node.expected_connected_nodes(),
             Self::AssignNode(assign_node) => assign_node.expected_connected_nodes(),
             Self::ConstNode(const_node) => const_node.expected_connected_nodes(),
@@ -66,6 +72,28 @@ pub struct DAG {
     nodes: Vec<DAGNode>,
     edges: Vec<DAGEdge>,
     entry_node_id: usize,
+}
+
+impl AllocLLVM for DAG {
+    fn alloc_llvm(&self, llvm_builder: &mut LLVMBuilder, module: &mut Module, func: &mut Function) {
+        self.nodes.iter().for_each(|node| {
+            match node {
+                DAGNode::BinaryNode(node) => node.alloc_llvm::<TypeI32>(llvm_builder, module, func),
+                DAGNode::UnaryNode(node) => node.alloc_llvm::<TypeI32>(llvm_builder, module, func),
+                DAGNode::GroupNode(node) => node.alloc_llvm::<TypeI32>(llvm_builder, module, func),
+                DAGNode::DefineNode(node) => node.alloc_llvm::<TypeI32>(llvm_builder, module, func),
+                DAGNode::AssignNode(node) => node.alloc_llvm::<TypeI32>(llvm_builder, module, func),
+                DAGNode::ConstNode(node) => node.alloc_llvm::<TypeI32>(llvm_builder, module, func),
+                DAGNode::IdentNode(node) => node.alloc_llvm::<TypeI32>(llvm_builder, module, func),
+            }
+        })
+    }
+}
+
+impl GenerateLLVM for DAG {
+    fn build_llvm(&self, llvm_builder: &mut LLVMBuilder, func: &mut Function) {
+        let operand = self.generate_llvm::<TypeI32>(self.entry_node_id, func, llvm_builder);
+    }
 }
 
 impl DAG {
@@ -181,7 +209,7 @@ impl DAG {
                 register_allocator.get_var_reg(ident_node.get_ssa_key().get_ident())
             }
 
-            DAGNode::FnCallNode(fn_call_node) => { todo!() }
+            // DAGNode::FnCallNode(fn_call_node) => { todo!() }
         };
 
         dst_reg
@@ -200,10 +228,6 @@ impl DAG {
         );
 
         register_allocator.free_temp_reg(possibly_dead_reg);
-    }
-
-    pub fn build_llvm(&self, func: &mut Function, llvm_builder: &mut LLVMBuilder) {
-        let operand = self.generate_llvm::<TypeI32>(self.entry_node_id, func, llvm_builder);
     }
 
     fn generate_llvm<T>(
@@ -236,6 +260,9 @@ impl DAG {
             }
             DAGNode::IdentNode(ident_node) => {
                 ident_node.generate_llvm::<T>(node_id, func, llvm_builder, self)
+            }
+            DAGNode::AssignNode(assign_node) => {
+                assign_node.generate_llvm::<T>(node_id, func, llvm_builder, self)
             }
             _ => panic!("SDf"),
         }
@@ -302,9 +329,9 @@ impl DAG {
             DAGNode::AssignNode(assign_node) => {
                 self.dissasemble_assign_node(assign_node, &mut connected_nodes)
             }
-            DAGNode::FnCallNode(fn_call_node) => {
-                self.dissasemble_fn_call_node(fn_call_node, &mut connected_nodes)
-            }
+            // DAGNode::FnCallNode(fn_call_node) => {
+            //     self.dissasemble_fn_call_node(fn_call_node, &mut connected_nodes)
+            // }
             DAGNode::ConstNode(node) => {
                 self.dissasemble_const_or_ident_node(node, &mut connected_nodes)
             }
@@ -450,21 +477,21 @@ impl DAG {
         string_builder
     }
 
-    fn dissasemble_fn_call_node(
-        &self,
-        fn_call_node: &DAGFnCallNode,
-        connected_nodes: &mut Vec<usize>
-    ) -> String {
-        let mut string_builder = fn_call_node.dissasemble();
-        for (i, connected_node_id) in connected_nodes.iter().enumerate() {
-            let arg = self.dissasemble_node(*connected_node_id);
-            string_builder += arg.as_str();
-            if i != connected_nodes.len() - 1 {
-                string_builder += ", ";
-            }
-        }
+    // fn dissasemble_fn_call_node(
+    //     &self,
+    //     fn_call_node: &DAGFnCallNode,
+    //     connected_nodes: &mut Vec<usize>
+    // ) -> String {
+    //     let mut string_builder = fn_call_node.dissasemble();
+    //     for (i, connected_node_id) in connected_nodes.iter().enumerate() {
+    //         let arg = self.dissasemble_node(*connected_node_id);
+    //         string_builder += arg.as_str();
+    //         if i != connected_nodes.len() - 1 {
+    //             string_builder += ", ";
+    //         }
+    //     }
 
-        string_builder += ")";
-        string_builder
-    }
+    //     string_builder += ")";
+    //     string_builder
+    // }
 }

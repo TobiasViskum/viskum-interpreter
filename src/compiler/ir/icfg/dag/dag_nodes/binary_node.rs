@@ -1,9 +1,9 @@
-use llvm_builder::{ BuildLLVM, Function, LLVMBuilder, LLVMType, Operand, Var };
+use llvm_builder::{ BuildLLVM, Function, LLVMBuilder, LLVMType, Module, Operand, Var };
 
 use crate::compiler::{
     ds::value::ops::{ BinaryOp, ComparisonOp },
     ir::icfg::dag::DAG,
-    traits::{ DAGNodeTrait, DAGNodeGenerateLLVM, OpTrait, ParseConnectedNodes },
+    traits::{ AllocLLVM, DAGNodeGenerateLLVM, DAGNodeTrait, OpTrait, ParseConnectedNodes },
     Dissasemble,
 };
 
@@ -23,6 +23,14 @@ impl DAGBinaryNode {
 }
 
 impl DAGNodeGenerateLLVM for DAGBinaryNode {
+    fn alloc_llvm<T>(
+        &self,
+        _llvm_builder: &mut LLVMBuilder,
+        _module: &mut Module,
+        _func: &mut Function
+    )
+        where T: LLVMType {}
+
     fn generate_llvm<T>(
         &self,
         node_id: usize,
@@ -42,14 +50,26 @@ impl DAGNodeGenerateLLVM for DAGBinaryNode {
         );
 
         let result_key = llvm_builder.req_ssa_key();
-        let instr = format!(
-            "%{} = {} nsw {} {}, {}",
-            result_key,
-            self.op.build_llvm(),
-            T::build_type(),
-            op1.build(),
-            op2.build()
-        );
+
+        let instr = if self.op.is_cmp() {
+            format!(
+                "%{} = icmp {} {} {}, {}",
+                result_key,
+                self.op.build_llvm(),
+                T::build_type(),
+                op1.build(),
+                op2.build()
+            )
+        } else {
+            format!(
+                "%{} = {} nsw {} {}, {}",
+                result_key,
+                self.op.build_llvm(),
+                T::build_type(),
+                op1.build(),
+                op2.build()
+            )
+        };
 
         func.add_instr(instr);
 

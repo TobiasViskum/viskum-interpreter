@@ -6,16 +6,16 @@ use crate::compiler::{
     ds::symbol_table::{ SSAKey, SymbolTableRef },
     error_handler::{ CompileError, ErrorHandler },
     ir::icfg::{
-        cfg::{ CFGNode, CFGNodeId, CFGNodeType, CFGProcessNode, CFG },
+        cfg::{ CFGLabelNode, CFGNode, CFGNodeId, CFGNodeType, CFGProcessNode, CFG },
         dag::DAG,
-        icfg_builder::{ CFGBuilder },
+        icfg_builder::{ CFGBuilder, ICFGBuilder },
         ICFG,
     },
     print_todo,
     traits::{ Dissasemble, LinearControlFlow, StmtTrait },
 };
 
-use super::{ GotoNodeIds, Stmt, Stmts };
+use super::{ GotoNodeIds, Stmt };
 
 pub enum ScopeEnv {
     BasicBlock,
@@ -27,17 +27,17 @@ pub enum ScopeEnv {
 #[derive(Debug)]
 pub struct BlockStmt<'ast> {
     stmts: VecDeque<Stmt<'ast>>,
-    symbol_table_ref: SymbolTableRef,
+    symbol_table_id: usize,
     is_basic_block: bool,
     // forwards_declarations: Stmts, // TypeDefStmt, FnStmt, (ClassStmt)
 }
 
 impl<'ast> BlockStmt<'ast> {
-    pub fn new(symbol_table_ref: SymbolTableRef, is_basic_block: bool) -> Self {
+    pub fn new(symbol_table_id: usize) -> Self {
         Self {
             stmts: VecDeque::new(),
-            symbol_table_ref,
-            is_basic_block,
+            symbol_table_id,
+            is_basic_block: true,
             // symbol_table_ref,
         }
     }
@@ -46,8 +46,8 @@ impl<'ast> BlockStmt<'ast> {
         self.is_basic_block = new_state;
     }
 
-    pub fn get_symbol_table_ref(&self) -> SymbolTableRef {
-        self.symbol_table_ref
+    pub fn get_symbol_table_id(&self) -> usize {
+        self.symbol_table_id
     }
 
     pub fn push_stmt(&mut self, stmt: Stmt<'ast>) {
@@ -109,7 +109,7 @@ impl<'ast> Dissasemble for BlockStmt<'ast> {
 impl<'ast> StmtTrait for BlockStmt<'ast> {
     fn compile_into_icfg(
         &self,
-        icfg: &mut ICFG,
+        icfg_builder: &mut ICFGBuilder,
         cfg_builder: &mut CFGBuilder,
         goto_node_ids: &mut GotoNodeIds
     ) {
@@ -118,7 +118,17 @@ impl<'ast> StmtTrait for BlockStmt<'ast> {
                 cfg_builder.build_into_linear_basic_block(linear_stmt)
             } else {
                 cfg_builder.push_linear_block_if_exists();
-                stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids)
+                stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids);
+
+                if let Stmt::IfStmt(_) = &stmt {
+                    let label_node_id_after_if = cfg_builder.push_cfg_node(
+                        CFGNode::new(CFGNodeType::LabelNode(CFGLabelNode))
+                    );
+                    cfg_builder.push_cfg_edge(
+                        label_node_id_after_if,
+                        cfg_builder.get_next_cfg_node_id()
+                    )
+                }
             }
         });
         if self.is_basic_block {

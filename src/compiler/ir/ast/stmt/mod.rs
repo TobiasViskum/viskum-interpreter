@@ -34,7 +34,7 @@ use crate::compiler::{
     ir::icfg::{
         cfg::{ CFGNode, CFGNodeId, CFGNodeType, CFGProcessNode, CFG },
         dag::DAG,
-        icfg_builder::{ CFGBuilder },
+        icfg_builder::{ CFGBuilder, ICFGBuilder },
         ICFG,
     },
     parser::token::TokenMetadata,
@@ -84,235 +84,6 @@ impl GotoNodeIds {
 }
 
 #[derive(Debug)]
-pub struct Stmts<'ast> {
-    stmts: VecDeque<Stmt<'ast>>,
-}
-
-impl<'ast> Dissasemble for Stmts<'ast> {
-    fn dissasemble(&self) -> String {
-        let mut string_builder = String::new();
-        for stmt in &self.stmts {
-            string_builder += stmt.dissasemble().as_str();
-        }
-        string_builder
-    }
-}
-
-impl<'ast> Stmts<'ast> {
-    pub fn new() -> Self {
-        Self {
-            stmts: VecDeque::new(),
-        }
-    }
-
-    pub fn push(
-        &mut self,
-        stmt: Stmt<'ast>,
-        symbol_table_ref: &mut SymbolTableRef
-    ) -> Result<(), CompileError> {
-        match stmt {
-            Stmt::FunctionStmt(ref fn_stmt) => {
-                let result = symbol_table_ref.get_mut().declare_fn(fn_stmt);
-                self.stmts.push_front(stmt);
-                result?;
-            }
-            _ => self.stmts.push_back(stmt),
-        }
-
-        Ok(())
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &Stmt<'ast>> {
-        self.stmts.iter()
-    }
-
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Stmt<'ast>> {
-        self.stmts.iter_mut()
-    }
-
-    pub fn len(&self) -> usize {
-        self.stmts.len()
-    }
-
-    pub fn compile_linear_stmts_into_icfg(&self, i: &mut usize) -> CFGNode {
-        let mut dag = DAG::new();
-        let mut ident_node_id_map = AHashMap::new();
-        let mut prev_dag_node_id: Option<usize> = None;
-
-        while let Some(linear_cf) = self.index(*i).as_linear_control_flow() {
-            let dag_node_id = linear_cf.compile_into_dag(&mut dag, &mut ident_node_id_map);
-
-            if let Some(prev_dag_node_id) = prev_dag_node_id {
-                dag.add_edge(dag_node_id, prev_dag_node_id);
-            }
-            prev_dag_node_id = Some(dag_node_id);
-
-            if *i >= self.stmts.len() - 1 {
-                break;
-            } else {
-                if
-                    let Some(is_next_linear) = self.stmts
-                        .get(*i + 1)
-                        .map(|stmt| stmt.is_linear_control_flow())
-                {
-                    if is_next_linear {
-                        *i += 1;
-                    } else {
-                        break;
-                    }
-                }
-            }
-        }
-
-        CFGNode::new(CFGNodeType::ProcessNode(CFGProcessNode::new(dag)))
-    }
-}
-
-impl<'ast> StmtTrait for Stmts<'ast> {
-    fn compile_into_icfg(
-        &self,
-        icfg: &mut ICFG,
-        cfg_builder: &mut CFGBuilder,
-        goto_node_ids: &mut GotoNodeIds
-    ) {
-        self.stmts.iter().for_each(|stmt| {
-            if let Some(linear_stmt) = stmt.as_linear_control_flow() {
-            }
-        })
-
-        // let mut first_added_node_id: Option<usize> = None;
-        // let mut last_added_node_id: Option<usize> = None;
-
-        // macro_rules! updated_added_node_ids {
-        //     ($node_id:expr) => {
-        //         if first_added_node_id.is_none() {
-        //             first_added_node_id = Some($node_id);
-        //         }
-        //         match last_added_node_id {
-        //             Some(last_node_id) if $node_id > last_node_id => {
-        //                 last_added_node_id = Some($node_id);
-        //             }
-        //             _ => last_added_node_id = Some($node_id)
-        //         }
-        //     };
-        // }
-
-        // let mut prev_node_ids_range: Option<NodeIdsRange> = None;
-        // let mut curr_node_ids_range: Option<NodeIdsRange> = None;
-
-        // self.stmts.iter().for_each(|stmt| {
-        //     if let Some(linear_stmt) = stmt.as_linear_control_flow() {
-        //         icfg_builder.build_into_linear_basic_block(linear_stmt);
-        //     } else {
-        //         let linear_block = icfg_builder.push_linear_block_if_exists();
-        //         if let Some(linear_block_node_id) = linear_block {
-        //             updated_added_node_ids!(linear_block_node_id);
-        //             prev_node_ids_range = Some(
-        //                 NodeIdsRange::new(linear_block_node_id, linear_block_node_id)
-        //             );
-        //         }
-
-        //         if let Some(node_ids_range) = stmt.compile_into_icfg(icfg_builder, goto_node_ids) {
-        //             curr_node_ids_range = Some(node_ids_range);
-        //             updated_added_node_ids!(node_ids_range.get_first_added_node_id());
-        //             updated_added_node_ids!(node_ids_range.get_last_added_node_id());
-        //         }
-        //     }
-
-        //     match (prev_node_ids_range.clone(), curr_node_ids_range.clone()) {
-        //         (Some(prev_ids_range), Some(curr_ids_range)) => {
-        //             icfg_builder.push_cfg_edge(
-        //                 prev_ids_range.get_last_added_node_id(),
-        //                 curr_ids_range.get_first_added_node_id()
-        //             );
-
-        //             prev_node_ids_range = curr_node_ids_range.clone();
-        //             curr_node_ids_range = None;
-        //         }
-        //         _ => {}
-        //     }
-
-        //     if goto_node_ids.get_if_branch_end_node_ids().len() > 0 {
-        //         for if_branch_end_node_id in goto_node_ids.take_if_branch_end_node_ids() {
-        //             println!(
-        //                 "if_branch_end_node_id: {}, last_added_node_id: {:?}",
-        //                 if_branch_end_node_id,
-        //                 last_added_node_id
-        //             );
-        //             if let Some(last_added_node_id) = last_added_node_id.clone() {
-        //                 icfg_builder.push_cfg_edge(if_branch_end_node_id, last_added_node_id + 1);
-        //             }
-        //         }
-        //     }
-        // });
-
-        // match (first_added_node_id, last_added_node_id) {
-        //     (Some(first_node_id), Some(last_node_id)) =>
-        //         Some(NodeIdsRange::new(first_node_id, last_node_id)),
-        //     (Some(first_node_id), None) => Some(NodeIdsRange::new(first_node_id, first_node_id)),
-        //     (None, Some(last_node_id)) => Some(NodeIdsRange::new(last_node_id, last_node_id)),
-        //     (None, None) => None,
-        // }
-    }
-
-    fn validate_stmt(
-        &mut self,
-        symbol_table_ref: &mut SymbolTableRef,
-        error_handler: &mut ErrorHandler
-    ) {
-        self.iter_mut().for_each(|stmt| {
-            stmt.validate_stmt(symbol_table_ref, error_handler);
-        });
-
-        let scope_symbol_table = symbol_table_ref.get();
-
-        let all_vars_in_scope = scope_symbol_table.get_all_vars();
-        // if all_vars_in_scope.len() > 0 {
-        //     self.stmts.push_back(Stmt::DropStmt(DropStmt::new(all_vars_in_scope)))
-        // }
-    }
-
-    fn is_linear_control_flow(&self) -> bool {
-        self.stmts
-            .iter()
-            .filter(|&stmt| !stmt.is_linear_control_flow())
-            .count() == 0
-    }
-
-    fn as_linear_control_flow(&self) -> Option<&dyn LinearControlFlow> {
-        if self.is_linear_control_flow() { Some(self) } else { None }
-    }
-}
-
-impl<'ast> LinearControlFlow for Stmts<'ast> {
-    fn compile_into_dag(
-        &self,
-        dag: &mut DAG,
-        ident_node_id_map: &mut AHashMap<SSAKey, usize>
-    ) -> usize {
-        let linear_stmts = self.stmts
-            .iter()
-            .filter_map(|stmt| stmt.as_linear_control_flow())
-            .collect::<Vec<_>>();
-
-        for linear_stmt in linear_stmts {
-            let node_id = linear_stmt.compile_into_dag(dag, ident_node_id_map);
-            dag.set_entry_node_id(node_id);
-        }
-
-        dag.get_entry_node_id()
-    }
-}
-
-impl<'ast> Index<usize> for Stmts<'ast> {
-    type Output = Stmt<'ast>;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.stmts[index]
-    }
-}
-
-#[derive(Debug)]
 pub enum Stmt<'ast> {
     ExprStmt(ExprStmt<'ast>),
     VarDefStmt(VarDefStmt<'ast>),
@@ -348,36 +119,37 @@ impl<'ast> Dissasemble for Stmt<'ast> {
 impl<'ast> StmtTrait for Stmt<'ast> {
     fn compile_into_icfg(
         &self,
-        icfg: &mut ICFG,
+        icfg_builder: &mut ICFGBuilder,
         cfg_builder: &mut CFGBuilder,
         goto_node_ids: &mut GotoNodeIds
     ) {
         match self {
             Self::ExprStmt(expr_stmt) =>
-                expr_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids),
+                expr_stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids),
             Self::VarDefStmt(var_def_stmt) => {
-                var_def_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids)
+                var_def_stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids)
             }
             Self::VarAssignStmt(var_assign_stmt) => {
-                var_assign_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids)
+                var_assign_stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids)
             }
             Self::BlockStmt(scope_stmt) => {
-                scope_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids)
+                scope_stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids)
             }
             Self::FunctionStmt(fn_stmt) =>
-                fn_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids),
+                fn_stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids),
             Self::BreakStmt(break_stmt) => {
-                break_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids)
+                break_stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids)
             }
             Self::ContinueStmt(continue_stmt) => {
-                continue_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids)
+                continue_stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids)
             }
             Self::ReturnStmt(return_stmt) => {
-                return_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids)
+                return_stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids)
             }
-            Self::IfStmt(if_stmt) => if_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids),
+            Self::IfStmt(if_stmt) =>
+                if_stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids),
             Self::LoopStmt(loop_stmt) =>
-                loop_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids),
+                loop_stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids),
             // Self::DropStmt(drop_stmt) =>
             //     drop_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids),
         }
@@ -446,6 +218,14 @@ impl<'ast> StmtTrait for Stmt<'ast> {
             // Self::DropStmt(drop_stmt) => drop_stmt.as_linear_control_flow(),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct FnArg {
+    ssa_ident: SSAKey,
+    value_type: ValueType,
+    mut_keyword_metadata: Option<TokenMetadata>,
+    ident_metadata: TokenMetadata,
 }
 
 #[derive(Debug, Clone)]

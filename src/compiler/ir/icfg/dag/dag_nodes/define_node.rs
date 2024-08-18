@@ -1,10 +1,12 @@
 use std::fmt::format;
 
-use llvm_builder::{ BuildLLVM, Operand, Var };
+use llvm_builder::{ BuildLLVM, Function, LLVMBuilder, LLVMType, Module, Operand, Var };
 
 use crate::compiler::{
     ds::symbol_table::SSAKey,
-    traits::{ DAGNodeGenerateLLVM, DAGNodeTrait, ParseConnectedNodes },
+    ir::icfg::dag::DAG,
+    print_todo,
+    traits::{ AllocLLVM, DAGNodeGenerateLLVM, DAGNodeTrait, ParseConnectedNodes },
     Dissasemble,
 };
 
@@ -16,14 +18,26 @@ pub struct DAGDefineNode {
 }
 
 impl DAGNodeGenerateLLVM for DAGDefineNode {
+    fn alloc_llvm<T>(
+        &self,
+        llvm_builder: &mut LLVMBuilder,
+        module: &mut Module,
+        func: &mut Function
+    )
+        where T: LLVMType
+    {
+        let var_key = llvm_builder.req_var_ssa_key(self.ssa_key.get_ident());
+        func.add_instr(format!("%{} = alloca {}, align 4", var_key, T::build_type()));
+    }
+
     fn generate_llvm<T>(
         &self,
         node_id: usize,
-        func: &mut llvm_builder::Function,
-        llvm_builder: &mut llvm_builder::LLVMBuilder,
-        dag: &crate::compiler::ir::icfg::dag::DAG
-    ) -> llvm_builder::Operand
-        where T: llvm_builder::LLVMType
+        func: &mut Function,
+        llvm_builder: &mut LLVMBuilder,
+        dag: &DAG
+    ) -> Operand
+        where T: LLVMType
     {
         let connected_node = self
             .parse_connected_nodes(dag.get_connected_node_ids(node_id))
@@ -31,8 +45,8 @@ impl DAGNodeGenerateLLVM for DAGDefineNode {
 
         let result = dag.generate_llvm::<T>(connected_node, func, llvm_builder);
 
-        let var_key = llvm_builder.req_var_ssa_key(self.ssa_key.get_ident());
-        func.add_instr(format!("%{} = alloca {}, align 4", var_key, T::build_type()));
+        let var_key = llvm_builder.get_var_ssa_key(self.ssa_key.get_ident());
+        // func.add_instr(format!("%{} = alloca {}, align 4", var_key, T::build_type()));
         func.add_instr(
             format!("store {} {}, ptr %{}, align 4", T::build_type(), result.build(), var_key)
         );

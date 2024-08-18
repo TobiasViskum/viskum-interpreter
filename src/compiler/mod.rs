@@ -4,11 +4,14 @@ pub(in crate::compiler) mod ir;
 pub(in crate::compiler) mod parser;
 pub(in crate::compiler) mod traits;
 
+use std::rc::Rc;
+
+use ahash::AHashMap;
 use colored::Colorize;
-use ds::{ symbol_table::GlobalSymbolTable, vm_builder::VMBuilder };
+use ds::{ symbol_table::{ GlobalSymbolTable, SSAKey }, value::ValueType, vm_builder::VMBuilder };
 use error_handler::ErrorHandler;
-use ir::{ ast::{ Ast, AstArena }, icfg::ICFG };
-use parser::Parser;
+use ir::{ ast::{ stmt::FnArg, Ast, AstArena }, icfg::ICFG };
+use parser::{ token::TokenMetadata, Parser };
 pub use traits::Dissasemble;
 use traits::LoadConstants;
 
@@ -25,7 +28,78 @@ pub fn print_todo(str: &str) {
     eprintln!("{} {}", "TODO:".red().bold(), str)
 }
 
+struct SymbolVar {
+    mut_keyword_metadata: Option<TokenMetadata>,
+    value_type: ValueType,
+    ident_metadata: TokenMetadata,
+}
+
+struct SymbolFunc {
+    ident_metadata: TokenMetadata,
+    fn_args: Vec<FnArg>,
+    ret_type: ValueType,
+}
+
+enum SymbolType {
+    Var(SymbolVar),
+    Func(SymbolFunc),
+}
+
+struct SymbolMetadata {
+    symbol_type: SymbolType,
+}
+
+struct Symbols {
+    symbols: AHashMap<SSAKey, SymbolMetadata>,
+}
+
+impl Symbols {
+    pub fn new() -> Self {
+        Self {
+            symbols: AHashMap::new(),
+        }
+    }
+}
+
+struct SymbolTable {
+    parent_symbol_table_id: Option<usize>,
+    scoped_symbols: Symbols,
+}
+
+impl SymbolTable {
+    pub fn new(parent_symbol_table_id: Option<usize>) -> Self {
+        Self {
+            parent_symbol_table_id,
+            scoped_symbols: Symbols::new(),
+        }
+    }
+}
+
+pub struct ProgramSymbolTable {
+    symbol_tables: Vec<SymbolTable>,
+    ident_occurences: AHashMap<Rc<str>, usize>,
+    global_symbols: Symbols,
+}
+
+impl ProgramSymbolTable {
+    pub fn new() -> Self {
+        Self {
+            symbol_tables: vec![],
+            ident_occurences: AHashMap::new(),
+            global_symbols: Symbols::new(),
+        }
+    }
+
+    pub fn new_symbol_table(&mut self, parent_symbol_table_id: Option<usize>) -> usize {
+        self.symbol_tables.push(SymbolTable::new(parent_symbol_table_id));
+        self.symbol_tables.len() - 1
+    }
+}
+
+pub trait SymbolTableActions {}
+
 pub struct Compiler {
+    program_symbol_table: ProgramSymbolTable,
     symbol_table: GlobalSymbolTable,
     // register_allocator: RegisterAllocator
 }
@@ -33,6 +107,7 @@ pub struct Compiler {
 impl Compiler {
     pub fn new() -> Self {
         Self {
+            program_symbol_table: ProgramSymbolTable::new(),
             symbol_table: GlobalSymbolTable::new(),
         }
     }
@@ -48,9 +123,10 @@ impl Compiler {
 
         icfg.print();
 
-        // let llvm_builder = icfg.build_llvm();
-        // println!("{}", llvm_builder.build());
-        // llvm_builder.output();
+        let llvm_builder = icfg.build_llvm();
+        llvm_builder.output();
+
+        panic!("Exiting: VM is behind");
 
         let mut vm_builder = VMBuilder::new();
         icfg.load_constants(&mut vm_builder);
@@ -71,15 +147,21 @@ impl Compiler {
                     instr.dissasemble()
                 )
             });
-        println!();
 
         (vm_builder.take_registers(), optimize_instructions(&instructions), instructions)
     }
 
     pub fn make_icfg(&mut self, src_chars: &Vec<char>, error_handler: &mut ErrorHandler) -> ICFG {
-        let mut parser = Parser::new(&src_chars, error_handler);
-        let arena = AstArena::new();
-        let mut ast = parser.parse_ast(&mut self.symbol_table, &arena);
+        let ast_arena = AstArena::new();
+
+        let mut ast = {
+            Parser::new(
+                &src_chars,
+                error_handler,
+                &ast_arena,
+                &mut self.program_symbol_table
+            ).parse_ast()
+        };
 
         ast.type_check_and_constant_fold(error_handler);
 
@@ -89,7 +171,7 @@ impl Compiler {
             Self::log_errors(error_handler);
         }
 
-        Ast::construct_icfg(ast)
+        ast.construct_icfg()
     }
 
     pub fn log_errors(error_handler: &ErrorHandler) -> ! {

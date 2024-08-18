@@ -3,15 +3,60 @@ use llvm_builder::{ Function, LLVMBuilder };
 use crate::{
     compiler::{
         ds::register_allocator::RegisterAllocator,
-        ir::icfg::dag::DAG,
-        traits::{ CFGNodeTrait, Dissasemble, ParseConnectedNodes },
+        ir::icfg::{ cfg::CFG, dag::DAG },
+        traits::{
+            AllocLLVM,
+            CFGNodeGenerateLLVM,
+            CFGNodeTrait,
+            Dissasemble,
+            GenerateLLVM,
+            ParseConnectedNodes,
+        },
     },
     vm::instructions::Instruction,
 };
 
+use super::CFGLabelNode;
+
 #[derive(Debug)]
 pub struct CFGDecisionNode {
     condition: DAG,
+}
+
+impl AllocLLVM for CFGDecisionNode {
+    fn alloc_llvm(
+        &self,
+        llvm_builder: &mut LLVMBuilder,
+        module: &mut llvm_builder::Module,
+        func: &mut Function
+    ) {
+        self.condition.alloc_llvm(llvm_builder, module, func)
+    }
+}
+
+impl CFGNodeGenerateLLVM for CFGDecisionNode {
+    fn build_llvm(
+        &self,
+        node_id: usize,
+        llvm_builder: &mut LLVMBuilder,
+        func: &mut Function,
+        cfg: &CFG
+    ) {
+        let connected_nodes = self.parse_connected_nodes(cfg.get_connected_nodes(node_id));
+
+        self.condition.build_llvm(llvm_builder, func);
+
+        let cmp_ssa_key = llvm_builder.get_latest_ssa_key();
+
+        func.add_instr(
+            format!(
+                "br i1 %{}, label %lbl{}, label %lbl{}",
+                cmp_ssa_key,
+                connected_nodes.0,
+                connected_nodes.1
+            )
+        );
+    }
 }
 
 impl CFGNodeTrait for CFGDecisionNode {
@@ -22,10 +67,6 @@ impl CFGNodeTrait for CFGDecisionNode {
         let mut instructions = vec![];
         self.condition.generate_instructions_as_condition(&mut instructions, register_allocator);
         instructions
-    }
-
-    fn build_llvm(&self, func: &mut Function, llvm_builder: &mut LLVMBuilder) {
-        unimplemented!()
     }
 }
 

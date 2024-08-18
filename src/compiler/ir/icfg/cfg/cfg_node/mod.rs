@@ -19,7 +19,7 @@ pub use label_node::CFGLabelNode;
 use crate::{
     compiler::{
         ds::register_allocator::RegisterAllocator,
-        traits::{ CFGNodeTrait, Dissasemble, ParseConnectedNodes },
+        traits::{ CFGNodeTrait, Dissasemble, GenerateLLVM, ParseConnectedNodes },
     },
     vm::instructions::Instruction,
 };

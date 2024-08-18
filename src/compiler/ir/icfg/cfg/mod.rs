@@ -13,12 +13,32 @@ use crate::{
             value::ValueType,
             vm_builder::VMBuilder,
         },
-        traits::{ CFGNodeTrait, Dissasemble, LoadConstants, ParseConnectedNodes },
+        traits::{
+            AllocLLVM,
+            CFGNodeGenerateLLVM,
+            CFGNodeTrait,
+            Dissasemble,
+            GenerateLLVM,
+            LoadConstants,
+            ParseConnectedNodes,
+        },
     },
     vm::instructions::Instruction,
 };
 
 pub type CFGNodeId = usize;
+
+/* 
+
+What is true for a CFG:
+
+- Goto nodes and decision nodes are always connected to a label node
+    - These are also the only nodes, that is connected to label nodes
+
+- Other nodes are connected to the next node, which is not a label node
+    - Including label nodes
+
+*/
 
 #[derive(Debug)]
 pub struct CFG {
@@ -110,26 +130,67 @@ impl LoadConstants for CFG {
     }
 }
 
-impl CFG {
-    pub fn get_fn_info(&self) -> (&String, ValueType) {
-        (&self.fn_name, self.ret_type.clone())
-    }
-
-    pub fn build_llvm(&self, llvm_builder: &mut LLVMBuilder, func: &mut Function) {
+impl AllocLLVM for CFG {
+    fn alloc_llvm(&self, llvm_builder: &mut LLVMBuilder, module: &mut Module, func: &mut Function) {
         for cfg_node_type in self.nodes.iter().map(|node| node.get_node_type()) {
             match cfg_node_type {
                 CFGNodeType::ProcessNode(process_node) => {
-                    process_node.build_llvm(func, llvm_builder);
+                    process_node.alloc_llvm(llvm_builder, module, func);
+                }
+                CFGNodeType::TerminateNode(terminate_node) => {
+                    terminate_node.alloc_llvm(llvm_builder, module, func);
                 }
                 CFGNodeType::DecisionNode(decision_node) => {
-                    decision_node.build_llvm(func, llvm_builder);
+                    decision_node.alloc_llvm(llvm_builder, module, func);
                 }
-                CFGNodeType::TerminateNode(_) => {}
-                _ => {
-                    panic!("CFGNode not supported");
+                CFGNodeType::DropNode(drop_node) => {
+                    drop_node.alloc_llvm(llvm_builder, module, func);
+                }
+                CFGNodeType::GotoNode(goto_node) => {
+                    goto_node.alloc_llvm(llvm_builder, module, func);
+                }
+                CFGNodeType::ReturnNode(return_node) => {
+                    return_node.alloc_llvm(llvm_builder, module, func);
+                }
+                CFGNodeType::LabelNode(label_node) => {
+                    label_node.alloc_llvm(llvm_builder, module, func);
                 }
             }
         }
+    }
+}
+
+impl GenerateLLVM for CFG {
+    fn build_llvm(&self, llvm_builder: &mut LLVMBuilder, func: &mut Function) {
+        for (i, cfg_node_type) in self.nodes
+            .iter()
+            .enumerate()
+            .map(|(i, node)| (i, node.get_node_type())) {
+            match cfg_node_type {
+                CFGNodeType::ProcessNode(process_node) => {
+                    process_node.build_llvm(llvm_builder, func);
+                }
+                CFGNodeType::DecisionNode(decision_node) => {
+                    decision_node.build_llvm(i, llvm_builder, func, self);
+                }
+                CFGNodeType::LabelNode(label_node) => {
+                    label_node.build_llvm(i, llvm_builder, func, self);
+                }
+                CFGNodeType::GotoNode(goto_node) => {
+                    goto_node.build_llvm(i, llvm_builder, func, self);
+                }
+                CFGNodeType::TerminateNode(_) => {}
+                _ => {
+                    unimplemented!("CFGNode not supported (build_llvm)");
+                }
+            }
+        }
+    }
+}
+
+impl CFG {
+    pub fn get_fn_info(&self) -> (&String, ValueType) {
+        (&self.fn_name, self.ret_type.clone())
     }
 
     pub fn generate_instructions(

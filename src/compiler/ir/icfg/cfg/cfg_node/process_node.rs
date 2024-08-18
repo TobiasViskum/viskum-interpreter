@@ -4,7 +4,7 @@ use crate::{
     compiler::{
         ds::register_allocator::RegisterAllocator,
         ir::icfg::dag::DAG,
-        traits::{ CFGNodeTrait, Dissasemble, ParseConnectedNodes },
+        traits::{ AllocLLVM, CFGNodeTrait, Dissasemble, GenerateLLVM, ParseConnectedNodes },
     },
     vm::instructions::Instruction,
 };
@@ -12,6 +12,23 @@ use crate::{
 #[derive(Debug)]
 pub struct CFGProcessNode {
     dag: DAG,
+}
+
+impl AllocLLVM for CFGProcessNode {
+    fn alloc_llvm(
+        &self,
+        llvm_builder: &mut LLVMBuilder,
+        module: &mut llvm_builder::Module,
+        func: &mut Function
+    ) {
+        self.dag.alloc_llvm(llvm_builder, module, func)
+    }
+}
+
+impl GenerateLLVM for CFGProcessNode {
+    fn build_llvm(&self, llvm_builder: &mut LLVMBuilder, func: &mut Function) {
+        self.dag.build_llvm(llvm_builder, func)
+    }
 }
 
 impl CFGNodeTrait for CFGProcessNode {
@@ -22,10 +39,6 @@ impl CFGNodeTrait for CFGProcessNode {
         let mut instructions = vec![];
         self.dag.generate_instructions(&mut instructions, register_allocator);
         instructions
-    }
-
-    fn build_llvm(&self, func: &mut Function, llvm_builder: &mut LLVMBuilder) {
-        self.dag.build_llvm(func, llvm_builder)
     }
 }
 

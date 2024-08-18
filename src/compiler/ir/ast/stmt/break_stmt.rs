@@ -3,7 +3,7 @@ use crate::compiler::{
     error_handler::{ CompileError, ErrorHandler, ReportedError },
     ir::icfg::{
         cfg::{ CFGGotoNode, CFGNode, CFGNodeId, CFGNodeType, CFG },
-        icfg_builder::{ CFGBuilder },
+        icfg_builder::{ CFGBuilder, ICFGBuilder },
         ICFG,
     },
     parser::token::TokenMetadata,
@@ -27,7 +27,7 @@ impl BreakStmt {
 impl StmtTrait for BreakStmt {
     fn compile_into_icfg(
         &self,
-        icfg: &mut ICFG,
+        icfg_builder: &mut ICFGBuilder,
         cfg_builder: &mut CFGBuilder,
         goto_node_ids: &mut GotoNodeIds
     ) {

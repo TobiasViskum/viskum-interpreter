@@ -3,7 +3,15 @@ use llvm_builder::{ Function, LLVMBuilder };
 use crate::{
     compiler::{
         ds::register_allocator::RegisterAllocator,
-        traits::{ CFGNodeTrait, Dissasemble, ParseConnectedNodes },
+        ir::icfg::cfg::CFG,
+        traits::{
+            AllocLLVM,
+            CFGNodeGenerateLLVM,
+            CFGNodeTrait,
+            Dissasemble,
+            GenerateLLVM,
+            ParseConnectedNodes,
+        },
     },
     vm::instructions::Instruction,
 };
@@ -11,13 +19,32 @@ use crate::{
 #[derive(Debug)]
 pub struct CFGGotoNode;
 
+impl AllocLLVM for CFGGotoNode {
+    fn alloc_llvm(
+        &self,
+        llvm_builder: &mut LLVMBuilder,
+        module: &mut llvm_builder::Module,
+        func: &mut Function
+    ) {}
+}
+
+impl CFGNodeGenerateLLVM for CFGGotoNode {
+    fn build_llvm(
+        &self,
+        node_id: usize,
+        llvm_builder: &mut LLVMBuilder,
+        func: &mut Function,
+        cfg: &CFG
+    ) {
+        let connected_node = self.parse_connected_nodes(cfg.get_connected_nodes(node_id));
+
+        func.add_instr(format!("br label %lbl{}", connected_node))
+    }
+}
+
 impl CFGNodeTrait for CFGGotoNode {
     fn generate_instructions(&self, _: &mut RegisterAllocator) -> Vec<Instruction> {
         vec![Instruction::Goto { jmp_pos: 0 }]
-    }
-
-    fn build_llvm(&self, func: &mut Function, llvm_builder: &mut LLVMBuilder) {
-        unimplemented!()
     }
 }
 

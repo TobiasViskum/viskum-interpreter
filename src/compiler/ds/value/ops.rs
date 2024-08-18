@@ -11,6 +11,15 @@ pub enum BinaryOp {
     ComparisonOp(ComparisonOp),
 }
 
+impl BinaryOp {
+    pub fn is_cmp(&self) -> bool {
+        match self {
+            Self::ComparisonOp(_) => true,
+            _ => false,
+        }
+    }
+}
+
 impl Dissasemble for BinaryOp {
     fn dissasemble(&self) -> String {
         match self {

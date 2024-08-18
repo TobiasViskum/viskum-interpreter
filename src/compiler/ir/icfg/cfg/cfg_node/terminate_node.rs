@@ -3,7 +3,7 @@ use llvm_builder::{ Function, LLVMBuilder };
 use crate::{
     compiler::{
         ds::register_allocator::RegisterAllocator,
-        traits::{ CFGNodeTrait, Dissasemble, ParseConnectedNodes },
+        traits::{ AllocLLVM, CFGNodeTrait, Dissasemble, GenerateLLVM, ParseConnectedNodes },
     },
     vm::instructions::Instruction,
 };
@@ -19,13 +19,24 @@ pub struct CFGTerminateNode {
     termination_state: TerminationState,
 }
 
+impl AllocLLVM for CFGTerminateNode {
+    fn alloc_llvm(
+        &self,
+        _llvm_builder: &mut LLVMBuilder,
+        _module: &mut llvm_builder::Module,
+        _func: &mut Function
+    ) {}
+}
+
+impl GenerateLLVM for CFGTerminateNode {
+    fn build_llvm(&self, llvm_builder: &mut LLVMBuilder, func: &mut Function) {
+        unimplemented!()
+    }
+}
+
 impl CFGNodeTrait for CFGTerminateNode {
     fn generate_instructions(&self, _: &mut RegisterAllocator) -> Vec<Instruction> {
         if !self.is_start() { vec![Instruction::Halt] } else { vec![] }
-    }
-
-    fn build_llvm(&self, func: &mut Function, llvm_builder: &mut LLVMBuilder) {
-        unimplemented!()
     }
 }
 

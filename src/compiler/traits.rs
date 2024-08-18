@@ -1,7 +1,7 @@
 use std::{ fmt::Debug, rc::Rc };
 
 use ahash::AHashMap;
-use llvm_builder::{ Function, LLVMBuilder, LLVMType, Operand };
+use llvm_builder::{ Function, LLVMBuilder, LLVMType, Module, Operand };
 
 use crate::vm::instructions::Instruction;
 
@@ -13,7 +13,11 @@ use super::{
         vm_builder::VMBuilder,
     },
     error_handler::{ CompileError, ErrorHandler, SrcCharsRange },
-    ir::{ ast::stmt::GotoNodeIds, icfg::{ dag::DAG, icfg_builder::{ CFGBuilder }, ICFG } },
+    ir::{
+        ast::stmt::GotoNodeIds,
+        icfg::{ cfg::CFG, dag::DAG, icfg_builder::{ CFGBuilder, ICFGBuilder }, ICFG },
+    },
+    ProgramSymbolTable,
 };
 
 pub trait Dissasemble {
@@ -67,14 +71,15 @@ pub trait LinearControlFlow {
 pub trait StmtTrait {
     fn compile_into_icfg(
         &self,
-        icfg: &mut ICFG,
+        icfg: &mut ICFGBuilder,
         cfg_builder: &mut CFGBuilder,
         goto_node_ids: &mut GotoNodeIds
     );
 
     fn validate_stmt(
         &mut self,
-        symbol_table_ref: &mut SymbolTableRef,
+        program_symbol_table: &mut ProgramSymbolTable,
+        symbol_table_id: usize,
         error_handler: &mut ErrorHandler
     );
 
@@ -97,6 +102,10 @@ pub trait DAGNodeTrait: ParseConnectedNodes {
     fn expected_connected_nodes(&self) -> usize;
 }
 
+pub trait AllocLLVM {
+    fn alloc_llvm(&self, llvm_builder: &mut LLVMBuilder, module: &mut Module, func: &mut Function);
+}
+
 pub trait DAGNodeGenerateLLVM: DAGNodeTrait {
     fn generate_llvm<T>(
         &self,
@@ -106,9 +115,29 @@ pub trait DAGNodeGenerateLLVM: DAGNodeTrait {
         dag: &DAG
     ) -> Operand
         where T: LLVMType;
+
+    fn alloc_llvm<T>(
+        &self,
+        llvm_builder: &mut LLVMBuilder,
+        module: &mut Module,
+        func: &mut Function
+    )
+        where T: LLVMType;
 }
 pub trait CFGNodeTrait: ParseConnectedNodes {
     fn generate_instructions(&self, register_allocator: &mut RegisterAllocator) -> Vec<Instruction>;
+}
 
-    fn build_llvm(&self, func: &mut Function, llvm_builder: &mut LLVMBuilder);
+pub trait GenerateLLVM: AllocLLVM {
+    fn build_llvm(&self, llvm_builder: &mut LLVMBuilder, func: &mut Function);
+}
+
+pub trait CFGNodeGenerateLLVM: CFGNodeTrait {
+    fn build_llvm(
+        &self,
+        node_id: usize,
+        llvm_builder: &mut LLVMBuilder,
+        func: &mut Function,
+        cfg: &CFG
+    );
 }

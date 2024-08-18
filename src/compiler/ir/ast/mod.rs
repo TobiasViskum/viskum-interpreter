@@ -6,7 +6,7 @@ use typed_arena::Arena;
 
 use crate::compiler::{ error_handler::ErrorHandler, traits::{ Dissasemble, StmtTrait } };
 
-use super::icfg::{ cfg::CFG, icfg_builder::CFGBuilder, ICFG };
+use super::icfg::{ cfg::CFG, icfg_builder::{ CFGBuilder, ICFGBuilder }, ICFG };
 
 pub mod expr;
 pub mod stmt;
@@ -67,18 +67,18 @@ impl<'ast> Ast<'ast> {
     }
 
     pub fn construct_icfg(self) -> ICFG {
-        let mut cfg_builder = CFGBuilder::new();
         let mut goto_node_ids = GotoNodeIds::new();
 
-        let mut icfg = ICFG::new();
-        self.main_scope.compile_into_icfg(&mut icfg, &mut cfg_builder, &mut goto_node_ids);
+        let mut icfg_builder = ICFGBuilder::new();
+        let mut cfg_builder = CFGBuilder::new();
+        self.main_scope.compile_into_icfg(&mut icfg_builder, &mut cfg_builder, &mut goto_node_ids);
 
         let cfg = cfg_builder.end_entry_cfg();
-        let entry_cfg_id = icfg.push_cfg(cfg);
+        let entry_cfg_id = icfg_builder.push_cfg(cfg);
 
-        icfg.set_entry_cfg(entry_cfg_id);
+        icfg_builder.set_entry_cfg(entry_cfg_id);
 
-        icfg
+        icfg_builder.take_cfg()
     }
 
     pub fn type_check_and_constant_fold(&mut self, error_handler: &mut ErrorHandler) {

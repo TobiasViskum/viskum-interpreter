@@ -35,7 +35,7 @@ type ReturnType<'b> = Result<Stmt<'b>, CompileError>;
 type Args<'b> = (&'b AstArena<'b>, SymbolTableRef);
 
 impl<'a> Parser<'a> {
-    pub(super) fn statement<'b>(&mut self, (arena, symbol_table_ref): Args<'b>) -> ReturnType<'b> {
+    pub(super) fn statement<'b>(&mut self) -> ReturnType<'b> {
         let curr = current!(self, ttype);
 
         match curr {

@@ -3,7 +3,7 @@ use llvm_builder::{ Function, LLVMBuilder };
 use crate::{
     compiler::{
         ds::register_allocator::RegisterAllocator,
-        traits::{ CFGNodeTrait, Dissasemble, ParseConnectedNodes },
+        traits::{ AllocLLVM, CFGNodeTrait, Dissasemble, GenerateLLVM, ParseConnectedNodes },
     },
     vm::instructions::Instruction,
 };
@@ -11,13 +11,26 @@ use crate::{
 #[derive(Debug)]
 pub struct CFGDropNode {}
 
+impl AllocLLVM for CFGDropNode {
+    fn alloc_llvm(
+        &self,
+        llvm_builder: &mut LLVMBuilder,
+        module: &mut llvm_builder::Module,
+        func: &mut Function
+    ) {
+        unimplemented!()
+    }
+}
+
+impl GenerateLLVM for CFGDropNode {
+    fn build_llvm(&self, llvm_builder: &mut LLVMBuilder, func: &mut Function) {
+        unimplemented!()
+    }
+}
+
 impl CFGNodeTrait for CFGDropNode {
     fn generate_instructions(&self, _: &mut RegisterAllocator) -> Vec<Instruction> {
         todo!()
-    }
-
-    fn build_llvm(&self, func: &mut Function, llvm_builder: &mut LLVMBuilder) {
-        unimplemented!()
     }
 }
 

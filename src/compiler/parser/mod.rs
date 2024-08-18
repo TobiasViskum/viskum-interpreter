@@ -26,6 +26,7 @@ use super::{
     error_handler::ErrorHandler,
     ir::ast::{ stmt::BlockStmt, Ast, AstArena },
     traits::SymbolTableAlloc,
+    ProgramSymbolTable,
 };
 
 #[derive(Debug, Hash)]
@@ -87,11 +88,18 @@ pub struct Parser<'a> {
     error_handler: &'a mut ErrorHandler,
     current: usize,
     tokens: Vec<Token>,
+    ast_arena: &'a AstArena<'a>,
+    program_symbol_table: &'a mut ProgramSymbolTable,
     parse_rules: &'static [ParseRule; 41],
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(source: &'a Vec<char>, error_handler: &'a mut ErrorHandler) -> Self {
+    pub fn new(
+        source: &'a Vec<char>,
+        error_handler: &'a mut ErrorHandler,
+        ast_arena: &'a AstArena<'a>,
+        program_symbol_table: &'a mut ProgramSymbolTable
+    ) -> Self {
         let tokens = Lexer::new(source).get_tokens();
 
         Self {
@@ -101,21 +109,21 @@ impl<'a> Parser<'a> {
             current: 0,
             error_handler,
             parse_rules: &PARSE_RULES,
+            ast_arena,
+            program_symbol_table,
         }
     }
 
-    pub fn parse_ast<'b>(
-        &'a mut self,
-        global_symbol_table: &mut GlobalSymbolTable,
-        ast_arena: &'b AstArena<'b>
-    ) -> Ast<'b> {
-        let symbol_table_ref = global_symbol_table.alloc_symbol_table(None);
+    pub fn parse_ast<'b>(&'a mut self) -> Ast<'b> where 'b: 'a {
+        // let symbol_table_ref = global_symbol_table.alloc_symbol_table(None);
 
-        let mut main_scope = BlockStmt::new(symbol_table_ref, true);
+        let symbol_table_id = self.program_symbol_table.new_symbol_table(None);
+
+        let mut main_scope = BlockStmt::new(symbol_table_id);
 
         while !self.is_at_end() {
             // println!("I run, {} {:?}", self.is_at_end(), current!(self, ttype));
-            match self.statement((ast_arena, symbol_table_ref)) {
+            match self.statement() {
                 Ok(stmt) => main_scope.push_stmt(stmt),
                 Err(err) => {
                     self.report_compile_error(err);

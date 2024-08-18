@@ -8,7 +8,7 @@ use crate::compiler::{
         icfg::{
             cfg::{ CFGNode, CFGNodeId, CFGNodeType, CFGProcessNode, CFG },
             dag::DAG,
-            icfg_builder::{ CFGBuilder },
+            icfg_builder::{ CFGBuilder, ICFGBuilder },
             ICFG,
         },
     },
@@ -53,7 +53,7 @@ impl<'ast> ExprStmt<'ast> {
 impl<'ast> StmtTrait for ExprStmt<'ast> {
     fn compile_into_icfg(
         &self,
-        icfg: &mut ICFG,
+        icfg_builder: &mut ICFGBuilder,
         cfg_builder: &mut CFGBuilder,
         goto_node_ids: &mut GotoNodeIds
     ) {

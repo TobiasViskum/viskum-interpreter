@@ -2,14 +2,17 @@ pub mod cfg;
 pub mod dag;
 pub mod icfg_builder;
 
+use std::fmt::Debug;
+
 use ahash::AHashMap;
-use cfg::{ CFGNodeType, CFG };
+use cfg::{ CFGLabelNode, CFGNode, CFGNodeType, CFG };
 use llvm_builder::{ Function, LLVMBuilder, Module };
+use typed_arena::Arena;
 
 use crate::{
     compiler::{
         ds::{ register_allocator::RegisterAllocator, vm_builder::VMBuilder },
-        traits::{ Dissasemble, LoadConstants, ParseConnectedNodes },
+        traits::{ AllocLLVM, Dissasemble, GenerateLLVM, LoadConstants, ParseConnectedNodes },
     },
     vm::instructions::Instruction,
 };
@@ -48,10 +51,11 @@ impl ICFG {
     pub fn build_llvm(&self) -> LLVMBuilder {
         let mut llvm_builder = llvm_builder::LLVMBuilder::new();
 
+        let mut module = Module::new();
         let mut func = Function::new("main".to_string(), llvm_builder::Type::I32);
+        self.cfgs[0].alloc_llvm(&mut llvm_builder, &mut module, &mut func);
         self.cfgs[0].build_llvm(&mut llvm_builder, &mut func);
         func.add_instr("ret i32 0".to_string());
-        let mut module = Module::new();
         module.push_func(func);
         llvm_builder.push_mod(module);
         llvm_builder

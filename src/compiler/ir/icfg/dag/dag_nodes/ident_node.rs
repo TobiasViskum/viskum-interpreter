@@ -1,10 +1,11 @@
 use std::rc::Rc;
 
-use llvm_builder::{ Operand, Var };
+use llvm_builder::{ Function, LLVMBuilder, LLVMType, Module, Operand, Var };
 
 use crate::compiler::{
     ds::symbol_table::SSAKey,
-    traits::{ DAGNodeGenerateLLVM, DAGNodeTrait, ParseConnectedNodes },
+    ir::icfg::dag::DAG,
+    traits::{ AllocLLVM, DAGNodeGenerateLLVM, DAGNodeTrait, ParseConnectedNodes },
     Dissasemble,
 };
 
@@ -28,14 +29,22 @@ impl DAGIdentNode {
 }
 
 impl DAGNodeGenerateLLVM for DAGIdentNode {
+    fn alloc_llvm<T>(
+        &self,
+        _llvm_builder: &mut LLVMBuilder,
+        _module: &mut Module,
+        _func: &mut Function
+    )
+        where T: LLVMType {}
+
     fn generate_llvm<T>(
         &self,
         node_id: usize,
-        func: &mut llvm_builder::Function,
-        llvm_builder: &mut llvm_builder::LLVMBuilder,
-        dag: &crate::compiler::ir::icfg::dag::DAG
-    ) -> llvm_builder::Operand
-        where T: llvm_builder::LLVMType
+        func: &mut Function,
+        llvm_builder: &mut LLVMBuilder,
+        dag: &DAG
+    ) -> Operand
+        where T: LLVMType
     {
         let var_key = llvm_builder.get_var_ssa_key(self.get_ident());
         let result_key = llvm_builder.req_ssa_key();

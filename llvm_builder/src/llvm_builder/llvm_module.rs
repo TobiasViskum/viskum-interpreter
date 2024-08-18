@@ -25,8 +25,8 @@ impl BuildLLVM for Module {
         let mut string_builder = "".to_string();
 
         for function in self.functions.iter() {
-            string_builder += function.build().as_str();
             string_builder += "\n";
+            string_builder += function.build().as_str();
         }
 
         string_builder
