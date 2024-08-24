@@ -19,14 +19,10 @@ use token::Token;
 use crate::macros::create_tokens_and_parse_rules;
 
 use super::{
-    ds::{
-        symbol_table::GlobalSymbolTable,
-        value::{ ops::{ BinaryOp, ComparisonOp, UnaryOp }, Value },
-    },
-    error_handler::ErrorHandler,
-    ir::ast::{ stmt::BlockStmt, Ast, AstArena },
-    traits::SymbolTableAlloc,
-    ProgramSymbolTable,
+    ds::{ value::{ ops::{ BinaryOp, ComparisonOp, UnaryOp }, Value } },
+    error_handler::{ CompileError, ErrorHandler },
+    ir::ast::{ expr::ExprBuilder, stmt::{ BlockStmt, Stmt }, Ast, AstArena },
+    ProgramSymbolTablePhase1,
 };
 
 #[derive(Debug, Hash)]
@@ -47,6 +43,14 @@ impl Lexeme {
 
     pub fn take_lexeme_rc(self) -> Rc<str> {
         self.lexeme
+    }
+
+    pub fn borrow_ident(&self) -> &Rc<str> {
+        &self.lexeme
+    }
+
+    pub fn get_ident(&self) -> Rc<str> {
+        Rc::clone(&self.lexeme)
     }
 
     pub fn parse_number(&self) -> Option<Value> {
@@ -82,24 +86,27 @@ impl Lexeme {
     }
 }
 
+pub type StmtMethodRetType<'b> = Result<Stmt<'b>, CompileError>;
+pub type StmtMethodArgs<'b, 'c> = (&'c mut ProgramSymbolTablePhase1, &'b AstArena<'b>);
+
+pub type ExprMethodRetType = Result<(), CompileError>;
+pub type ExprMethodArgs<'b, 'c> = (
+    &'c mut ExprBuilder<'b>,
+    &'c mut ProgramSymbolTablePhase1,
+    &'b AstArena<'b>,
+);
+
 pub struct Parser<'a> {
     source: &'a Vec<char>,
     panic_mode: bool,
     error_handler: &'a mut ErrorHandler,
     current: usize,
     tokens: Vec<Token>,
-    ast_arena: &'a AstArena<'a>,
-    program_symbol_table: &'a mut ProgramSymbolTable,
-    parse_rules: &'static [ParseRule; 41],
+    parse_rules: &'static [ParseRule; 46],
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(
-        source: &'a Vec<char>,
-        error_handler: &'a mut ErrorHandler,
-        ast_arena: &'a AstArena<'a>,
-        program_symbol_table: &'a mut ProgramSymbolTable
-    ) -> Self {
+    pub fn new(source: &'a Vec<char>, error_handler: &'a mut ErrorHandler) -> Self {
         let tokens = Lexer::new(source).get_tokens();
 
         Self {
@@ -109,22 +116,27 @@ impl<'a> Parser<'a> {
             current: 0,
             error_handler,
             parse_rules: &PARSE_RULES,
-            ast_arena,
-            program_symbol_table,
         }
     }
 
-    pub fn parse_ast<'b>(&'a mut self) -> Ast<'b> where 'b: 'a {
-        // let symbol_table_ref = global_symbol_table.alloc_symbol_table(None);
-
-        let symbol_table_id = self.program_symbol_table.new_symbol_table(None);
+    pub fn parse_ast<'b, 'c>(
+        &'a mut self,
+        program_symbol_table: &'c mut ProgramSymbolTablePhase1,
+        ast_arena: &'b AstArena<'b>
+    ) -> Ast<'b>
+        where 'b: 'a + 'c
+    {
+        let symbol_table_id = program_symbol_table.new_symbol_table(None, None);
 
         let mut main_scope = BlockStmt::new(symbol_table_id);
 
         while !self.is_at_end() {
-            // println!("I run, {} {:?}", self.is_at_end(), current!(self, ttype));
-            match self.statement() {
-                Ok(stmt) => main_scope.push_stmt(stmt),
+            match self.statement((program_symbol_table, ast_arena)) {
+                Ok(stmt) =>
+                    match main_scope.push_stmt(stmt, program_symbol_table) {
+                        Ok(_) => {}
+                        Err(err) => self.error_handler.report_compile_error(err),
+                    }
                 Err(err) => {
                     self.report_compile_error(err);
                 }
@@ -154,6 +166,7 @@ create_tokens_and_parse_rules!(
     [TokenDoubleQuote]          = { string,         None,           PrecNone        },
     [TokenSemicolon]            = { None,           None,           PrecNone        },
     [TokenComma]                = { None,           None,           PrecNone        },
+    [TokenDot]                  = { None,           None,           PrecNone        },
 
     // Unary operators  
     [TokenBang]                 = { unary,          None,           PrecNone        },
@@ -196,6 +209,10 @@ create_tokens_and_parse_rules!(
     [TokenContinue]             = { None,           None,           PrecNone        },
     [TokenLoop]                 = { None,           None,           PrecNone        },
     [TokenWhile]                = { None,           None,           PrecNone        },
+    [TokenEnd]                  = { None,           None,           PrecNone        },
+    [TokenDo]                   = { None,           None,           PrecNone        },
+    [TokenElif]                 = { None,           None,           PrecNone        },
+    [TokenDef]                  = { None,           None,           PrecNone        },
 
     [TokenError]                = { None,           None,           PrecNone        },
     [TokenEOF]                  = { None,           None,           PrecNone        },
@@ -231,5 +248,13 @@ impl TokenType {
             // Self::TokenStar => Ok(UnaryOp::Deref),
             _ => Err(()),
         }
+    }
+
+    pub fn can_terminate_block(&self) -> bool {
+        matches!(self, TokenType::TokenEnd | TokenType::TokenElse | TokenType::TokenElif)
+    }
+
+    pub fn requires_end_block(&self) -> bool {
+        matches!(self, TokenType::TokenIf | TokenType::TokenLoop)
     }
 }

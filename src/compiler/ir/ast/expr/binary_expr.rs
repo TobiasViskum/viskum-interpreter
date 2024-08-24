@@ -2,10 +2,11 @@ use ahash::AHashMap;
 
 use crate::{
     compiler::{
-        ds::{ symbol_table::{ SSAKey, SymbolTableRef }, value::{ ops::BinaryOp, ValueType } },
+        ds::{ ssa_ident::SSAIdent, value::{ ops::BinaryOp, ValueType } },
         error_handler::{ CompileError, ReportedError, SrcCharsRange },
-        ir::icfg::dag::{ DAGBinaryNode, DAGNode, DAG },
+        ir::icfg::{ dag::{ DAGBinaryNode, DAGNode, DAG }, icfg_builder::ICFGBuilder },
         traits::{ Dissasemble, ExprTrait },
+        ProgramSymbolTablePhase1,
     },
     macros::merge_chars_range,
 };
@@ -17,6 +18,7 @@ pub struct BinaryExpr<'ast> {
     lhs: &'ast mut Expr<'ast>,
     op: BinaryOp,
     rhs: &'ast mut Expr<'ast>,
+    result_type: Option<ValueType>,
 }
 
 impl<'ast> BinaryExpr<'ast> {
@@ -25,6 +27,7 @@ impl<'ast> BinaryExpr<'ast> {
             lhs,
             op,
             rhs,
+            result_type: None,
         }
     }
 
@@ -48,14 +51,20 @@ impl<'ast> Dissasemble for BinaryExpr<'ast> {
 }
 
 impl<'ast> ExprTrait for BinaryExpr<'ast> {
-    fn type_check(&mut self, symbol_table_ref: &SymbolTableRef) -> Result<ValueType, CompileError> {
+    fn type_check(
+        &mut self,
+        program_symbol_table: &ProgramSymbolTablePhase1
+    ) -> Result<ValueType, CompileError> {
         let (lhs_type, rhs_type) = (
-            self.lhs.type_check(symbol_table_ref)?,
-            (*self.rhs).type_check(symbol_table_ref)?,
+            self.lhs.type_check(program_symbol_table)?,
+            self.rhs.type_check(program_symbol_table)?,
         );
 
         match lhs_type.try_binary(&rhs_type, self.op) {
-            Ok(v) => Ok(v),
+            Ok(v) => {
+                self.result_type = Some(v.clone());
+                Ok(v)
+            }
             Err(msg) => {
                 let metadata = self.collect_metadata();
                 Err(CompileError::new(ReportedError::new(msg, metadata)))
@@ -66,11 +75,19 @@ impl<'ast> ExprTrait for BinaryExpr<'ast> {
     fn compile_into_dag(
         &self,
         dag: &mut DAG,
-        ident_node_id_map: &mut AHashMap<SSAKey, usize>
+        ident_node_id_map: &mut AHashMap<SSAIdent, usize>,
+        icfg_builder: &mut ICFGBuilder
     ) -> usize {
-        let lhs_node_id = self.lhs.compile_into_dag(dag, ident_node_id_map);
-        let rhs_node_id = self.rhs.compile_into_dag(dag, ident_node_id_map);
-        let binary_node_id = dag.push_node(DAGNode::BinaryNode(DAGBinaryNode::new(self.op)));
+        let lhs_node_id = self.lhs.compile_into_dag(dag, ident_node_id_map, icfg_builder);
+        let rhs_node_id = self.rhs.compile_into_dag(dag, ident_node_id_map, icfg_builder);
+        let binary_node_id = dag.push_node(
+            DAGNode::BinaryNode(
+                DAGBinaryNode::new(
+                    self.op,
+                    self.result_type.as_ref().expect("Expected result type in BinaryExpr").clone()
+                )
+            )
+        );
         dag.add_edge(binary_node_id, lhs_node_id);
         dag.add_edge(binary_node_id, rhs_node_id);
         binary_node_id

@@ -2,18 +2,19 @@ use std::rc::Rc;
 
 use crate::compiler::{
     ds::value::ValueType,
-    error_handler::{CompileError, ReportedError},
-    ir::ast::stmt::{FunctionStmt, VarAssignStmt, VarDefStmt},
+    error_handler::{ CompileError, ReportedError },
+    ir::ast::stmt::{ FunctionStmt, VarAssignStmt, VarDefStmt },
     parser::token::TokenMetadata,
     print_todo,
-    traits::{ExprTrait, SymbolTableActions, SymbolTableAlloc},
+    traits::{ ExprTrait, SymbolTableActions, SymbolTableAlloc },
     Dissasemble,
 };
 
 use super::{
     clone_table_ref,
-    helper_structs::{Symbol, SymbolFunction, SymbolVariable, Symbols},
-    GlobalSymbolTable, SSAKey,
+    helper_structs::{ Symbol, SymbolFunction, SymbolVariable, Symbols },
+    GlobalSymbolTable,
+    SSAIdent,
 };
 
 #[derive(Debug)]
@@ -28,7 +29,7 @@ impl<'com> ScopedSymbolTable<'com> {
     pub fn new(
         parent: Option<&'com Self>,
         global_symbol_table: &'com mut GlobalSymbolTable<'com>,
-        fn_return_type: Option<ValueType>,
+        fn_return_type: Option<ValueType>
     ) -> Self {
         Self {
             symbols: Symbols::new(),
@@ -38,7 +39,7 @@ impl<'com> ScopedSymbolTable<'com> {
         }
     }
 
-    pub fn get_all_vars(&self) -> Vec<SSAKey> {
+    pub fn get_all_vars(&self) -> Vec<SSAIdent> {
         self.symbols
             .iter()
             .filter(|&(_, (symbol, _))| symbol.is_var())
@@ -59,13 +60,12 @@ impl<'com> ScopedSymbolTable<'com> {
         name: &Rc<str>,
         value_type: ValueType,
         is_mutable: bool,
-        metadata: TokenMetadata,
+        metadata: TokenMetadata
     ) {
         let symbol = Symbol::new_variable(value_type, is_mutable, metadata);
 
         let ssa_subscript = self.get_new_ident_subscript(name);
-        self.symbols
-            .insert(SSAKey::new(Rc::clone(name), ssa_subscript), symbol);
+        self.symbols.insert(SSAIdent::new(Rc::clone(name), ssa_subscript), symbol);
     }
 
     pub fn get_new_ident_subscript(&mut self, ident: &Rc<str>) -> usize {
@@ -76,7 +76,7 @@ impl<'com> ScopedSymbolTable<'com> {
         let symbol = Symbol::new_function(
             fn_stmt.get_return_type().clone(),
             fn_stmt.get_args().clone(),
-            fn_stmt.get_metadata(),
+            fn_stmt.get_metadata()
         );
 
         print_todo(
@@ -91,74 +91,89 @@ impl<'com> ScopedSymbolTable<'com> {
     #[must_use]
     pub fn assing_var(
         &mut self,
-        var_assign_stmt: &mut VarAssignStmt,
-    ) -> Result<SSAKey, CompileError> {
+        var_assign_stmt: &mut VarAssignStmt
+    ) -> Result<SSAIdent, CompileError> {
         let symbol_table_ref = SymbolTableRef::new(self as *mut ScopedSymbolTable);
 
-        let value_type = var_assign_stmt
-            .get_mut_value_expr()
-            .type_check(&symbol_table_ref)?;
+        let value_type = var_assign_stmt.get_mut_value_expr().type_check(&symbol_table_ref)?;
 
-        var_assign_stmt
-            .get_mut_target_expr()
-            .type_check(&symbol_table_ref)?;
+        var_assign_stmt.get_mut_target_expr().type_check(&symbol_table_ref)?;
 
         let ident_expr_lexeme = var_assign_stmt.get_target_expr().get_lexeme();
 
-        let symbol_var = self.lookup_as_var(&ident_expr_lexeme).or_else(|msg| {
-            Err(CompileError::new(ReportedError::new(
-                msg,
-                var_assign_stmt.get_target_expr().collect_metadata(),
-            )))
-        })?;
+        let symbol_var = self
+            .lookup_as_var(&ident_expr_lexeme)
+            .or_else(|msg| {
+                Err(
+                    CompileError::new(
+                        ReportedError::new(
+                            msg,
+                            var_assign_stmt.get_target_expr().collect_metadata()
+                        )
+                    )
+                )
+            })?;
 
         match symbol_var.get_is_mutable() {
             true => {
                 if symbol_var.get_value_type().is(&value_type) {
-                    let ssa_key =
-                        self.insert(ident_expr_lexeme, Symbol::Variable(symbol_var.clone()));
+                    let ssa_key = self.insert(
+                        ident_expr_lexeme,
+                        Symbol::Variable(symbol_var.clone())
+                    );
                     Ok(ssa_key)
                 } else {
-                    Err(CompileError::new(ReportedError::new(
-                        format!(
-                            "Variable '{}' is of type '{}' but it is assigned to type '{}'",
-                            ident_expr_lexeme,
-                            symbol_var.get_value_type().dissasemble(),
-                            value_type.dissasemble()
-                        ),
-                        {
-                            let mut src_chars_range =
-                                var_assign_stmt.get_target_expr().collect_metadata();
-                            src_chars_range
-                                .merge(&var_assign_stmt.get_value_expr().collect_metadata());
-                            src_chars_range
-                        },
-                    )))
+                    Err(
+                        CompileError::new(
+                            ReportedError::new(
+                                format!(
+                                    "Variable '{}' is of type '{}' but it is assigned to type '{}'",
+                                    ident_expr_lexeme,
+                                    symbol_var.get_value_type().dissasemble(),
+                                    value_type.dissasemble()
+                                ),
+                                {
+                                    let mut src_chars_range = var_assign_stmt
+                                        .get_target_expr()
+                                        .collect_metadata();
+                                    src_chars_range.merge(
+                                        &var_assign_stmt.get_value_expr().collect_metadata()
+                                    );
+                                    src_chars_range
+                                }
+                            )
+                        )
+                    )
                 }
             }
-            false => Err(CompileError::new_multiple(vec![
-                ReportedError::new(
-                    format!(
-                        "Cannot assign a value to immutable variable '{}'",
-                        ident_expr_lexeme
-                    ),
-                    {
-                        let mut src_chars_range =
-                            var_assign_stmt.get_target_expr().collect_metadata();
-                        src_chars_range.merge(&var_assign_stmt.get_value_expr().collect_metadata());
-                        src_chars_range
-                    },
+            false =>
+                Err(
+                    CompileError::new_multiple(
+                        vec![
+                            ReportedError::new(
+                                format!("Cannot assign a value to immutable variable '{}'", ident_expr_lexeme),
+                                {
+                                    let mut src_chars_range = var_assign_stmt
+                                        .get_target_expr()
+                                        .collect_metadata();
+                                    src_chars_range.merge(
+                                        &var_assign_stmt.get_value_expr().collect_metadata()
+                                    );
+                                    src_chars_range
+                                }
+                            ),
+                            ReportedError::new(
+                                format!("Consider changing this to `mut {}`", ident_expr_lexeme),
+                                symbol_var.get_metadata().into()
+                            )
+                        ]
+                    )
                 ),
-                ReportedError::new(
-                    format!("Consider changing this to `mut {}`", ident_expr_lexeme),
-                    symbol_var.get_metadata().into(),
-                ),
-            ])),
         }
     }
 
     #[must_use]
-    pub fn declare_var(&mut self, var_def_stmt: &mut VarDefStmt) -> Result<SSAKey, CompileError> {
+    pub fn declare_var(&mut self, var_def_stmt: &mut VarDefStmt) -> Result<SSAIdent, CompileError> {
         let mut symbol_table_ref = SymbolTableRef::new(self as *mut ScopedSymbolTable);
 
         let value_type = var_def_stmt.get_resolved_value_type(&symbol_table_ref)?;
@@ -166,12 +181,10 @@ impl<'com> ScopedSymbolTable<'com> {
         let symbol = Symbol::new_variable(
             value_type,
             var_def_stmt.get_is_mutable(),
-            var_def_stmt.get_metadata(),
+            var_def_stmt.get_metadata()
         );
 
-        let ssa_key = symbol_table_ref
-            .get_mut()
-            .insert(var_def_stmt.get_name(), symbol);
+        let ssa_key = symbol_table_ref.get_mut().insert(var_def_stmt.get_name(), symbol);
 
         Ok(ssa_key)
     }
@@ -180,58 +193,60 @@ impl<'com> ScopedSymbolTable<'com> {
 impl<'com> SymbolTableAlloc<'com> for ScopedSymbolTable<'com> {
     fn alloc_symbol_table<'b>(
         &'b mut self,
-        return_type: Option<ValueType>,
+        return_type: Option<ValueType>
     ) -> &'b mut ScopedSymbolTable<'com> {
         let self_ptr = clone_table_ref!(self, ScopedSymbolTable);
-        self.global_symbol_table
-            .alloc_empty(Some(self_ptr), return_type)
+        self.global_symbol_table.alloc_empty(Some(self_ptr), return_type)
     }
 }
 
 impl<'com> SymbolTableActions for ScopedSymbolTable<'com> {
-    fn insert(&mut self, ident: Rc<str>, symbol: Symbol) -> SSAKey {
+    fn insert(&mut self, ident: Rc<str>, symbol: Symbol) -> SSAIdent {
         let ssa_subscript = self.get_new_ident_subscript(&ident);
-        self.symbols
-            .insert(SSAKey::new(ident, ssa_subscript), symbol)
+        self.symbols.insert(SSAIdent::new(ident, ssa_subscript), symbol)
     }
 
-    fn lookup(&self, ident: &Rc<str>) -> Option<(&SSAKey, &Symbol)> {
+    fn lookup(&self, ident: &Rc<str>) -> Option<(&SSAIdent, &Symbol)> {
         match self.symbols.lookup(ident) {
             Some(v) => Some(v),
-            None => match self.parent {
-                Some(table) => unsafe { (*table).lookup(ident) },
-                None => self.global_symbol_table.lookup(ident),
-            },
+            None =>
+                match self.parent {
+                    Some(table) => unsafe { (*table).lookup(ident) }
+                    None => self.global_symbol_table.lookup(ident),
+                }
         }
     }
 
     fn lookup_as_fn(&self, ident: &Rc<str>) -> Result<&SymbolFunction, String> {
         match self.symbols.lookup_as_fn(ident) {
             Ok(v) => Ok(v),
-            Err(_) => match self.parent {
-                Some(table) => unsafe { (*table).lookup_as_fn(ident) },
-                None => unsafe { (*self.global_symbol_table).lookup_as_fn(ident) },
-            },
+            Err(_) =>
+                match self.parent {
+                    Some(table) => unsafe { (*table).lookup_as_fn(ident) }
+                    None => unsafe { (*self.global_symbol_table).lookup_as_fn(ident) }
+                }
         }
     }
 
     fn lookup_as_var(&self, ident: &Rc<str>) -> Result<&SymbolVariable, String> {
         match self.symbols.lookup_as_var(ident) {
             Ok(v) => Ok(v),
-            Err(_) => match self.parent {
-                Some(table) => unsafe { (*table).lookup_as_var(ident) },
-                None => unsafe { (*self.global_symbol_table).lookup_as_var(ident) },
-            },
+            Err(_) =>
+                match self.parent {
+                    Some(table) => unsafe { (*table).lookup_as_var(ident) }
+                    None => unsafe { (*self.global_symbol_table).lookup_as_var(ident) }
+                }
         }
     }
 
-    fn lookup_with_key(&self, ssa_key: &SSAKey) -> Option<&Symbol> {
+    fn lookup_with_key(&self, ssa_key: &SSAIdent) -> Option<&Symbol> {
         match self.symbols.lookup_with_key(ssa_key) {
             Some(v) => Some(v),
-            None => match self.parent {
-                Some(table) => unsafe { (*table).lookup_with_key(ssa_key) },
-                None => unsafe { (*self.global_symbol_table).lookup_with_key(ssa_key) },
-            },
+            None =>
+                match self.parent {
+                    Some(table) => unsafe { (*table).lookup_with_key(ssa_key) }
+                    None => unsafe { (*self.global_symbol_table).lookup_with_key(ssa_key) }
+                }
         }
     }
 }

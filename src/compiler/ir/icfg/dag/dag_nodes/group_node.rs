@@ -1,4 +1,5 @@
-use llvm_builder::{ Function, LLVMBuilder, LLVMType, Module, Operand };
+use crate::compiler::ds::value::ValueType;
+use crate::compiler::llvm_builder::{ Function, LLVMBuilder, Module, Operand };
 
 use crate::compiler::{
     ir::icfg::dag::DAG,
@@ -6,27 +7,33 @@ use crate::compiler::{
 };
 
 #[derive(Debug)]
-pub struct DAGGroupNode;
+pub struct DAGGroupNode {
+    result_type: ValueType,
+}
+
+impl DAGGroupNode {
+    pub fn new(result_type: ValueType) -> Self {
+        Self { result_type }
+    }
+}
 
 impl DAGNodeGenerateLLVM for DAGGroupNode {
-    fn alloc_llvm<T>(
+    fn alloc_llvm(
         &self,
         _llvm_builder: &mut LLVMBuilder,
         _module: &mut Module,
         _func: &mut Function
-    )
-        where T: LLVMType {}
+    ) {}
 
-    fn generate_llvm<T>(
+    fn generate_llvm(
         &self,
         node_id: usize,
         func: &mut Function,
         llvm_builder: &mut LLVMBuilder,
         dag: &DAG
-    ) -> Operand
-        where T: LLVMType
-    {
-        unimplemented!()
+    ) -> Operand {
+        let connected_node_id = self.parse_connected_nodes(dag.get_connected_node_ids(node_id));
+        dag.generate_llvm(connected_node_id, func, llvm_builder)
     }
 }
 

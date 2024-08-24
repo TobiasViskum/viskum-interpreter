@@ -1,13 +1,16 @@
 use crate::compiler::{
-    ds::symbol_table::SymbolTableRef,
     error_handler::ErrorHandler,
-    ir::icfg::{
-        cfg::{ CFGGotoNode, CFGNode, CFGNodeId, CFGNodeType, CFG },
-        icfg_builder::{ CFGBuilder, ICFGBuilder },
-        ICFG,
+    ir::{
+        ast::AST_DISSASEMBLE_INDENTATION,
+        icfg::{
+            cfg::{ CFGGotoNode, CFGNode, CFGNodeId, CFGNodeType, CFG },
+            icfg_builder::{ CFGBuilder, ICFGBuilder },
+            ICFG,
+        },
     },
     print_todo,
-    traits::{ Dissasemble, LinearControlFlow, StmtTrait },
+    traits::{ AstDissasemble, Dissasemble, LinearControlFlow, StmtTrait },
+    ProgramSymbolTablePhase1,
 };
 
 use super::{ GotoNodeIds };
@@ -40,7 +43,7 @@ impl StmtTrait for ContinueStmt {
 
     fn validate_stmt(
         &mut self,
-        symbol_table_ref: &mut SymbolTableRef,
+        program_symbol_table: &mut ProgramSymbolTablePhase1,
         error_handler: &mut ErrorHandler
     ) {
         print_todo("Check if continue stmt is used outside of loop")
@@ -53,6 +56,19 @@ impl StmtTrait for ContinueStmt {
 
 impl Dissasemble for ContinueStmt {
     fn dissasemble(&self) -> String {
-        "continue".to_string()
+        "continue\n".to_string()
+    }
+}
+impl AstDissasemble for ContinueStmt {
+    fn ast_dissasemble(
+        &self,
+        program_symbol_table: &mut ProgramSymbolTablePhase1,
+        scope_depth: usize
+    ) -> String {
+        format!(
+            "[{}]: {}continue\n",
+            program_symbol_table.get_current_symbol_table_id(),
+            " ".repeat(AST_DISSASEMBLE_INDENTATION * scope_depth)
+        )
     }
 }

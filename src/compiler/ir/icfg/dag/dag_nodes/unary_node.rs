@@ -1,42 +1,41 @@
-use llvm_builder::{ Function, LLVMBuilder, LLVMType, Module, Operand };
+use crate::compiler::ds::value::ValueType;
+use crate::compiler::llvm_builder::{ Function, LLVMBuilder, Module, Operand };
 
 use crate::compiler::{
     ds::value::ops::UnaryOp,
     ir::icfg::dag::DAG,
-    traits::{ AllocLLVM, DAGNodeGenerateLLVM, DAGNodeTrait, ParseConnectedNodes },
+    traits::{ DAGNodeGenerateLLVM, DAGNodeTrait, ParseConnectedNodes },
     Dissasemble,
 };
 
 #[derive(Debug)]
 pub struct DAGUnaryNode {
     op: UnaryOp,
+    result_type: ValueType,
 }
 
 impl DAGNodeGenerateLLVM for DAGUnaryNode {
-    fn alloc_llvm<T>(
+    fn alloc_llvm(
         &self,
         _llvm_builder: &mut LLVMBuilder,
         _module: &mut Module,
         _func: &mut Function
-    )
-        where T: LLVMType {}
+    ) {}
 
-    fn generate_llvm<T>(
+    fn generate_llvm(
         &self,
         node_id: usize,
         func: &mut Function,
         llvm_builder: &mut LLVMBuilder,
         dag: &DAG
-    ) -> Operand
-        where T: LLVMType
-    {
+    ) -> Operand {
         unimplemented!()
     }
 }
 
 impl DAGUnaryNode {
-    pub fn new(op: UnaryOp) -> Self {
-        Self { op }
+    pub fn new(op: UnaryOp, result_type: ValueType) -> Self {
+        Self { op, result_type }
     }
 
     pub fn get_op(&self) -> UnaryOp {

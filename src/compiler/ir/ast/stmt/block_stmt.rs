@@ -3,19 +3,25 @@ use std::collections::VecDeque;
 use ahash::AHashMap;
 
 use crate::compiler::{
-    ds::symbol_table::{ SSAKey, SymbolTableRef },
+    ds::ssa_ident::SSAIdent,
     error_handler::{ CompileError, ErrorHandler },
-    ir::icfg::{
-        cfg::{ CFGLabelNode, CFGNode, CFGNodeId, CFGNodeType, CFGProcessNode, CFG },
-        dag::DAG,
-        icfg_builder::{ CFGBuilder, ICFGBuilder },
-        ICFG,
+    ir::{
+        ast::expr::{ Expr, FnCallExpr },
+        icfg::{
+            cfg::{ CFGLabelNode, CFGNode, CFGNodeId, CFGNodeType, CFGProcessNode, CFG },
+            dag::DAG,
+            icfg_builder::{ CFGBuilder, ICFGBuilder },
+            ICFG,
+        },
     },
+    parser::token::TokenMetadata,
     print_todo,
-    traits::{ Dissasemble, LinearControlFlow, StmtTrait },
+    traits::{ AstDissasemble, Dissasemble, LinearControlFlow, StmtTrait },
+    ProgramSymbolTablePhase1,
+    SymbolFn,
 };
 
-use super::{ GotoNodeIds, Stmt };
+use super::{ ExprStmt, GotoNodeIds, Stmt };
 
 pub enum ScopeEnv {
     BasicBlock,
@@ -42,6 +48,14 @@ impl<'ast> BlockStmt<'ast> {
         }
     }
 
+    pub fn iter_stmts(&self) -> std::collections::vec_deque::Iter<Stmt<'ast>> {
+        self.stmts.iter()
+    }
+
+    pub fn iter_mut_stmts(&mut self) -> std::collections::vec_deque::IterMut<Stmt<'ast>> {
+        self.stmts.iter_mut()
+    }
+
     pub fn set_is_basic_block(&mut self, new_state: bool) {
         self.is_basic_block = new_state;
     }
@@ -50,25 +64,48 @@ impl<'ast> BlockStmt<'ast> {
         self.symbol_table_id
     }
 
-    pub fn push_stmt(&mut self, stmt: Stmt<'ast>) {
+    #[must_use]
+    pub fn push_stmt(
+        &mut self,
+        stmt: Stmt<'ast>,
+        program_symbol_table: &mut ProgramSymbolTablePhase1
+    ) -> Result<(), CompileError> {
         print_todo("Remove result from below function (wait to declare func until validate_stmt)");
         match stmt {
             Stmt::FunctionStmt(ref fn_stmt) => {
-                // let result = self.symbol_table_ref.get_mut().declare_fn(fn_stmt);
+                let result = program_symbol_table.insert_fn(
+                    fn_stmt.get_ssa_ident().clone(),
+                    SymbolFn::new(
+                        fn_stmt.get_ident_metadata(),
+                        fn_stmt.get_args().clone(),
+                        fn_stmt.get_return_type().clone()
+                    )
+                );
                 self.stmts.push_front(stmt);
-                // result
+                result
             }
-            _ => self.stmts.push_back(stmt),
+            _ => {
+                self.stmts.push_back(stmt);
+                Ok(())
+            }
         }
     }
 
-    pub fn compile_linear_stmts_into_icfg(&self, i: &mut usize) -> CFGNode {
+    pub fn compile_linear_stmts_into_icfg(
+        &self,
+        i: &mut usize,
+        icfg_builder: &mut ICFGBuilder
+    ) -> CFGNode {
         let mut dag = DAG::new();
         let mut ident_node_id_map = AHashMap::new();
         let mut prev_dag_node_id: Option<usize> = None;
 
         while let Some(linear_cf) = self.stmts[*i].as_linear_control_flow() {
-            let dag_node_id = linear_cf.compile_into_dag(&mut dag, &mut ident_node_id_map);
+            let dag_node_id = linear_cf.compile_into_dag(
+                &mut dag,
+                &mut ident_node_id_map,
+                icfg_builder
+            );
 
             if let Some(prev_dag_node_id) = prev_dag_node_id {
                 dag.add_edge(dag_node_id, prev_dag_node_id);
@@ -96,16 +133,6 @@ impl<'ast> BlockStmt<'ast> {
     }
 }
 
-impl<'ast> Dissasemble for BlockStmt<'ast> {
-    fn dissasemble(&self) -> String {
-        let mut string_builder = String::new();
-        for stmt in &self.stmts {
-            string_builder += stmt.dissasemble().as_str();
-        }
-        string_builder
-    }
-}
-
 impl<'ast> StmtTrait for BlockStmt<'ast> {
     fn compile_into_icfg(
         &self,
@@ -115,7 +142,7 @@ impl<'ast> StmtTrait for BlockStmt<'ast> {
     ) {
         self.stmts.iter().for_each(|stmt| {
             if let Some(linear_stmt) = stmt.as_linear_control_flow() {
-                cfg_builder.build_into_linear_basic_block(linear_stmt)
+                cfg_builder.build_into_linear_basic_block(linear_stmt, icfg_builder)
             } else {
                 cfg_builder.push_linear_block_if_exists();
                 stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids);
@@ -131,23 +158,24 @@ impl<'ast> StmtTrait for BlockStmt<'ast> {
                 }
             }
         });
-        if self.is_basic_block {
+        if !self.is_basic_block {
             cfg_builder.push_linear_block_if_exists()
         }
     }
 
-    fn validate_stmt(&mut self, _: &mut SymbolTableRef, error_handler: &mut ErrorHandler) {
-        let symbol_table_ref = &mut self.symbol_table_ref;
+    fn validate_stmt(
+        &mut self,
+        program_symbol_table: &mut ProgramSymbolTablePhase1,
+        error_handler: &mut ErrorHandler
+    ) {
+        let prev_symbol_table_id = program_symbol_table.get_current_symbol_table_id();
+        program_symbol_table.set_current_symbol_table_id(self.symbol_table_id);
+
         self.stmts.iter_mut().for_each(|stmt| {
-            stmt.validate_stmt(symbol_table_ref, error_handler);
+            stmt.validate_stmt(program_symbol_table, error_handler);
         });
 
-        let scope_symbol_table = symbol_table_ref.get();
-
-        // let all_vars_in_scope = scope_symbol_table.get_all_vars();
-        // if all_vars_in_scope.len() > 0 {
-        //     self.stmts.push_back(Stmt::DropStmt(DropStmt::new(all_vars_in_scope)))
-        // }
+        program_symbol_table.set_current_symbol_table_id(prev_symbol_table_id)
     }
 
     fn is_linear_control_flow(&self) -> bool {
@@ -166,7 +194,8 @@ impl<'ast> LinearControlFlow for BlockStmt<'ast> {
     fn compile_into_dag(
         &self,
         dag: &mut DAG,
-        ident_node_id_map: &mut AHashMap<SSAKey, usize>
+        ident_node_id_map: &mut AHashMap<SSAIdent, usize>,
+        icfg_builder: &mut ICFGBuilder
     ) -> usize {
         let linear_stmts = self.stmts
             .iter()
@@ -174,10 +203,41 @@ impl<'ast> LinearControlFlow for BlockStmt<'ast> {
             .collect::<Vec<_>>();
 
         for linear_stmt in linear_stmts {
-            let node_id = linear_stmt.compile_into_dag(dag, ident_node_id_map);
+            let node_id = linear_stmt.compile_into_dag(dag, ident_node_id_map, icfg_builder);
             dag.set_entry_node_id(node_id);
         }
 
         dag.get_entry_node_id()
+    }
+}
+
+impl<'ast> Dissasemble for BlockStmt<'ast> {
+    fn dissasemble(&self) -> String {
+        let mut string_builder = String::new();
+        for stmt in &self.stmts {
+            string_builder += stmt.dissasemble().as_str();
+        }
+        string_builder
+    }
+}
+
+impl<'ast> AstDissasemble for BlockStmt<'ast> {
+    fn ast_dissasemble(
+        &self,
+        program_symbol_table: &mut ProgramSymbolTablePhase1,
+        mut scope_depth: usize
+    ) -> String {
+        scope_depth += 1;
+        let prev_symbol_table_id = program_symbol_table.get_current_symbol_table_id();
+        program_symbol_table.set_current_symbol_table_id(self.symbol_table_id);
+
+        let mut string_builder = String::new();
+        for stmt in self.stmts.iter() {
+            string_builder += stmt.ast_dissasemble(program_symbol_table, scope_depth).as_str();
+        }
+
+        program_symbol_table.set_current_symbol_table_id(prev_symbol_table_id);
+
+        string_builder
     }
 }

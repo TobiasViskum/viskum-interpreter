@@ -16,49 +16,6 @@ use crate::compiler::{
 
 use super::value::ValueType;
 
-#[derive(Hash, Eq, PartialEq, Clone, Debug)]
-pub struct SSAKey {
-    ident: Rc<str>,
-    subscript: usize,
-}
-
-impl SSAKey {
-    pub fn new(ident: Rc<str>, subscript: usize) -> Self {
-        Self { ident, subscript }
-    }
-
-    pub fn get_ident(&self) -> Rc<str> {
-        Rc::clone(&self.ident)
-    }
-
-    pub fn get_subscript(&self) -> usize {
-        self.subscript
-    }
-}
-
-impl Dissasemble for SSAKey {
-    fn dissasemble(&self) -> String {
-        let mut subscript = String::new();
-        for char in self.subscript.to_string().chars() {
-            subscript += match char {
-                '0' => "₀",
-                '1' => "₁",
-                '2' => "₂",
-                '3' => "₃",
-                '4' => "₄",
-                '5' => "₅",
-                '6' => "₆",
-                '7' => "₇",
-                '8' => "₈",
-                '9' => "₉",
-                c => panic!("Invalid subscript character: {} (only chars 0-9 is supported)", c),
-            };
-        }
-
-        format!("{}{}", self.ident, subscript)
-    }
-}
-
 pub struct GlobalSymbolTable {
     allocated_symbol_tables: Arena<LocalSymbolTable>,
     ident_occurences: AHashMap<Rc<str>, usize>,
@@ -119,12 +76,12 @@ impl SymbolTableAlloc for GlobalSymbolTable {
 }
 
 impl SymbolTableActions for GlobalSymbolTable {
-    fn insert(&mut self, ident: Rc<str>, symbol: Symbol) -> SSAKey {
+    fn insert(&mut self, ident: Rc<str>, symbol: Symbol) -> SSAIdent {
         let ssa_subscript = self.get_new_ident_subscript(&ident);
-        self.symbols.insert(SSAKey::new(ident, ssa_subscript), symbol)
+        self.symbols.insert(SSAIdent::new(ident, ssa_subscript), symbol)
     }
 
-    fn lookup(&self, ident: &Rc<str>) -> Option<(&SSAKey, &Symbol)> {
+    fn lookup(&self, ident: &Rc<str>) -> Option<(&SSAIdent, &Symbol)> {
         self.symbols.lookup(ident)
     }
 
@@ -136,7 +93,7 @@ impl SymbolTableActions for GlobalSymbolTable {
         self.symbols.lookup_as_var(ident)
     }
 
-    fn lookup_with_key(&self, ssa_key: &SSAKey) -> Option<&Symbol> {
+    fn lookup_with_key(&self, ssa_key: &SSAIdent) -> Option<&Symbol> {
         self.symbols.lookup_with_key(ssa_key)
     }
 }

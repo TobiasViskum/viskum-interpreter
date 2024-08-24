@@ -3,133 +3,100 @@ use std::rc::Rc;
 use ahash::AHashMap;
 
 use crate::compiler::{
-    ds::{ symbol_table::{ SSAKey, SymbolTableRef }, value::ValueType },
+    ds::{ ssa_ident::SSAIdent, value::ValueType },
     error_handler::{ CompileError, ReportedError, SrcCharsRange },
-    ir::icfg::dag::{ DAGIdentNode, DAGNode, DAG },
+    ir::icfg::{ dag::{ DAGIdentNode, DAGNode, DAG }, icfg_builder::ICFGBuilder },
     parser::token::TokenMetadata,
-    traits::{ Dissasemble, SymbolTableActions },
+    traits::Dissasemble,
+    ProgramSymbolTablePhase1,
 };
 
 use super::ExprTrait;
 
 #[derive(Debug)]
 pub struct IdentifierExpr {
-    lexeme: Rc<str>,
-    ssa_subscript: usize,
+    ssa_ident: SSAIdent,
     metadata: TokenMetadata,
+    result_type: Option<ValueType>,
 }
 
 impl IdentifierExpr {
-    pub fn new(lexeme: Rc<str>, metadata: TokenMetadata) -> Self {
-        Self { lexeme, ssa_subscript: 0, metadata }
+    pub fn new(ssa_ident: SSAIdent, metadata: TokenMetadata) -> Self {
+        Self { ssa_ident, metadata, result_type: None }
     }
 
     pub fn get_lexeme(&self) -> Rc<str> {
-        Rc::clone(&self.lexeme)
+        self.ssa_ident.get_ident()
     }
 
-    pub fn get_raw_metadata(&self) -> TokenMetadata {
+    pub fn set_result_type(&mut self, value_type: ValueType) {
+        self.result_type = Some(value_type);
+    }
+
+    pub fn get_metadata(&self) -> TokenMetadata {
         self.metadata
     }
 
-    pub fn is_var_mutable(&self, symbol_table_ref: &SymbolTableRef) -> Result<bool, CompileError> {
-        match symbol_table_ref.get().lookup_as_var(&self.lexeme) {
-            Ok(symbol_var) => Ok(symbol_var.get_is_mutable()),
-            Err(msg) => Err(CompileError::new(ReportedError::new(msg, self.collect_metadata()))),
-        }
-    }
+    // pub fn is_var_mutable(
+    //     &self,
+    //     program_symbol_table: &ProgramSymbolTablePhase1
+    // ) -> Result<bool, CompileError> {
+    //     match program_symbol_table.lookup_var(&self.ssa_ident) {
+    //         Ok(symbol_var) => Ok(symbol_var.get_is_mutable()),
+    //         Err(msg) => Err(CompileError::new(ReportedError::new(msg, self.collect_metadata()))),
+    //     }
+    // }
 
-    pub fn get_ssa_key(&self) -> SSAKey {
-        SSAKey::new(Rc::clone(&self.lexeme), self.ssa_subscript)
-    }
-
-    pub fn set_ssa_subscript(&mut self, ssa_subscript: usize) {
-        self.ssa_subscript = ssa_subscript;
+    pub fn get_ssa_ident(&self) -> &SSAIdent {
+        &self.ssa_ident
     }
 }
 
 impl Dissasemble for IdentifierExpr {
     fn dissasemble(&self) -> String {
-        format!("{}", self.get_ssa_key().dissasemble())
+        format!("{}", self.ssa_ident.dissasemble())
     }
 }
 
 impl ExprTrait for IdentifierExpr {
-    // fn evaluate(&mut self, ast_symbol_table: &AstSymbolTable) -> super::ExprEvaluateResult {
-    //     todo!("Evaluate identifer if it hasn't changed and if its a variable")
-    // }
-
     fn compile_into_dag(
         &self,
         dag: &mut DAG,
-        ident_node_id_map: &mut AHashMap<SSAKey, usize>
+        ident_node_id_map: &mut AHashMap<SSAIdent, usize>,
+        _: &mut ICFGBuilder
     ) -> usize {
-        if let Some(&node_id) = ident_node_id_map.get(&self.get_ssa_key()) {
+        if let Some(&node_id) = ident_node_id_map.get(&self.ssa_ident) {
             node_id
         } else {
             let ident_node_id = dag.push_node(
-                DAGNode::IdentNode(DAGIdentNode::new(self.get_ssa_key()))
+                DAGNode::IdentNode(
+                    DAGIdentNode::new(
+                        self.ssa_ident.clone(),
+                        self.result_type
+                            .as_ref()
+                            .expect("Expected result type in IdentifierExpr")
+                            .clone()
+                    )
+                )
             );
-            ident_node_id_map.insert(self.get_ssa_key(), ident_node_id);
+            ident_node_id_map.insert(self.ssa_ident.clone(), ident_node_id);
             ident_node_id
         }
     }
 
-    fn type_check(&mut self, symbol_table_ref: &SymbolTableRef) -> Result<ValueType, CompileError> {
-        match symbol_table_ref.get().lookup(&self.lexeme) {
-            Some((ssa_key, symbol)) => {
-                match symbol.try_value_type_as_var() {
-                    Ok(vtype) => {
-                        self.set_ssa_subscript(ssa_key.get_subscript());
-                        Ok(vtype)
-                    }
-                    Err(msg) =>
-                        Err(CompileError::new(ReportedError::new(msg, self.collect_metadata()))),
-                }
+    fn type_check(
+        &mut self,
+        program_symbol_table: &ProgramSymbolTablePhase1
+    ) -> Result<ValueType, CompileError> {
+        match program_symbol_table.lookup_var(&self.ssa_ident) {
+            Ok(symbol_var) => {
+                let value_type = symbol_var.get_value_type().clone();
+                self.result_type = Some(value_type.clone());
+                Ok(value_type)
             }
-            None => {
-                Err(
-                    CompileError::new(
-                        ReportedError::new(
-                            format!("Undefined variable '{}'", self.lexeme),
-                            self.collect_metadata()
-                        )
-                    )
-                )
-            }
+            Err(msg) => Err(CompileError::new(ReportedError::new(msg, self.collect_metadata()))),
         }
     }
-
-    // fn type_check_and_constant_fold(&mut self, ast_symbol_table: &AstSymbolTable) -> ExprResult {
-    //     match ast_symbol_table.get(&self.lexeme, &self.metadata) {
-    //         Ok(symbol) => {
-    //             match symbol {
-    //                 Some(symbol) =>
-    //                     match symbol {
-    //                         AstSymbol::Variable { value_type, .. } =>
-    //                             Ok(ExprResultOk::new(value_type.clone(), false)),
-    //                         AstSymbol::Function { return_type, .. } =>
-    //                             Ok(ExprResultOk::new(return_type.clone(), false)),
-    //                     }
-    //                 None => {
-    //                     Err(
-    //                         ExprResultErr::new(
-    //                             vec![
-    //                                 CompileError::new(
-    //                                     ReportedError::new(
-    //                                         format!("Undefined variable '{}'", self.lexeme),
-    //                                         self.metadata.into()
-    //                                     )
-    //                                 )
-    //                             ]
-    //                         )
-    //                     )
-    //                 }
-    //             }
-    //         }
-    //         Err(err) => ExprResult::Err(ExprResultErr::new(vec![err])),
-    //     }
-    // }
 
     fn collect_metadata(&self) -> SrcCharsRange {
         self.metadata.into()

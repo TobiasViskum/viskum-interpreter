@@ -1,10 +1,13 @@
 mod cfg_node;
 mod cfg_edge;
 
+use std::rc::Rc;
+
 use ahash::AHashMap;
 pub use cfg_node::*;
 pub use cfg_edge::*;
-use llvm_builder::{ Function, LLVMBuilder, Module, Type, TypeI32 };
+use crate::compiler::ds::ssa_ident::SSAIdent;
+use crate::compiler::llvm_builder::{ Function, LLVMBuilder, Module, Type, TypeI32 };
 
 use crate::{
     compiler::{
@@ -42,20 +45,36 @@ What is true for a CFG:
 
 #[derive(Debug)]
 pub struct CFG {
+    dce_state: CFGNodeState,
     nodes: Vec<CFGNode>,
     edges: Vec<CFGEdge>,
-    fn_name: String,
+    fn_ssa_name: SSAIdent,
     ret_type: ValueType,
+    args_count: usize,
 }
 
 impl CFG {
-    pub fn new(fn_name: String, ret_type: ValueType) -> Self {
+    pub fn new(fn_ssa_name: SSAIdent, ret_type: ValueType, args_count: usize) -> Self {
         Self {
             nodes: Vec::new(),
             edges: Vec::new(),
-            fn_name,
+            fn_ssa_name,
             ret_type,
+            args_count,
+            dce_state: CFGNodeState::Alive, //CFGNodeState::Dead,
         }
+    }
+
+    pub fn get_ssa_name(&self) -> &SSAIdent {
+        &self.fn_ssa_name
+    }
+
+    pub fn get_ret_type(&self) -> &ValueType {
+        &self.ret_type
+    }
+
+    pub fn get_args_count(&self) -> usize {
+        self.args_count
     }
 
     pub fn get_mut_node(&mut self, node_id: usize) -> Option<&mut CFGNode> {
@@ -124,6 +143,9 @@ impl LoadConstants for CFG {
                 CFGNodeType::DecisionNode(decision_node) => {
                     decision_node.get_condition().load_constants(vm_builder);
                 }
+                CFGNodeType::ReturnNode(ret_node) => {
+                    ret_node.get_ret_val().map(|dag| dag.load_constants(vm_builder));
+                }
                 _ => {}
             }
         }
@@ -179,6 +201,9 @@ impl GenerateLLVM for CFG {
                 CFGNodeType::GotoNode(goto_node) => {
                     goto_node.build_llvm(i, llvm_builder, func, self);
                 }
+                CFGNodeType::ReturnNode(ret_node) => {
+                    ret_node.build_llvm(i, llvm_builder, func, self);
+                }
                 CFGNodeType::TerminateNode(_) => {}
                 _ => {
                     unimplemented!("CFGNode not supported (build_llvm)");
@@ -189,15 +214,12 @@ impl GenerateLLVM for CFG {
 }
 
 impl CFG {
-    pub fn get_fn_info(&self) -> (&String, ValueType) {
-        (&self.fn_name, self.ret_type.clone())
-    }
-
     pub fn generate_instructions(
         &self,
         register_allocator: &mut RegisterAllocator
     ) -> Vec<Instruction> {
         let mut instructions = vec![];
+
         for cfg_node_type in self.nodes.iter().map(|node| node.get_node_type()) {
             let node_instructions = match cfg_node_type {
                 CFGNodeType::LabelNode(label_node) => {

@@ -2,7 +2,15 @@ pub(in crate::compiler) mod ops;
 
 use std::rc::Rc;
 
-use llvm_builder::{ LLVMType, Operand, RawOperand, Type, TypeI32 };
+use crate::compiler::llvm_builder::{
+    BuildLLVM,
+    ConstStringPointer,
+    LLVMBuilder,
+    Operand,
+    RawOperand,
+    Type,
+    TypeI32,
+};
 use ops::{ BinaryOp, ComparisonOp, UnaryOp };
 
 use crate::{
@@ -53,10 +61,10 @@ pub enum ValueType {
 impl Dissasemble for ValueType {
     fn dissasemble(&self) -> String {
         match self {
-            Self::Int => "int".to_string(),
-            Self::Bool => "bool".to_string(),
+            Self::Int => "Int".to_string(),
+            Self::Bool => "Bool".to_string(),
             Self::Void => "()".to_string(),
-            Self::String => "string".to_string(),
+            Self::String => "String".to_string(),
             // Self::Deref(boxed) => format!("*{}", boxed.dissasemble()),
             // Self::Ref(boxed) => format!("&{}", boxed.dissasemble()),
             // Self::MutableRef(boxed) => format!("&mut {}", boxed.dissasemble()),
@@ -69,13 +77,12 @@ impl ValueType {
         self == other
     }
 
-    pub fn to_type_string(&self) -> String {
+    pub fn to_llvm_type(&self) -> Type {
         match self {
-            ValueType::Int => "int".to_string(),
-            ValueType::Bool => "bool".to_string(),
-            ValueType::Void => "void".to_string(),
-            ValueType::String => "string".to_string(),
-            _ => "TO_TYPE_STRING".to_string(),
+            Self::Int => Type::I32,
+            Self::Void => Type::Void,
+            Self::Bool => Type::I32,
+            Self::String => Type::Ptr,
         }
     }
 
@@ -250,9 +257,16 @@ impl Default for Value {
 }
 
 impl Value {
-    pub fn get_llvm_operand(&self) -> Operand {
+    pub fn get_llvm_operand(&self, llvm_builder: &LLVMBuilder) -> Operand {
         match self {
             Self::Int(int) => { Operand::Raw(RawOperand::TypeI32(TypeI32::new(*int as i32))) }
+            Self::String(string) => {
+                Operand::Raw(
+                    RawOperand::ConstStringPointer(
+                        ConstStringPointer::new(llvm_builder.get_const_string_idx(string))
+                    )
+                )
+            }
             _ => { unimplemented!() }
         }
     }

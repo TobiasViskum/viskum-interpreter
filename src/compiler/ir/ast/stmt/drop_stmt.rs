@@ -1,7 +1,7 @@
 use ahash::AHashMap;
 
 use crate::compiler::{
-    ds::symbol_table::{ SSAKey, SymbolTableRef },
+    ds::symbol_table::{ SSAIdent, SymbolTableRef },
     error_handler::ErrorHandler,
     ir::icfg::{
         dag::{ DAGDropNode, DAGIdentNode, DAGNode, DAG },
@@ -16,19 +16,19 @@ use super::{ GotoNodeIds };
 
 #[derive(Debug)]
 pub struct DropStmt {
-    vars: Vec<SSAKey>,
+    vars: Vec<SSAIdent>,
     // strings
     // other heap allocated objects
 }
 
 impl DropStmt {
-    pub fn new(vars: Vec<SSAKey>) -> Self {
+    pub fn new(vars: Vec<SSAIdent>) -> Self {
         Self {
             vars,
         }
     }
 
-    pub fn get_vars(&self) -> &Vec<SSAKey> {
+    pub fn get_vars(&self) -> &Vec<SSAIdent> {
         &self.vars
     }
 }
@@ -59,7 +59,7 @@ impl StmtTrait for DropStmt {
 }
 
 impl LinearControlFlow for DropStmt {
-    fn compile_into_dag(&self, dag: &mut DAG, _: &mut AHashMap<SSAKey, usize>) -> usize {
+    fn compile_into_dag(&self, dag: &mut DAG, _: &mut AHashMap<SSAIdent, usize>) -> usize {
         let drops_count = self.vars.len();
 
         let drop_node_id = dag.push_node(DAGNode::DropNode(DAGDropNode::new(drops_count)));

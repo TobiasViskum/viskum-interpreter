@@ -1,11 +1,12 @@
 use ahash::AHashMap;
 
 use crate::compiler::{
-    ds::{ symbol_table::{ SSAKey, SymbolTableRef }, value::{ Value, ValueType } },
+    ds::{ ssa_ident::SSAIdent, value::{ Value, ValueType } },
     error_handler::{ CompileError, SrcCharsRange },
-    ir::icfg::dag::{ DAGConstNode, DAGNode, DAG },
+    ir::icfg::{ dag::{ DAGConstNode, DAGNode, DAG }, icfg_builder::ICFGBuilder },
     parser::token::TokenMetadata,
     traits::{ Dissasemble, ExprTrait },
+    ProgramSymbolTablePhase1,
 };
 
 #[derive(Debug)]
@@ -45,12 +46,13 @@ impl ExprTrait for LiteralExpr {
     fn compile_into_dag(
         &self,
         dag: &mut DAG,
-        ident_node_id_map: &mut AHashMap<SSAKey, usize>
+        _: &mut AHashMap<SSAIdent, usize>,
+        _: &mut ICFGBuilder
     ) -> usize {
         dag.push_node(DAGNode::ConstNode(DAGConstNode::new(self.value.clone())))
     }
 
-    fn type_check(&mut self, _: &SymbolTableRef) -> Result<ValueType, CompileError> {
+    fn type_check(&mut self, _: &ProgramSymbolTablePhase1) -> Result<ValueType, CompileError> {
         Ok(self.value.to_value_type())
     }
 

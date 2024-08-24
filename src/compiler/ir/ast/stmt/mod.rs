@@ -28,18 +28,24 @@ pub use if_stmt::IfStmt;
 pub use loop_stmt::LoopStmt;
 pub use return_stmt::ReturnStmt;
 
-use crate::compiler::{
-    ds::{ symbol_table::{ SSAKey, SymbolTableRef }, value::ValueType },
-    error_handler::{ CompileError, ErrorHandler },
-    ir::icfg::{
-        cfg::{ CFGNode, CFGNodeId, CFGNodeType, CFGProcessNode, CFG },
-        dag::DAG,
-        icfg_builder::{ CFGBuilder, ICFGBuilder },
-        ICFG,
+use crate::{
+    compiler::{
+        ds::{ ssa_ident::SSAIdent, value::ValueType },
+        error_handler::{ CompileError, ErrorHandler, SrcCharsRange },
+        ir::icfg::{
+            cfg::{ CFGNode, CFGNodeId, CFGNodeType, CFGProcessNode, CFG },
+            dag::DAG,
+            icfg_builder::{ CFGBuilder, ICFGBuilder },
+            ICFG,
+        },
+        parser::token::TokenMetadata,
+        traits::{ AstDissasemble, Dissasemble, LinearControlFlow, StmtTrait },
+        ProgramSymbolTablePhase1,
     },
-    parser::token::TokenMetadata,
-    traits::{ Dissasemble, LinearControlFlow, StmtTrait },
+    macros::merge_chars_range,
 };
+
+use super::AST_DISSASEMBLE_INDENTATION;
 
 pub struct GotoNodeIds {
     break_node_ids: Vec<usize>,
@@ -98,24 +104,6 @@ pub enum Stmt<'ast> {
     LoopStmt(LoopStmt<'ast>),
 }
 
-impl<'ast> Dissasemble for Stmt<'ast> {
-    fn dissasemble(&self) -> String {
-        match self {
-            Self::ExprStmt(expr_stmt) => format!("{}\n", expr_stmt.dissasemble()),
-            Self::VarDefStmt(var_def_stmt) => var_def_stmt.dissasemble(),
-            Self::VarAssignStmt(var_assign_stmt) => var_assign_stmt.dissasemble(),
-            Self::BlockStmt(scope_stmt) => scope_stmt.dissasemble(),
-            Self::FunctionStmt(fn_stmt) => fn_stmt.dissasemble(),
-            Self::BreakStmt(break_stmt) => break_stmt.dissasemble(),
-            Self::ContinueStmt(continue_stmt) => continue_stmt.dissasemble(),
-            Self::ReturnStmt(return_stmt) => return_stmt.dissasemble(),
-            Self::IfStmt(if_stmt) => if_stmt.dissasemble(),
-            Self::LoopStmt(loop_stmt) => loop_stmt.dissasemble(),
-            // Self::DropStmt(drop_stmt) => drop_stmt.dissasemble(),
-        }
-    }
-}
-
 impl<'ast> StmtTrait for Stmt<'ast> {
     fn compile_into_icfg(
         &self,
@@ -157,32 +145,35 @@ impl<'ast> StmtTrait for Stmt<'ast> {
 
     fn validate_stmt(
         &mut self,
-        symbol_table_ref: &mut SymbolTableRef,
+        program_symbol_table: &mut ProgramSymbolTablePhase1,
         error_handler: &mut ErrorHandler
     ) {
         match self {
-            Self::ExprStmt(expr_stmt) => expr_stmt.validate_stmt(symbol_table_ref, error_handler),
+            Self::ExprStmt(expr_stmt) =>
+                expr_stmt.validate_stmt(program_symbol_table, error_handler),
             Self::VarDefStmt(var_def_stmt) => {
-                var_def_stmt.validate_stmt(symbol_table_ref, error_handler)
+                var_def_stmt.validate_stmt(program_symbol_table, error_handler)
             }
             Self::VarAssignStmt(var_assign_stmt) => {
-                var_assign_stmt.validate_stmt(symbol_table_ref, error_handler)
+                var_assign_stmt.validate_stmt(program_symbol_table, error_handler)
             }
             Self::BlockStmt(scope_stmt) => {
-                scope_stmt.validate_stmt(symbol_table_ref, error_handler)
+                scope_stmt.validate_stmt(program_symbol_table, error_handler)
             }
-            Self::FunctionStmt(fn_stmt) => fn_stmt.validate_stmt(symbol_table_ref, error_handler),
+            Self::FunctionStmt(fn_stmt) =>
+                fn_stmt.validate_stmt(program_symbol_table, error_handler),
             Self::BreakStmt(break_stmt) => {
-                break_stmt.validate_stmt(symbol_table_ref, error_handler)
+                break_stmt.validate_stmt(program_symbol_table, error_handler)
             }
             Self::ContinueStmt(continue_stmt) => {
-                continue_stmt.validate_stmt(symbol_table_ref, error_handler)
+                continue_stmt.validate_stmt(program_symbol_table, error_handler)
             }
             Self::ReturnStmt(return_stmt) => {
-                return_stmt.validate_stmt(symbol_table_ref, error_handler)
+                return_stmt.validate_stmt(program_symbol_table, error_handler)
             }
-            Self::IfStmt(if_stmt) => if_stmt.validate_stmt(symbol_table_ref, error_handler),
-            Self::LoopStmt(loop_stmt) => loop_stmt.validate_stmt(symbol_table_ref, error_handler),
+            Self::IfStmt(if_stmt) => if_stmt.validate_stmt(program_symbol_table, error_handler),
+            Self::LoopStmt(loop_stmt) =>
+                loop_stmt.validate_stmt(program_symbol_table, error_handler),
             // Self::DropStmt(drop_stmt) => drop_stmt.validate_stmt(symbol_table_ref, error_handler),
         }
     }
@@ -220,18 +211,78 @@ impl<'ast> StmtTrait for Stmt<'ast> {
     }
 }
 
+impl<'ast> Dissasemble for Stmt<'ast> {
+    fn dissasemble(&self) -> String {
+        match self {
+            Self::ExprStmt(expr_stmt) => format!("{}\n", expr_stmt.dissasemble()),
+            Self::VarDefStmt(var_def_stmt) => var_def_stmt.dissasemble(),
+            Self::VarAssignStmt(var_assign_stmt) => var_assign_stmt.dissasemble(),
+            Self::BlockStmt(scope_stmt) => scope_stmt.dissasemble(),
+            Self::FunctionStmt(fn_stmt) => fn_stmt.dissasemble(),
+            Self::BreakStmt(break_stmt) => break_stmt.dissasemble(),
+            Self::ContinueStmt(continue_stmt) => continue_stmt.dissasemble(),
+            Self::ReturnStmt(return_stmt) => return_stmt.dissasemble(),
+            Self::IfStmt(if_stmt) => if_stmt.dissasemble(),
+            Self::LoopStmt(loop_stmt) => loop_stmt.dissasemble(),
+            // Self::DropStmt(drop_stmt) => drop_stmt.dissasemble(),
+        }
+    }
+}
+
+impl<'ast> AstDissasemble for Stmt<'ast> {
+    fn ast_dissasemble(
+        &self,
+        program_symbol_table: &mut ProgramSymbolTablePhase1,
+        scope_depth: usize
+    ) -> String {
+        match self {
+            Self::ExprStmt(expr_stmt) =>
+                format!(
+                    "{}{}\n",
+                    " ".repeat(AST_DISSASEMBLE_INDENTATION * scope_depth),
+                    expr_stmt.ast_dissasemble(program_symbol_table, scope_depth)
+                ),
+            Self::VarDefStmt(var_def_stmt) =>
+                var_def_stmt.ast_dissasemble(program_symbol_table, scope_depth),
+            Self::VarAssignStmt(var_assign_stmt) =>
+                var_assign_stmt.ast_dissasemble(program_symbol_table, scope_depth),
+            Self::BlockStmt(scope_stmt) =>
+                scope_stmt.ast_dissasemble(program_symbol_table, scope_depth),
+            Self::FunctionStmt(fn_stmt) =>
+                fn_stmt.ast_dissasemble(program_symbol_table, scope_depth),
+            Self::BreakStmt(break_stmt) =>
+                break_stmt.ast_dissasemble(program_symbol_table, scope_depth),
+            Self::ContinueStmt(continue_stmt) =>
+                continue_stmt.ast_dissasemble(program_symbol_table, scope_depth),
+            Self::ReturnStmt(return_stmt) =>
+                return_stmt.ast_dissasemble(program_symbol_table, scope_depth),
+            Self::IfStmt(if_stmt) => if_stmt.ast_dissasemble(program_symbol_table, scope_depth),
+            Self::LoopStmt(loop_stmt) =>
+                loop_stmt.ast_dissasemble(program_symbol_table, scope_depth),
+            // Self::DropStmt(drop_stmt) => drop_stmt.dissasemble(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct FnArg {
-    ssa_ident: SSAKey,
+    ssa_ident: SSAIdent,
     value_type: ValueType,
     mut_keyword_metadata: Option<TokenMetadata>,
     ident_metadata: TokenMetadata,
 }
 
-#[derive(Debug, Clone)]
-pub struct FunctionArgument {
-    pub name: Rc<str>,
-    pub value_type: ValueType,
-    pub is_mutable: bool,
-    pub metadata: TokenMetadata,
+impl FnArg {
+    pub fn new(
+        ssa_ident: SSAIdent,
+        value_type: ValueType,
+        mut_keyword_metadata: Option<TokenMetadata>,
+        ident_metadata: TokenMetadata
+    ) -> Self {
+        Self { ssa_ident, value_type, mut_keyword_metadata, ident_metadata }
+    }
+
+    pub fn get_src_chars_range(&self) -> SrcCharsRange {
+        self.ident_metadata.into()
+    }
 }

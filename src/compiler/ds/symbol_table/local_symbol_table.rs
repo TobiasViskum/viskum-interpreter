@@ -13,7 +13,7 @@ use crate::compiler::{
 use super::{
     helper_structs::{ Symbol, SymbolFunction, SymbolTableRef, SymbolVariable, Symbols },
     GlobalSymbolTable,
-    SSAKey,
+    SSAIdent,
 };
 
 #[derive(Debug)]
@@ -41,7 +41,7 @@ impl LocalSymbolTable {
         }
     }
 
-    pub fn get_all_vars(&self) -> Vec<SSAKey> {
+    pub fn get_all_vars(&self) -> Vec<SSAIdent> {
         self.symbols
             .iter()
             .filter(|&(_, (symbol, _))| symbol.is_var())
@@ -67,7 +67,7 @@ impl LocalSymbolTable {
         let symbol = Symbol::new_variable(value_type, is_mutable, metadata);
 
         let ssa_subscript = self.get_new_ident_subscript(name);
-        self.symbols.insert(SSAKey::new(Rc::clone(name), ssa_subscript), symbol);
+        self.symbols.insert(SSAIdent::new(Rc::clone(name), ssa_subscript), symbol);
     }
 
     pub fn get_new_ident_subscript(&mut self, ident: &Rc<str>) -> usize {
@@ -93,7 +93,7 @@ impl LocalSymbolTable {
     pub fn assing_var(
         &mut self,
         var_assign_stmt: &mut VarAssignStmt
-    ) -> Result<SSAKey, CompileError> {
+    ) -> Result<SSAIdent, CompileError> {
         let symbol_table_ref = SymbolTableRef::new(self as *mut LocalSymbolTable);
 
         let value_type = var_assign_stmt.get_mut_value_expr().type_check(&symbol_table_ref)?;
@@ -174,7 +174,7 @@ impl LocalSymbolTable {
     }
 
     #[must_use]
-    pub fn declare_var(&mut self, var_def_stmt: &mut VarDefStmt) -> Result<SSAKey, CompileError> {
+    pub fn declare_var(&mut self, var_def_stmt: &mut VarDefStmt) -> Result<SSAIdent, CompileError> {
         let mut symbol_table_ref = SymbolTableRef::new(self as *mut LocalSymbolTable);
 
         let value_type = var_def_stmt.get_resolved_value_type(&symbol_table_ref)?;
@@ -206,12 +206,12 @@ impl SymbolTableAlloc for LocalSymbolTable {
 }
 
 impl SymbolTableActions for LocalSymbolTable {
-    fn insert(&mut self, ident: Rc<str>, symbol: Symbol) -> SSAKey {
+    fn insert(&mut self, ident: Rc<str>, symbol: Symbol) -> SSAIdent {
         let ssa_subscript = self.get_new_ident_subscript(&ident);
-        self.symbols.insert(SSAKey::new(ident, ssa_subscript), symbol)
+        self.symbols.insert(SSAIdent::new(ident, ssa_subscript), symbol)
     }
 
-    fn lookup(&self, ident: &Rc<str>) -> Option<(&SSAKey, &Symbol)> {
+    fn lookup(&self, ident: &Rc<str>) -> Option<(&SSAIdent, &Symbol)> {
         match self.symbols.lookup(ident) {
             Some(v) => Some(v),
             None =>
@@ -244,7 +244,7 @@ impl SymbolTableActions for LocalSymbolTable {
         }
     }
 
-    fn lookup_with_key(&self, ssa_key: &SSAKey) -> Option<&Symbol> {
+    fn lookup_with_key(&self, ssa_key: &SSAIdent) -> Option<&Symbol> {
         match self.symbols.lookup_with_key(ssa_key) {
             Some(v) => Some(v),
             None =>

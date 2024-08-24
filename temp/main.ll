@@ -22,7 +22,7 @@ inc:
     br label %cond
 
 end:
-    ret i32 0
+    ret i8 0
 }
 
 

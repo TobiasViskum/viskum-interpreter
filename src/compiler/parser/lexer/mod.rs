@@ -29,29 +29,22 @@ impl<'a> Lexer<'a> {
 
         self.make_eof_token();
 
+        println!("LEXER DONE");
+
         self.tokens
     }
 
     pub fn scan_token(&mut self) {
         self.skip_whitespace();
+        self.skip_comment();
 
-        match self.skip_comment() {
-            Some(token) => {
-                self.tokens.push(token);
-                return;
-            }
-            None => {}
-        }
-
-        if self.current >= self.source.len() {
+        if self.current > self.source.len() - 1 {
             return;
         }
 
         self.start = self.current;
 
-        self.advance();
-
-        let c = self.peek(-1).unwrap();
+        let c = self.advance();
 
         match c {
             '(' => self.make_token(TokenLeftParen),
@@ -66,6 +59,7 @@ impl<'a> Lexer<'a> {
             '/' => self.make_token(TokenSlash),
             ';' => self.make_token(TokenSemicolon),
             ',' => self.make_token(TokenComma),
+            '.' => self.make_token(TokenDot),
             '&' => {
                 if self.is_keyword(1, 3, "mut") {
                     self.current += 3;
@@ -121,13 +115,13 @@ impl<'a> Lexer<'a> {
                 }
             }
             c => {
-                if Self::is_digit(Some(c)) {
+                if Self::is_digit(Some(&c)) {
                     while !self.is_at_end() && Self::is_digit(self.peek(0)) {
                         self.advance();
                     }
 
                     self.make_token(TokenNumber)
-                } else if Self::is_alphabetic(Some(c)) {
+                } else if Self::is_alphabetic(Some(&c)) {
                     while
                         !self.is_at_end() &&
                         (Self::is_alphabetic(self.peek(0)) || Self::is_digit(self.peek(0)))

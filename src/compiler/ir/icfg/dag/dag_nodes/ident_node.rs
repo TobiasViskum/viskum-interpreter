@@ -1,54 +1,60 @@
 use std::rc::Rc;
 
-use llvm_builder::{ Function, LLVMBuilder, LLVMType, Module, Operand, Var };
+use crate::compiler::ds::value::ValueType;
+use crate::compiler::llvm_builder::{ BuildLLVM, Function, LLVMBuilder, Module, Operand, Var };
 
 use crate::compiler::{
-    ds::symbol_table::SSAKey,
+    ds::ssa_ident::SSAIdent,
     ir::icfg::dag::DAG,
-    traits::{ AllocLLVM, DAGNodeGenerateLLVM, DAGNodeTrait, ParseConnectedNodes },
+    traits::{ DAGNodeGenerateLLVM, DAGNodeTrait, ParseConnectedNodes },
     Dissasemble,
 };
 
 #[derive(Debug)]
 pub struct DAGIdentNode {
-    ssa_key: SSAKey,
+    ssa_key: SSAIdent,
+    result_type: ValueType,
 }
 
 impl DAGIdentNode {
-    pub fn new(ssa_key: SSAKey) -> Self {
-        Self { ssa_key }
+    pub fn new(ssa_key: SSAIdent, result_type: ValueType) -> Self {
+        Self { ssa_key, result_type }
     }
 
     pub fn get_ident(&self) -> Rc<str> {
         self.ssa_key.get_ident()
     }
 
-    pub fn get_ssa_key(&self) -> &SSAKey {
+    pub fn get_ssa_key(&self) -> &SSAIdent {
         &self.ssa_key
     }
 }
 
 impl DAGNodeGenerateLLVM for DAGIdentNode {
-    fn alloc_llvm<T>(
+    fn alloc_llvm(
         &self,
         _llvm_builder: &mut LLVMBuilder,
         _module: &mut Module,
         _func: &mut Function
-    )
-        where T: LLVMType {}
+    ) {}
 
-    fn generate_llvm<T>(
+    fn generate_llvm(
         &self,
         node_id: usize,
         func: &mut Function,
         llvm_builder: &mut LLVMBuilder,
         dag: &DAG
-    ) -> Operand
-        where T: LLVMType
-    {
+    ) -> Operand {
         let var_key = llvm_builder.get_var_ssa_key(self.get_ident());
         let result_key = llvm_builder.req_ssa_key();
-        func.add_instr(format!("%{} = load {}, ptr %{}", result_key, T::build_type(), var_key));
+        func.add_instr(
+            format!(
+                "%{} = load {}, ptr %{}",
+                result_key,
+                self.result_type.to_llvm_type().build(),
+                var_key
+            )
+        );
 
         Operand::Var(Var::new(result_key))
     }

@@ -1,12 +1,23 @@
 use crate::compiler::{
-    ds::symbol_table::SymbolTableRef,
     error_handler::ErrorHandler,
-    ir::icfg::{
-        cfg::{ CFGDecisionNode, CFGGotoNode, CFGLabelNode, CFGNode, CFGNodeId, CFGNodeType, CFG },
-        icfg_builder::{ CFGBuilder, ICFGBuilder },
-        ICFG,
+    ir::{
+        ast::AST_DISSASEMBLE_INDENTATION,
+        icfg::{
+            cfg::{
+                CFGDecisionNode,
+                CFGGotoNode,
+                CFGLabelNode,
+                CFGNode,
+                CFGNodeId,
+                CFGNodeType,
+                CFG,
+            },
+            icfg_builder::{ CFGBuilder, ICFGBuilder },
+            ICFG,
+        },
     },
-    traits::{ Dissasemble, LinearControlFlow, StmtTrait },
+    traits::{ AstDissasemble, Dissasemble, LinearControlFlow, StmtTrait },
+    ProgramSymbolTablePhase1,
 };
 
 use super::{ BlockStmt, ExprStmt, GotoNodeIds };
@@ -24,25 +35,6 @@ impl<'ast> LoopStmt<'ast> {
     }
 }
 
-impl<'ast> Dissasemble for LoopStmt<'ast> {
-    fn dissasemble(&self) -> String {
-        let mut string_builder = String::new();
-        match &self.condition {
-            Some(condition) => {
-                string_builder += format!("while {} {{\n", condition.dissasemble()).as_str();
-                string_builder += self.body.dissasemble().as_str();
-                string_builder += "}\n";
-            }
-            None => {
-                string_builder += "loop {\n";
-                string_builder += self.body.dissasemble().as_str();
-                string_builder += "}\n";
-            }
-        }
-        string_builder
-    }
-}
-
 impl<'ast> StmtTrait for LoopStmt<'ast> {
     fn compile_into_icfg(
         &self,
@@ -53,7 +45,7 @@ impl<'ast> StmtTrait for LoopStmt<'ast> {
         let break_node_ids_in_prev_block = goto_node_ids.take_break_node_ids();
         let continue_node_ids_in_prev_block = goto_node_ids.take_continue_node_ids();
 
-        let condition = self.condition.as_ref().map(|expr| expr.compile_to_dag());
+        let condition = self.condition.as_ref().map(|expr| expr.compile_to_dag(icfg_builder));
 
         let start_loop_goto_node_id = cfg_builder.push_cfg_node(
             CFGNode::new(CFGNodeType::GotoNode(CFGGotoNode))
@@ -114,16 +106,70 @@ impl<'ast> StmtTrait for LoopStmt<'ast> {
 
     fn validate_stmt(
         &mut self,
-        symbol_table_ref: &mut SymbolTableRef,
+        program_symbol_table: &mut ProgramSymbolTablePhase1,
         error_handler: &mut ErrorHandler
     ) {
         if let Some(condition) = &mut self.condition {
-            condition.validate_stmt(symbol_table_ref, error_handler);
+            condition.validate_stmt(program_symbol_table, error_handler);
         }
-        self.body.validate_stmt(symbol_table_ref, error_handler)
+        self.body.validate_stmt(program_symbol_table, error_handler)
     }
 
     fn as_linear_control_flow(&self) -> Option<&dyn LinearControlFlow> {
         None
+    }
+}
+
+impl<'ast> Dissasemble for LoopStmt<'ast> {
+    fn dissasemble(&self) -> String {
+        let mut string_builder = String::new();
+        match &self.condition {
+            Some(condition) => {
+                string_builder += format!("while {} {{\n", condition.dissasemble()).as_str();
+                string_builder += self.body.dissasemble().as_str();
+                string_builder += "}\n";
+            }
+            None => {
+                string_builder += "loop {\n";
+                string_builder += self.body.dissasemble().as_str();
+                string_builder += "}\n";
+            }
+        }
+        string_builder
+    }
+}
+
+impl<'ast> AstDissasemble for LoopStmt<'ast> {
+    fn ast_dissasemble(
+        &self,
+        program_symbol_table: &mut ProgramSymbolTablePhase1,
+        scope_depth: usize
+    ) -> String {
+        let mut string_builder = String::new();
+        match &self.condition {
+            Some(condition) => {
+                string_builder += format!(
+                    "[{}]: {}while {} {{\n",
+                    program_symbol_table.get_current_symbol_table_id(),
+                    " ".repeat(AST_DISSASEMBLE_INDENTATION * scope_depth),
+                    condition.ast_dissasemble(program_symbol_table, scope_depth)
+                ).as_str();
+            }
+            None => {
+                string_builder += format!(
+                    "[{}]: {}loop {{\n",
+                    program_symbol_table.get_current_symbol_table_id(),
+                    " ".repeat(AST_DISSASEMBLE_INDENTATION * scope_depth)
+                ).as_str();
+            }
+        }
+
+        string_builder += self.body.ast_dissasemble(program_symbol_table, scope_depth).as_str();
+        string_builder += format!(
+            "[{}]: {}}}\n",
+            program_symbol_table.get_current_symbol_table_id(),
+            " ".repeat(AST_DISSASEMBLE_INDENTATION * scope_depth)
+        ).as_str();
+        string_builder
     }
 }

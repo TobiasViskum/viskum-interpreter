@@ -14,20 +14,9 @@ impl<'a> Parser<'a> {
             return;
         }
         self.current += 1;
-        /*
-        if let Some(prev_next) = self.next.take() {
-            if let Some(prev_current) = self.current.take() {
-                self.previous_tokens.push(prev_current);
-            }
-            self.current = Some(prev_next);
-        }
-        self.next = self.lexer.scan_token();
-        */
     }
 
     pub(super) fn get_current(&self) -> &Token {
-        // self.current.as_ref().unwrap()
-
         self.tokens.get(self.current).unwrap()
     }
 

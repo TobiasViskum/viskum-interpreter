@@ -41,3 +41,25 @@ macro_rules! current {
     };
 }
 pub(in crate::compiler::parser) use current;
+
+macro_rules! next {
+    ($self:ident, metadata) => {
+        $self.get_next().map(|token| token.get_metadata())
+    };
+    ($self:ident, lexeme) => {
+        $self.get_next().map(|token| token.get_lexeme($self.source))
+    };
+    ($self:ident, ttype) => {
+        $self.get_next().map(|token| token.get_ttype())
+    };
+    ($self:ident, line) => {
+        $self.get_next().map(|token| token.get_line())
+    };
+    ($self:ident, msg) => {
+        $self.get_next().map(|token| token.get_message())
+    };
+    ($self:ident $(, $keyword:ident)+) => {
+        ($(current!($self, $keyword), )+)
+    };
+}
+pub(in crate::compiler::parser) use next;

@@ -1,9 +1,11 @@
+use std::rc::Rc;
+
 use crate::{
     compiler::{
         ds::value::ValueType,
-        error_handler::{ CompileError, ReportedError },
-        ir::ast::{ expr::{ Expr, ExprBuilder }, stmt::FunctionArgument, AstArena },
-        error_handler::SrcCharsRange,
+        error_handler::{ CompileError, ReportedError, SrcCharsRange },
+        ir::ast::{ expr::{ Expr, ExprBuilder }, stmt::{ FnArg }, AstArena },
+        ProgramSymbolTablePhase1,
     },
     macros::merge_chars_range,
 };
@@ -12,7 +14,10 @@ use super::{
     parser_macros::{ current, previous },
     precedence::Precedence,
     token::TokenMetadata,
+    ExprMethodArgs,
+    ExprMethodRetType,
     Parser,
+    StmtMethodArgs,
     TokenType::*,
 };
 
@@ -40,8 +45,8 @@ impl<'a> Parser<'a> {
                 self.advance();
                 let type_lexeme = self.get_previous().get_lexeme(&&self.source);
                 match type_lexeme.get_lexeme_str() {
-                    "int" => Ok(Some(ValueType::Int)),
-                    "bool" => Ok(Some(ValueType::Bool)),
+                    "Int" => Ok(Some(ValueType::Int)),
+                    "Bool" => Ok(Some(ValueType::Bool)),
                     _ => Ok(None), // This should make a custom type
                 }
             }
@@ -51,24 +56,23 @@ impl<'a> Parser<'a> {
         resolved_type
     }
 
-    pub(super) fn expression<'b>(
+    pub(super) fn expression<'b, 'c>(
         &mut self,
         precedence: Precedence,
-        arena: &'b AstArena<'b>
+        (program_symbol_table, ast_arena): StmtMethodArgs<'b, 'c>
     ) -> Result<Expr<'b>, CompileError> {
-        let mut expr_builder = ExprBuilder::new(arena);
+        let mut expr_builder = ExprBuilder::new(ast_arena);
 
-        self.parse_precedence(precedence, &mut expr_builder, arena)?;
+        self.parse_precedence(precedence, (&mut expr_builder, program_symbol_table, ast_arena))?;
 
         Ok(expr_builder.get_built_expr())
     }
 
-    pub(super) fn parse_precedence<'b>(
+    pub(super) fn parse_precedence<'b, 'c>(
         &mut self,
         precedence: Precedence,
-        mut expr_builder: &mut ExprBuilder<'b>,
-        arena: &'b AstArena<'b>
-    ) -> Result<(), CompileError> {
+        (expr_builder, program_symbol_table, ast_arena): ExprMethodArgs<'b, 'c>
+    ) -> ExprMethodRetType {
         self.advance();
 
         let parse_rule = self.get_parse_rule(previous!(self, ttype));
@@ -76,7 +80,7 @@ impl<'a> Parser<'a> {
         let prefix_rule = parse_rule.get_prefix();
 
         if let Some(prefix_rule) = prefix_rule {
-            prefix_rule(self, &mut expr_builder, arena)?;
+            prefix_rule(self, (expr_builder, program_symbol_table, ast_arena))?;
 
             loop {
                 let current_precedence = self
@@ -96,7 +100,7 @@ impl<'a> Parser<'a> {
                 let infix_rule = self.get_parse_rule(previous!(self, ttype)).get_infix();
 
                 if let Some(infix_rule) = infix_rule {
-                    infix_rule(self, &mut expr_builder, arena)?;
+                    infix_rule(self, (expr_builder, program_symbol_table, ast_arena))?;
                 }
             }
         } else {
@@ -116,7 +120,10 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    pub(super) fn resolve_function_args(&mut self) -> Result<Vec<FunctionArgument>, CompileError> {
+    pub(super) fn resolve_function_args(
+        &mut self,
+        program_symbol_table: &mut ProgramSymbolTablePhase1
+    ) -> Result<Vec<Rc<FnArg>>, CompileError> {
         let mut args = vec![];
 
         self.consume(TokenLeftParen, "Expected '(' after function identifier")?;
@@ -137,14 +144,14 @@ impl<'a> Parser<'a> {
                 ).as_str()
             )?;
 
-            let (ident_lexeme, metadata) = previous!(self, lexeme, metadata);
+            let (ident_lexeme, ident_metadata) = previous!(self, lexeme, metadata);
 
-            let is_mutable = match current!(self, ttype).is(&TokenMutable) {
+            let mut_keyword_metadata = match current!(self, ttype).is(&TokenMutable) {
                 true => {
                     self.advance();
-                    true
+                    Some(previous!(self, metadata))
                 }
-                false => false,
+                false => None,
             };
 
             let arg_type = match self.resolve_type() {
@@ -170,12 +177,11 @@ impl<'a> Parser<'a> {
                 }
             };
 
-            args.push(FunctionArgument {
-                is_mutable,
-                name: ident_lexeme.take_lexeme_rc(),
-                value_type: arg_type,
-                metadata,
-            });
+            let ssa_ident = program_symbol_table.declare_var_ssa_ident(&ident_lexeme);
+
+            args.push(
+                Rc::new(FnArg::new(ssa_ident, arg_type, mut_keyword_metadata, ident_metadata))
+            );
         }
 
         self.consume(TokenRightParen, "Expected a closing ')' after function arguments")?;

@@ -1,13 +1,17 @@
 use crate::compiler::{
-    ds::symbol_table::SymbolTableRef,
+    ds::value::ValueType,
     error_handler::{ CompileError, ErrorHandler, ReportedError },
-    ir::icfg::{
-        cfg::{ CFGNode, CFGNodeId, CFGNodeType, CFGReturnNode, CFG },
-        icfg_builder::{ CFGBuilder, ICFGBuilder },
-        ICFG,
+    ir::{
+        ast::AST_DISSASEMBLE_INDENTATION,
+        icfg::{
+            cfg::{ CFGNode, CFGNodeId, CFGNodeType, CFGReturnNode, CFG },
+            icfg_builder::{ CFGBuilder, ICFGBuilder },
+            ICFG,
+        },
     },
     parser::token::TokenMetadata,
-    traits::Dissasemble,
+    traits::{ AstDissasemble, Dissasemble },
+    ProgramSymbolTablePhase1,
 };
 
 use super::{ ExprStmt, GotoNodeIds, LinearControlFlow, StmtTrait };
@@ -24,15 +28,6 @@ impl<'ast> ReturnStmt<'ast> {
     }
 }
 
-impl<'ast> Dissasemble for ReturnStmt<'ast> {
-    fn dissasemble(&self) -> String {
-        match &self.return_expr {
-            Some(return_expr) => format!("return {}", return_expr.dissasemble()),
-            None => "return".to_string(),
-        }
-    }
-}
-
 impl<'ast> StmtTrait for ReturnStmt<'ast> {
     fn compile_into_icfg(
         &self,
@@ -41,7 +36,14 @@ impl<'ast> StmtTrait for ReturnStmt<'ast> {
         goto_node_ids: &mut GotoNodeIds
     ) {
         let return_node_id = cfg_builder.push_cfg_node(
-            CFGNode::new(CFGNodeType::ReturnNode(CFGReturnNode))
+            CFGNode::new(
+                CFGNodeType::ReturnNode(
+                    CFGReturnNode::new(
+                        self.return_expr.as_ref().map(|expr| expr.compile_to_dag(icfg_builder)),
+                        cfg_builder.get_ret_type().clone()
+                    )
+                )
+            )
         );
         goto_node_ids.push_return_node_id(return_node_id);
     }
@@ -56,81 +58,95 @@ impl<'ast> StmtTrait for ReturnStmt<'ast> {
 
     fn validate_stmt(
         &mut self,
-        symbol_table_ref: &mut SymbolTableRef,
+        program_symbol_table: &mut ProgramSymbolTablePhase1,
         error_handler: &mut ErrorHandler
     ) {
-        let provided_return_type = match symbol_table_ref.get().get_fn_return_type() {
-            None => {
-                error_handler.report_compile_error(
-                    CompileError::new(
-                        ReportedError::new(
-                            "Return statements cannot be used outside of functions".to_string(),
-                            self.metadata.into()
-                        )
-                    )
-                );
-                return;
-            }
-            Some(v) => { Some(v) }
-        };
-
-        let found_return_type = match &mut self.return_expr {
-            Some(v) => {
-                match v.type_check(symbol_table_ref) {
+        if let Some(ret_type) = program_symbol_table.get_fn_ret_type() {
+            let found_ret_type = if let Some(ret_expr) = &mut self.return_expr {
+                match ret_expr.type_check(program_symbol_table) {
                     Ok(v) => Some(v),
                     Err(err) => {
                         error_handler.report_compile_error(err);
                         return;
                     }
                 }
-            }
-            None => None,
-        };
+            } else {
+                None
+            };
 
-        match (found_return_type, provided_return_type) {
-            (None, None) => {}
-            (Some(found_return_type), None) => {
-                error_handler.report_compile_error(
-                    CompileError::new(
-                        ReportedError::new(
-                            format!(
-                                "Expected return type: '()' but got '{}'",
-                                found_return_type.dissasemble()
-                            ),
-                            self.metadata.into()
-                        )
-                    )
-                )
-            }
-            (None, Some(provided_return_type)) => {
-                error_handler.report_compile_error(
-                    CompileError::new(
-                        ReportedError::new(
-                            format!(
-                                "Expected return type: '{}' but got '()'",
-                                provided_return_type.dissasemble()
-                            ),
-                            self.metadata.into()
-                        )
-                    )
-                )
-            }
-            (Some(found_return_type), Some(provided_return_type)) => {
-                if !found_return_type.is(provided_return_type) {
+            match (ret_type, found_ret_type) {
+                (ValueType::Void, None) => {}
+                (v1, None) => {
                     error_handler.report_compile_error(
                         CompileError::new(
                             ReportedError::new(
                                 format!(
-                                    "Expected return type: '{}' but got '{}'",
-                                    provided_return_type.dissasemble(),
-                                    found_return_type.dissasemble()
+                                    "Expected return type: '{}' but got '()'",
+                                    v1.dissasemble()
                                 ),
                                 self.metadata.into()
                             )
                         )
                     )
                 }
+                (v1, Some(v2)) => {
+                    if !v1.is(&v2) {
+                        error_handler.report_compile_error(
+                            CompileError::new(
+                                ReportedError::new(
+                                    format!(
+                                        "Expected return type: '{}' but got '{}'",
+                                        v1.dissasemble(),
+                                        v2.dissasemble()
+                                    ),
+                                    self.metadata.into()
+                                )
+                            )
+                        )
+                    }
+                }
             }
+        } else {
+            error_handler.report_compile_error(
+                CompileError::new(
+                    ReportedError::new(
+                        "Return statements cannot be used outside of functions".to_string(),
+                        self.metadata.into()
+                    )
+                )
+            );
+        }
+    }
+}
+
+impl<'ast> Dissasemble for ReturnStmt<'ast> {
+    fn dissasemble(&self) -> String {
+        match &self.return_expr {
+            Some(return_expr) => format!("return {}", return_expr.dissasemble()),
+            None => "return".to_string(),
+        }
+    }
+}
+
+impl<'ast> AstDissasemble for ReturnStmt<'ast> {
+    fn ast_dissasemble(
+        &self,
+        program_symbol_table: &mut ProgramSymbolTablePhase1,
+        scope_depth: usize
+    ) -> String {
+        let ret_string = match &self.return_expr {
+            Some(return_expr) =>
+                format!(
+                    "return {}",
+                    return_expr.ast_dissasemble(program_symbol_table, scope_depth)
+                ),
+            None => "return".to_string(),
         };
+        format!(
+            "[{}]: {}{}\n",
+            program_symbol_table.get_current_symbol_table_id(),
+            " ".repeat(AST_DISSASEMBLE_INDENTATION * scope_depth),
+            ret_string
+        )
     }
 }

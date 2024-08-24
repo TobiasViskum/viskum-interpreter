@@ -1,10 +1,11 @@
 use ahash::AHashMap;
 
 use crate::compiler::{
-    ds::{ symbol_table::{ SSAKey, SymbolTableRef }, value::ValueType },
+    ds::{ ssa_ident::SSAIdent, value::ValueType },
     error_handler::{ CompileError, SrcCharsRange },
-    ir::icfg::dag::{ DAGGroupNode, DAGNode, DAG },
+    ir::icfg::{ dag::{ DAGGroupNode, DAGNode, DAG }, icfg_builder::ICFGBuilder },
     traits::{ Dissasemble, ExprTrait },
+    ProgramSymbolTablePhase1,
 };
 
 use super::Expr;
@@ -12,12 +13,14 @@ use super::Expr;
 #[derive(Debug)]
 pub struct GroupingExpr<'ast> {
     expr: &'ast mut Expr<'ast>,
+    result_type: Option<ValueType>,
 }
 
 impl<'ast> GroupingExpr<'ast> {
     pub fn new(expr: &'ast mut Expr<'ast>) -> Self {
         Self {
             expr,
+            result_type: None,
         }
     }
 
@@ -43,23 +46,31 @@ impl<'ast> ExprTrait for GroupingExpr<'ast> {
     fn compile_into_dag(
         &self,
         dag: &mut DAG,
-        ident_node_id_map: &mut AHashMap<SSAKey, usize>
+        ident_node_id_map: &mut AHashMap<SSAIdent, usize>,
+        icfg_builder: &mut ICFGBuilder
     ) -> usize {
-        let group_content_id = self.expr.compile_into_dag(dag, ident_node_id_map);
-        let group_node_id = dag.push_node(DAGNode::GroupNode(DAGGroupNode));
+        let group_content_id = self.expr.compile_into_dag(dag, ident_node_id_map, icfg_builder);
+        let group_node_id = dag.push_node(
+            DAGNode::GroupNode(
+                DAGGroupNode::new(
+                    self.result_type.as_ref().expect("Expected result type in GroupingExpr").clone()
+                )
+            )
+        );
         dag.add_edge(group_node_id, group_content_id);
         group_node_id
     }
 
-    fn type_check(&mut self, symbol_table_ref: &SymbolTableRef) -> Result<ValueType, CompileError> {
-        (*self.expr).type_check(symbol_table_ref)
+    fn type_check(
+        &mut self,
+        program_symbol_table: &ProgramSymbolTablePhase1
+    ) -> Result<ValueType, CompileError> {
+        match self.expr.type_check(program_symbol_table) {
+            Ok(v) => {
+                self.result_type = Some(v.clone());
+                Ok(v)
+            }
+            Err(err) => Err(err),
+        }
     }
-
-    // fn evaluate(&mut self, ast_symbol_table: &AstSymbolTable) -> ExprEvaluateResult {
-    //     unsafe { (*self.expr).evaluate(ast_symbol_table) }
-    // }
-
-    // fn type_check_and_constant_fold(&mut self, ast_symbol_table: &AstSymbolTable) -> ExprResult {
-    //     unsafe { (*self.expr).type_check_and_constant_fold(ast_symbol_table) }
-    // }
 }

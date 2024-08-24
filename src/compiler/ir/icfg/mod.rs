@@ -4,15 +4,14 @@ pub mod icfg_builder;
 
 use std::fmt::Debug;
 
-use ahash::AHashMap;
-use cfg::{ CFGLabelNode, CFGNode, CFGNodeType, CFG };
-use llvm_builder::{ Function, LLVMBuilder, Module };
-use typed_arena::Arena;
+use cfg::CFG;
+pub use crate::compiler::llvm_builder::{ Function, LLVMBuilder, Module };
 
 use crate::{
     compiler::{
-        ds::{ register_allocator::RegisterAllocator, vm_builder::VMBuilder },
-        traits::{ AllocLLVM, Dissasemble, GenerateLLVM, LoadConstants, ParseConnectedNodes },
+        ds::{ register_allocator::RegisterAllocator, value::ValueType, vm_builder::VMBuilder },
+        llvm_builder::{ self, BuildLLVM, Type },
+        traits::{ AllocLLVM, Dissasemble, GenerateLLVM, LoadConstants },
     },
     vm::instructions::Instruction,
 };
@@ -44,19 +43,64 @@ impl ICFG {
         self.cfgs.len() - 1
     }
 
+    pub fn get_cfg(&self, cfg_id: usize) -> &CFG {
+        self.cfgs.get(cfg_id).expect("Expected cfg, got none")
+    }
+
     pub fn set_entry_cfg(&mut self, entry_id: CFGId) {
         self.entry_cfg = entry_id;
     }
 
+    fn get_main_fn_id(&self) -> usize {
+        self.cfgs
+            .iter()
+            .position(|cfg| cfg.get_ssa_name().is("main", 0))
+            .unwrap()
+    }
+
+    fn get_global_fn_id(&self) -> usize {
+        self.cfgs
+            .iter()
+            .position(|cfg| cfg.get_ssa_name().is("global", 0))
+            .unwrap()
+    }
+
     pub fn build_llvm(&self) -> LLVMBuilder {
-        let mut llvm_builder = llvm_builder::LLVMBuilder::new();
+        let mut llvm_builder = LLVMBuilder::new(self);
 
         let mut module = Module::new();
-        let mut func = Function::new("main".to_string(), llvm_builder::Type::I32);
-        self.cfgs[0].alloc_llvm(&mut llvm_builder, &mut module, &mut func);
-        self.cfgs[0].build_llvm(&mut llvm_builder, &mut func);
+
+        let main_fn_id = self.get_main_fn_id();
+        let global_scope_id = self.get_global_fn_id();
+
+        for i in 0..self.cfgs.len() {
+            let cfg = &self.cfgs[i];
+
+            if i == main_fn_id || i == global_scope_id {
+                continue;
+            }
+
+            let mut func = Function::new(
+                cfg.get_ssa_name().clone(),
+                cfg.get_ret_type().to_llvm_type()
+            );
+            cfg.alloc_llvm(&mut llvm_builder, &mut module, &mut func);
+            cfg.build_llvm(&mut llvm_builder, &mut func);
+            match cfg.get_ret_type() {
+                ValueType::Void => func.add_instr("ret void".to_string()),
+                _ => {}
+            }
+
+            module.push_func(func);
+        }
+
+        let mut func = Function::new(self.cfgs[main_fn_id].get_ssa_name().clone(), Type::I32);
+        self.cfgs[main_fn_id].alloc_llvm(&mut llvm_builder, &mut module, &mut func);
+        self.cfgs[main_fn_id].build_llvm(&mut llvm_builder, &mut func);
         func.add_instr("ret i32 0".to_string());
+
         module.push_func(func);
+
         llvm_builder.push_mod(module);
         llvm_builder
     }

@@ -1,14 +1,14 @@
 use std::{ fmt::Debug, rc::Rc };
 
 use ahash::AHashMap;
-use llvm_builder::{ Function, LLVMBuilder, LLVMType, Module, Operand };
+use crate::compiler::llvm_builder::{ Function, LLVMBuilder, Module, Operand };
 
 use crate::vm::instructions::Instruction;
 
 use super::{
     ds::{
         register_allocator::RegisterAllocator,
-        symbol_table::{ SSAKey, Symbol, SymbolFunction, SymbolTableRef, SymbolVariable },
+        ssa_ident::SSAIdent,
         value::ValueType,
         vm_builder::VMBuilder,
     },
@@ -17,27 +17,19 @@ use super::{
         ast::stmt::GotoNodeIds,
         icfg::{ cfg::CFG, dag::DAG, icfg_builder::{ CFGBuilder, ICFGBuilder }, ICFG },
     },
-    ProgramSymbolTable,
+    ProgramSymbolTablePhase1,
 };
 
 pub trait Dissasemble {
     fn dissasemble(&self) -> String;
 }
 
-pub trait SymbolTableActions {
-    fn lookup_with_key(&self, ssa_key: &SSAKey) -> Option<&Symbol>;
-
-    fn lookup_as_fn(&self, ident: &Rc<str>) -> Result<&SymbolFunction, String>;
-
-    fn lookup_as_var(&self, ident: &Rc<str>) -> Result<&SymbolVariable, String>;
-
-    fn lookup(&self, ident: &Rc<str>) -> Option<(&SSAKey, &Symbol)>;
-
-    fn insert(&mut self, ident: Rc<str>, symbol: Symbol) -> SSAKey;
-}
-
-pub trait SymbolTableAlloc {
-    fn alloc_symbol_table(&mut self, return_type: Option<ValueType>) -> SymbolTableRef;
+pub trait AstDissasemble {
+    fn ast_dissasemble(
+        &self,
+        program_symbol_table: &mut ProgramSymbolTablePhase1,
+        scope_depth: usize
+    ) -> String;
 }
 
 pub trait OpTrait: Dissasemble + Debug + Clone + Copy {
@@ -49,12 +41,16 @@ pub trait OpTrait: Dissasemble + Debug + Clone + Copy {
 }
 
 pub trait ExprTrait where Self: Dissasemble + Debug {
-    fn type_check(&mut self, symbol_table_ref: &SymbolTableRef) -> Result<ValueType, CompileError>;
+    fn type_check(
+        &mut self,
+        program_symbol_table: &ProgramSymbolTablePhase1
+    ) -> Result<ValueType, CompileError>;
 
     fn compile_into_dag(
         &self,
         dag: &mut DAG,
-        ident_node_id_map: &mut AHashMap<SSAKey, usize>
+        ident_node_id_map: &mut AHashMap<SSAIdent, usize>,
+        icfg_builder: &mut ICFGBuilder
     ) -> usize;
 
     fn collect_metadata(&self) -> SrcCharsRange;
@@ -64,22 +60,22 @@ pub trait LinearControlFlow {
     fn compile_into_dag(
         &self,
         dag: &mut DAG,
-        ident_node_id_map: &mut AHashMap<SSAKey, usize>
+        ident_node_id_map: &mut AHashMap<SSAIdent, usize>,
+        icfg_builder: &mut ICFGBuilder
     ) -> usize;
 }
 
 pub trait StmtTrait {
     fn compile_into_icfg(
         &self,
-        icfg: &mut ICFGBuilder,
+        icfg_builder: &mut ICFGBuilder,
         cfg_builder: &mut CFGBuilder,
         goto_node_ids: &mut GotoNodeIds
     );
 
     fn validate_stmt(
         &mut self,
-        program_symbol_table: &mut ProgramSymbolTable,
-        symbol_table_id: usize,
+        program_symbol_table: &mut ProgramSymbolTablePhase1,
         error_handler: &mut ErrorHandler
     );
 
@@ -107,22 +103,15 @@ pub trait AllocLLVM {
 }
 
 pub trait DAGNodeGenerateLLVM: DAGNodeTrait {
-    fn generate_llvm<T>(
+    fn generate_llvm(
         &self,
         node_id: usize,
         func: &mut Function,
         llvm_builder: &mut LLVMBuilder,
         dag: &DAG
-    ) -> Operand
-        where T: LLVMType;
+    ) -> Operand;
 
-    fn alloc_llvm<T>(
-        &self,
-        llvm_builder: &mut LLVMBuilder,
-        module: &mut Module,
-        func: &mut Function
-    )
-        where T: LLVMType;
+    fn alloc_llvm(&self, llvm_builder: &mut LLVMBuilder, module: &mut Module, func: &mut Function);
 }
 pub trait CFGNodeTrait: ParseConnectedNodes {
     fn generate_instructions(&self, register_allocator: &mut RegisterAllocator) -> Vec<Instruction>;

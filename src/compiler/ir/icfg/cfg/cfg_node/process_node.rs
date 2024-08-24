@@ -1,4 +1,4 @@
-use llvm_builder::{ Function, LLVMBuilder, Module };
+use crate::compiler::llvm_builder::{ Function, LLVMBuilder, Module };
 
 use crate::{
     compiler::{
@@ -18,7 +18,7 @@ impl AllocLLVM for CFGProcessNode {
     fn alloc_llvm(
         &self,
         llvm_builder: &mut LLVMBuilder,
-        module: &mut llvm_builder::Module,
+        module: &mut crate::compiler::llvm_builder::Module,
         func: &mut Function
     ) {
         self.dag.alloc_llvm(llvm_builder, module, func)
@@ -27,7 +27,7 @@ impl AllocLLVM for CFGProcessNode {
 
 impl GenerateLLVM for CFGProcessNode {
     fn build_llvm(&self, llvm_builder: &mut LLVMBuilder, func: &mut Function) {
-        self.dag.build_llvm(llvm_builder, func)
+        self.dag.build_llvm(llvm_builder, func);
     }
 }
 

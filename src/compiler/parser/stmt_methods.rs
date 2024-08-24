@@ -1,6 +1,6 @@
 use crate::{
     compiler::{
-        ds::{ symbol_table::SymbolTableRef, value::ValueType },
+        ds::{ value::ValueType },
         error_handler::{ CompileError, ReportedError },
         ir::ast::{
             expr::IdentifierExpr,
@@ -19,63 +19,78 @@ use crate::{
             },
             AstArena,
         },
-        traits::SymbolTableAlloc,
+        ProgramSymbolTablePhase1,
     },
     macros::merge_chars_range,
 };
 
 use super::{
-    parser_macros::{ current, previous },
+    parser_macros::{ current, next, previous },
     precedence::Precedence,
     Parser,
+    StmtMethodArgs,
+    StmtMethodRetType,
     TokenType::{ self, * },
 };
 
-type ReturnType<'b> = Result<Stmt<'b>, CompileError>;
-type Args<'b> = (&'b AstArena<'b>, SymbolTableRef);
-
 impl<'a> Parser<'a> {
-    pub(super) fn statement<'b>(&mut self) -> ReturnType<'b> {
+    pub(super) fn statement<'b, 'c>(
+        &mut self,
+        (program_symbol_table, ast_arena): StmtMethodArgs<'b, 'c>
+    ) -> StmtMethodRetType<'b> {
         let curr = current!(self, ttype);
 
         match curr {
             TokenLeftCurlyBrace =>
-                Ok(Stmt::BlockStmt(self.block((arena, symbol_table_ref), None)?)),
-            TokenMutable => self.mut_var_def((arena, symbol_table_ref)),
-            TokenFunction => self.function((arena, symbol_table_ref)),
-            TokenIf => Ok(Stmt::IfStmt(self.if_stmt((arena, symbol_table_ref))?)),
-            TokenLoop => self.loop_stmt((arena, symbol_table_ref)),
-            TokenWhile => self.while_stmt((arena, symbol_table_ref)),
-            TokenBreak => self.break_stmt((arena, symbol_table_ref)),
-            TokenContinue => self.continue_stmt((arena, symbol_table_ref)),
-            TokenReturn => self.return_stmt((arena, symbol_table_ref)),
-
+                Ok(Stmt::BlockStmt(self.block((program_symbol_table, ast_arena), None)?)),
+            TokenMutable => self.mut_var_def((program_symbol_table, ast_arena)),
+            TokenFunction => self.function((program_symbol_table, ast_arena)),
+            TokenIf => Ok(Stmt::IfStmt(self.if_stmt((program_symbol_table, ast_arena))?)),
+            TokenLoop => self.loop_stmt((program_symbol_table, ast_arena)),
+            TokenWhile => self.while_stmt((program_symbol_table, ast_arena)),
+            TokenBreak => self.break_stmt((program_symbol_table, ast_arena)),
+            TokenContinue => self.continue_stmt((program_symbol_table, ast_arena)),
+            TokenReturn => self.return_stmt((program_symbol_table, ast_arena)),
+            TokenDef => self.function_v2((program_symbol_table, ast_arena)),
             _ if curr.is(&TokenIdentifier) && self.is_ttype_in_stmt(TokenAssign) => {
-                self.var_assign((arena, symbol_table_ref))
+                self.var_assign((program_symbol_table, ast_arena))
             }
             _ if curr.is(&TokenIdentifier) && self.is_ttype_in_stmt(TokenDefine) => {
-                self.var_def((arena, symbol_table_ref), false)
+                self.var_def((program_symbol_table, ast_arena))
             }
 
-            _ => self.expression_statement((arena, symbol_table_ref)),
+            _ => self.expression_statement((program_symbol_table, ast_arena)),
         }
     }
 
-    pub(super) fn expression_statement<'b>(&mut self, (arena, _): Args<'b>) -> ReturnType<'b> {
-        let expr = self.expression(Precedence::PrecAssignment.get_next(), arena)?;
+    pub(super) fn expression_statement<'b, 'c>(
+        &mut self,
+        (program_symbol_table, ast_arena): StmtMethodArgs<'b, 'c>
+    ) -> StmtMethodRetType<'b> {
+        let expr = self.expression(Precedence::PrecAssignment.get_next(), (
+            program_symbol_table,
+            ast_arena,
+        ))?;
 
         self.consume_expr_end()?;
 
         Ok(Stmt::ExprStmt(ExprStmt::new(expr)))
     }
 
-    pub(super) fn return_stmt<'b>(&mut self, (arena, _): Args<'b>) -> ReturnType<'b> {
+    pub(super) fn return_stmt<'b, 'c>(
+        &mut self,
+        (program_symbol_table, ast_arena): StmtMethodArgs<'b, 'c>
+    ) -> StmtMethodRetType<'b> {
         let metadata = current!(self, metadata);
 
         self.advance();
 
         let return_expr = if !self.is_at_expr_end() {
-            Some(ExprStmt::new(self.expression(Precedence::PrecAssignment.get_next(), arena)?))
+            let return_expr = self.expression(Precedence::PrecAssignment.get_next(), (
+                program_symbol_table,
+                ast_arena,
+            ))?;
+            Some(ExprStmt::new(return_expr))
         } else {
             None
         };
@@ -85,14 +100,20 @@ impl<'a> Parser<'a> {
         Ok(Stmt::ReturnStmt(ReturnStmt::new(return_expr, metadata)))
     }
 
-    pub(super) fn continue_stmt<'b>(&mut self, _: Args<'b>) -> ReturnType<'b> {
+    pub(super) fn continue_stmt<'b, 'c>(
+        &mut self,
+        _: StmtMethodArgs<'b, 'c>
+    ) -> StmtMethodRetType<'b> {
         self.advance();
         self.consume_expr_end()?;
 
         Ok(Stmt::ContinueStmt(ContinueStmt::new()))
     }
 
-    pub(super) fn break_stmt<'b>(&mut self, _: Args<'b>) -> ReturnType<'b> {
+    pub(super) fn break_stmt<'b, 'c>(
+        &mut self,
+        _: StmtMethodArgs<'b, 'c>
+    ) -> StmtMethodRetType<'b> {
         let metadata = current!(self, metadata);
         self.advance();
         self.consume_expr_end()?;
@@ -100,22 +121,32 @@ impl<'a> Parser<'a> {
         Ok(Stmt::BreakStmt(BreakStmt::new(metadata)))
     }
 
-    pub(super) fn while_stmt<'b>(&mut self, (arena, symbol_table_ref): Args<'b>) -> ReturnType<'b> {
+    pub(super) fn while_stmt<'b, 'c>(
+        &mut self,
+        (program_symbol_table, ast_arena): StmtMethodArgs<'b, 'c>
+    ) -> StmtMethodRetType<'b> {
         self.advance();
 
-        let condition = ExprStmt::new(self.expression(Precedence::PrecAssignment, arena)?);
+        let condition = ExprStmt::new(
+            self.expression(Precedence::PrecAssignment, (program_symbol_table, ast_arena))?
+        );
 
-        let body = self.block((arena, symbol_table_ref), None)?;
+        let body = self.block((program_symbol_table, ast_arena), None)?;
 
         self.consume_expr_end()?;
 
         Ok(Stmt::LoopStmt(LoopStmt::new(Some(condition), body)))
     }
 
-    pub(super) fn loop_stmt<'b>(&mut self, (arena, symbol_table_ref): Args<'b>) -> ReturnType<'b> {
+    pub(super) fn loop_stmt<'b, 'c>(
+        &mut self,
+        (program_symbol_table, ast_arena): StmtMethodArgs<'b, 'c>
+    ) -> StmtMethodRetType<'b> {
         self.advance();
 
-        let body = self.block((arena, symbol_table_ref), None)?;
+        let body = self.block_v2((program_symbol_table, ast_arena), None)?;
+
+        self.consume(TokenType::TokenEnd, "Expected end token")?;
 
         self.consume_expr_end()?;
 
@@ -124,7 +155,10 @@ impl<'a> Parser<'a> {
         Ok(Stmt::LoopStmt(LoopStmt::new(None, body)))
     }
 
-    pub(super) fn var_assign<'b>(&mut self, (arena, symbol_table_ref): Args<'b>) -> ReturnType<'b> {
+    pub(super) fn var_assign<'b, 'c>(
+        &mut self,
+        (program_symbol_table, ast_arena): StmtMethodArgs<'b, 'c>
+    ) -> StmtMethodRetType<'b> {
         // Temporary block start (until chained assignments is supported: struct.value = some_value)
         self.advance();
         let (lexeme, token_metadata) = previous!(self, lexeme, metadata);
@@ -156,21 +190,34 @@ impl<'a> Parser<'a> {
 
         self.advance();
 
-        let value = ExprStmt::new(self.expression(Precedence::PrecAssignment.get_next(), arena)?);
+        let value = ExprStmt::new(
+            self.expression(Precedence::PrecAssignment.get_next(), (
+                program_symbol_table,
+                ast_arena,
+            ))?
+        );
 
         self.consume_expr_end()?;
 
+        let ssa_ident = program_symbol_table.declare_var_ssa_ident(&lexeme);
+
         Ok(
             Stmt::VarAssignStmt(
-                VarAssignStmt::new(
-                    IdentifierExpr::new(lexeme.take_lexeme_rc(), token_metadata),
-                    value
-                )
+                VarAssignStmt::new(IdentifierExpr::new(ssa_ident, token_metadata), value)
             )
         )
     }
 
-    pub(super) fn var_def<'b>(&mut self, (arena, _): Args<'b>, is_mutable: bool) -> ReturnType<'b> {
+    pub(super) fn var_def<'b, 'c>(
+        &mut self,
+        (program_symbol_table, ast_arena): StmtMethodArgs<'b, 'c>
+    ) -> StmtMethodRetType<'b> {
+        let mut_keyword_metadata = if let TokenMutable = previous!(self, ttype) {
+            Some(previous!(self, metadata))
+        } else {
+            None
+        };
+
         self.advance();
 
         let (lexeme, token_metadata) = previous!(self, lexeme, metadata);
@@ -199,7 +246,10 @@ impl<'a> Parser<'a> {
                     )
                 );
             }
-            let value = self.expression(Precedence::PrecAssignment.get_next(), arena)?;
+            let value = self.expression(Precedence::PrecAssignment.get_next(), (
+                program_symbol_table,
+                ast_arena,
+            ))?;
 
             Some(ExprStmt::new(value))
         } else {
@@ -208,24 +258,28 @@ impl<'a> Parser<'a> {
 
         self.consume_expr_end()?;
 
+        let ssa_ident = program_symbol_table.declare_var_ssa_ident(&lexeme);
+
         Ok(
             Stmt::VarDefStmt(
                 VarDefStmt::new(
-                    lexeme.take_lexeme_rc(),
+                    IdentifierExpr::new(ssa_ident, token_metadata),
                     found_type,
-                    is_mutable,
-                    value,
-                    token_metadata
+                    mut_keyword_metadata,
+                    value
                 )
             )
         )
     }
 
-    pub fn mut_var_def<'b>(&mut self, (arena, symbol_table_ref): Args<'b>) -> ReturnType<'b> {
+    pub fn mut_var_def<'b, 'c>(
+        &mut self,
+        (program_symbol_table, ast_arena): StmtMethodArgs<'b, 'c>
+    ) -> StmtMethodRetType<'b> {
         self.advance();
 
         match current!(self, ttype) {
-            TokenIdentifier => self.var_def((arena, symbol_table_ref), true),
+            TokenIdentifier => self.var_def((program_symbol_table, ast_arena)),
             TokenFunction => {
                 panic!("Functions cannot be mutable");
             }
@@ -233,26 +287,70 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn block<'b>(
+    pub fn block_v2<'b, 'c>(
         &mut self,
-        (arena, mut symbol_table_ref): Args<'b>,
+        (program_symbol_table, ast_arena): StmtMethodArgs<'b, 'c>,
         return_type: Option<ValueType>
     ) -> Result<BlockStmt<'b>, CompileError> {
+        let prev_symbol_table_id = program_symbol_table.get_current_symbol_table_id();
+
+        let new_symbol_table_id = program_symbol_table.new_symbol_table(
+            Some(prev_symbol_table_id),
+            return_type
+        );
+
+        let mut scope_stmt = BlockStmt::new(new_symbol_table_id);
+
+        while !self.is_at_end() && !current!(self, ttype).can_terminate_block() {
+            match self.statement((program_symbol_table, ast_arena)) {
+                Ok(stmt) => {
+                    match scope_stmt.push_stmt(stmt, program_symbol_table) {
+                        Ok(_) => {}
+                        Err(err) => self.error_handler.report_compile_error(err),
+                    }
+                }
+                Err(e) => {
+                    self.error_handler.report_compile_error(e);
+                }
+            }
+        }
+
+        program_symbol_table.set_current_symbol_table_id(prev_symbol_table_id);
+
+        Ok(scope_stmt)
+    }
+
+    pub fn block<'b, 'c>(
+        &mut self,
+        (program_symbol_table, ast_arena): StmtMethodArgs<'b, 'c>,
+        return_type: Option<ValueType>
+    ) -> Result<BlockStmt<'b>, CompileError> {
+        println!("DON'T RUN");
         self.consume(
             TokenType::TokenLeftCurlyBrace,
             format!("Expected '{{' but got: {}", current!(self, lexeme).get_lexeme_str()).as_str()
         )?;
 
-        let symbol_table_ref = symbol_table_ref.alloc_symbol_table(return_type);
+        let current_symbol_table_id = program_symbol_table.get_current_symbol_table_id();
 
-        let mut scope_stmt = BlockStmt::new(symbol_table_ref, true);
+        let new_symbol_table_id = program_symbol_table.new_symbol_table(
+            Some(current_symbol_table_id),
+            return_type
+        );
+
+        let mut scope_stmt = BlockStmt::new(new_symbol_table_id);
 
         while
             !self.is_at_end() &&
             !matches!(current!(self, ttype), &TokenType::TokenRightCurlyBrace)
         {
-            match self.statement((arena, symbol_table_ref)) {
-                Ok(stmt) => scope_stmt.push_stmt(stmt),
+            match self.statement((program_symbol_table, ast_arena)) {
+                Ok(stmt) => {
+                    match scope_stmt.push_stmt(stmt, program_symbol_table) {
+                        Ok(_) => {}
+                        Err(err) => self.error_handler.report_compile_error(err),
+                    }
+                }
                 Err(e) => {
                     self.error_handler.report_compile_error(e);
                 }
@@ -264,25 +362,32 @@ impl<'a> Parser<'a> {
         Ok(scope_stmt)
     }
 
-    pub fn if_stmt<'b>(
+    pub fn if_stmt<'b, 'c>(
         &mut self,
-        (arena, symbol_table_ref): Args<'b>
+        (program_symbol_table, ast_arena): StmtMethodArgs<'b, 'c>
     ) -> Result<IfStmt<'b>, CompileError> {
         self.advance();
 
-        let condition = ExprStmt::new(self.expression(Precedence::PrecAssignment, arena)?);
+        let condition = ExprStmt::new(
+            self.expression(Precedence::PrecAssignment, (program_symbol_table, ast_arena))?
+        );
 
-        let true_block = self.block((arena, symbol_table_ref), None)?;
+        self.consume(TokenType::TokenDo, "Expected do token")?;
 
-        let false_block = if current!(self, ttype).is(&TokenType::TokenElse) {
+        let true_block = self.block_v2((program_symbol_table, ast_arena), None)?;
+
+        let false_block = if current!(self, ttype).is(&TokenType::TokenElif) {
+            let if_stmt = self.if_stmt((program_symbol_table, ast_arena))?;
+            Some(ast_arena.alloc_if_stmt(if_stmt))
+        } else if current!(self, ttype).is(&TokenType::TokenElse) {
             self.advance();
-            let if_stmt = if current!(self, ttype).is(&TokenType::TokenIf) {
-                self.if_stmt((arena, symbol_table_ref))?
-            } else {
-                let true_block = self.block((arena, symbol_table_ref), None)?;
-                IfStmt::new(None, true_block, None)
-            };
-            Some(arena.alloc_if_stmt(if_stmt))
+            let true_block = self.block_v2((program_symbol_table, ast_arena), None)?;
+            self.consume(TokenType::TokenEnd, "Expected end token")?;
+            let if_stmt = IfStmt::new(None, true_block, None);
+            Some(ast_arena.alloc_if_stmt(if_stmt))
+        } else if current!(self, ttype).is(&TokenType::TokenEnd) {
+            self.advance();
+            None
         } else {
             None
         };
@@ -290,14 +395,82 @@ impl<'a> Parser<'a> {
         Ok(IfStmt::new(Some(condition), true_block, false_block))
     }
 
-    pub fn function<'b>(&mut self, (arena, symbol_table_ref): Args<'b>) -> ReturnType<'b> {
+    pub fn function_v2<'b, 'c>(
+        &mut self,
+        (program_symbol_table, ast_arena): StmtMethodArgs<'b, 'c>
+    ) -> StmtMethodRetType<'b> {
         self.advance();
 
         let (lexeme, metadata) = current!(self, lexeme, metadata);
 
+        let prev_symbol_table_id = program_symbol_table.get_current_symbol_table_id();
+        // program_symbol_table.set_current_symbol_table_id(
+        //     program_symbol_table.get_next_symbol_table_id()
+        // );
+
+        let ssa_ident = program_symbol_table.declare_fn_ssa_ident(&lexeme);
+
         self.advance();
 
-        let function_args = match self.resolve_function_args() {
+        let function_args = match self.resolve_function_args(program_symbol_table) {
+            Ok(v) => v,
+            Err(e) => {
+                return Err(e);
+            }
+        };
+
+        let return_type = match current!(self, ttype) {
+            TokenType::TokenIdentifier => {
+                match current!(self, lexeme).get_lexeme_str() {
+                    "Int" => {
+                        self.advance();
+                        ValueType::Int
+                    }
+                    "Bool" => {
+                        self.advance();
+                        ValueType::Bool
+                    }
+                    _ => ValueType::Void,
+                }
+            }
+            _ => ValueType::Void,
+        };
+
+        // program_symbol_table.set_current_symbol_table_id(prev_symbol_table_id);
+        let body = self.block_v2((program_symbol_table, ast_arena), Some(return_type.clone()))?;
+
+        let function_stmt = FunctionStmt::new(
+            ssa_ident,
+            function_args,
+            body,
+            return_type,
+            metadata
+        );
+
+        self.consume(TokenType::TokenEnd, "Expected end after function declaration")?;
+
+        program_symbol_table.set_current_symbol_table_id(prev_symbol_table_id);
+
+        Ok(Stmt::FunctionStmt(function_stmt))
+    }
+
+    pub fn function<'b, 'c>(
+        &mut self,
+        (program_symbol_table, ast_arena): StmtMethodArgs<'b, 'c>
+    ) -> StmtMethodRetType<'b> {
+        self.advance();
+
+        let (lexeme, metadata) = current!(self, lexeme, metadata);
+
+        program_symbol_table.set_current_symbol_table_id(
+            program_symbol_table.get_current_symbol_table_id() + 1
+        );
+
+        let ssa_ident = program_symbol_table.declare_fn_ssa_ident(&lexeme);
+
+        self.advance();
+
+        let function_args = match self.resolve_function_args(program_symbol_table) {
             Ok(v) => v,
             Err(e) => {
                 return Err(e);
@@ -313,12 +486,13 @@ impl<'a> Parser<'a> {
             }
         ).unwrap_or(ValueType::Void);
 
-        let body = self.block((arena, symbol_table_ref), Some(return_type))?;
+        let body = self.block((program_symbol_table, ast_arena), Some(return_type.clone()))?;
 
         let function_stmt = FunctionStmt::new(
-            lexeme.take_lexeme_rc(),
+            ssa_ident,
             function_args,
             body,
+            return_type,
             metadata
         );
 

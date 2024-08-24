@@ -1,54 +1,51 @@
-use std::fmt::format;
-
-use llvm_builder::{ BuildLLVM, Function, LLVMBuilder, LLVMType, Module, Operand, Var };
+use crate::compiler::ds::value::ValueType;
+use crate::compiler::llvm_builder::{ BuildLLVM, Function, LLVMBuilder, Module, Operand, Var };
 
 use crate::compiler::{
-    ds::symbol_table::SSAKey,
+    ds::ssa_ident::SSAIdent,
     ir::icfg::dag::DAG,
-    print_todo,
-    traits::{ AllocLLVM, DAGNodeGenerateLLVM, DAGNodeTrait, ParseConnectedNodes },
+    traits::{ DAGNodeGenerateLLVM, DAGNodeTrait, ParseConnectedNodes },
     Dissasemble,
 };
 
 #[derive(Debug)]
 pub struct DAGDefineNode {
-    ssa_key: SSAKey,
+    ssa_key: SSAIdent,
     is_mutable: bool,
     is_initialized: bool,
+    result_type: ValueType,
 }
 
 impl DAGNodeGenerateLLVM for DAGDefineNode {
-    fn alloc_llvm<T>(
-        &self,
-        llvm_builder: &mut LLVMBuilder,
-        module: &mut Module,
-        func: &mut Function
-    )
-        where T: LLVMType
-    {
+    fn alloc_llvm(&self, llvm_builder: &mut LLVMBuilder, module: &mut Module, func: &mut Function) {
         let var_key = llvm_builder.req_var_ssa_key(self.ssa_key.get_ident());
-        func.add_instr(format!("%{} = alloca {}, align 4", var_key, T::build_type()));
+        func.add_instr(
+            format!("%{} = alloca {}, align 4", var_key, self.result_type.to_llvm_type().build())
+        );
     }
 
-    fn generate_llvm<T>(
+    fn generate_llvm(
         &self,
         node_id: usize,
         func: &mut Function,
         llvm_builder: &mut LLVMBuilder,
         dag: &DAG
-    ) -> Operand
-        where T: LLVMType
-    {
+    ) -> Operand {
         let connected_node = self
             .parse_connected_nodes(dag.get_connected_node_ids(node_id))
             .expect("Unintialized variables not supported");
 
-        let result = dag.generate_llvm::<T>(connected_node, func, llvm_builder);
+        let result = dag.generate_llvm(connected_node, func, llvm_builder);
 
         let var_key = llvm_builder.get_var_ssa_key(self.ssa_key.get_ident());
-        // func.add_instr(format!("%{} = alloca {}, align 4", var_key, T::build_type()));
+
         func.add_instr(
-            format!("store {} {}, ptr %{}, align 4", T::build_type(), result.build(), var_key)
+            format!(
+                "store {} {}, ptr %{}, align 4",
+                self.result_type.to_llvm_type().build(),
+                result.build(),
+                var_key
+            )
         );
 
         Operand::Var(Var::new(var_key))
@@ -77,15 +74,21 @@ impl DAGNodeTrait for DAGDefineNode {
 }
 
 impl DAGDefineNode {
-    pub fn new(ssa_key: SSAKey, is_mutable: bool, is_initialized: bool) -> Self {
+    pub fn new(
+        ssa_key: SSAIdent,
+        is_mutable: bool,
+        is_initialized: bool,
+        result_type: ValueType
+    ) -> Self {
         Self {
             ssa_key,
             is_mutable,
             is_initialized,
+            result_type,
         }
     }
 
-    pub fn get_ssa_key(&self) -> &SSAKey {
+    pub fn get_ssa_key(&self) -> &SSAIdent {
         &self.ssa_key
     }
 

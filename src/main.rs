@@ -1,6 +1,8 @@
 mod compiler;
 mod macros;
 mod vm;
+use std::fmt::format;
+
 use compiler::Compiler;
 use vm::VM;
 

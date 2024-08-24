@@ -1,14 +1,17 @@
 use crate::compiler::{
-    ds::symbol_table::SymbolTableRef,
     error_handler::{ CompileError, ErrorHandler, ReportedError },
-    ir::icfg::{
-        cfg::{ CFGGotoNode, CFGNode, CFGNodeId, CFGNodeType, CFG },
-        icfg_builder::{ CFGBuilder, ICFGBuilder },
-        ICFG,
+    ir::{
+        ast::AST_DISSASEMBLE_INDENTATION,
+        icfg::{
+            cfg::{ CFGGotoNode, CFGNode, CFGNodeId, CFGNodeType, CFG },
+            icfg_builder::{ CFGBuilder, ICFGBuilder },
+            ICFG,
+        },
     },
     parser::token::TokenMetadata,
     print_todo,
-    traits::{ Dissasemble, LinearControlFlow, StmtTrait },
+    traits::{ AstDissasemble, Dissasemble, LinearControlFlow, StmtTrait },
+    ProgramSymbolTablePhase1,
 };
 
 use super::GotoNodeIds;
@@ -43,16 +46,10 @@ impl StmtTrait for BreakStmt {
 
     fn validate_stmt(
         &mut self,
-        symbol_table_ref: &mut SymbolTableRef,
+        program_symbol_table: &mut ProgramSymbolTablePhase1,
         error_handler: &mut ErrorHandler
     ) {
         print_todo("Check if break stmt is used outside of loop")
-        // let local_symbol_table = symbol_table_ref.get();
-        // if !local_symbol_table.is_is_in_loop() {
-        //     error_handler.report_compile_error(
-        //         CompileError::new(ReportedError::new(message, chars_range))
-        //     )
-        // }
     }
 
     fn as_linear_control_flow(&self) -> Option<&dyn LinearControlFlow> {
@@ -63,5 +60,19 @@ impl StmtTrait for BreakStmt {
 impl Dissasemble for BreakStmt {
     fn dissasemble(&self) -> String {
         "break\n".to_string()
+    }
+}
+
+impl AstDissasemble for BreakStmt {
+    fn ast_dissasemble(
+        &self,
+        program_symbol_table: &mut ProgramSymbolTablePhase1,
+        scope_depth: usize
+    ) -> String {
+        format!(
+            "[{}]: {}break\n",
+            program_symbol_table.get_current_symbol_table_id(),
+            " ".repeat(AST_DISSASEMBLE_INDENTATION * scope_depth)
+        )
     }
 }

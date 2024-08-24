@@ -1,17 +1,18 @@
 use ahash::AHashMap;
 
 use crate::compiler::{
-    ds::symbol_table::{ SSAKey, SymbolTableRef },
+    ds::{ ssa_ident::SSAIdent, value::ValueType },
     error_handler::ErrorHandler,
     ir::{
-        ast::expr::{ Expr, IdentifierExpr },
+        ast::{ expr::{ Expr, IdentifierExpr }, AST_DISSASEMBLE_INDENTATION },
         icfg::{
             dag::{ DAGAssignNode, DAGNode, DAG },
             icfg_builder::{ CFGBuilder, ICFGBuilder },
             ICFG,
         },
     },
-    traits::{ Dissasemble, ExprTrait },
+    traits::{ AstDissasemble, Dissasemble, ExprTrait },
+    ProgramSymbolTablePhase1,
 };
 
 use super::{ ExprStmt, GotoNodeIds, LinearControlFlow, StmtTrait };
@@ -20,6 +21,7 @@ use super::{ ExprStmt, GotoNodeIds, LinearControlFlow, StmtTrait };
 pub struct VarAssignStmt<'ast> {
     target_expr: IdentifierExpr, // ExprStmt<'ast>,
     value: ExprStmt<'ast>,
+    result_type: Option<ValueType>,
 }
 
 impl<'ast> VarAssignStmt<'ast> {
@@ -27,6 +29,7 @@ impl<'ast> VarAssignStmt<'ast> {
         Self {
             target_expr,
             value,
+            result_type: None,
         }
     }
 
@@ -42,18 +45,8 @@ impl<'ast> VarAssignStmt<'ast> {
         &mut self.value
     }
 
-    pub fn get_value_expr(&mut self) -> &ExprStmt<'ast> {
+    pub fn get_value_expr(&self) -> &ExprStmt<'ast> {
         &self.value
-    }
-
-    pub fn set_ssa_subscript(&mut self, subscript: usize) {
-        self.target_expr.set_ssa_subscript(subscript)
-    }
-}
-
-impl<'ast> Dissasemble for VarAssignStmt<'ast> {
-    fn dissasemble(&self) -> String {
-        format!("{} = {}\n", self.target_expr.dissasemble(), self.value.dissasemble())
     }
 }
 
@@ -73,12 +66,13 @@ impl<'ast> StmtTrait for VarAssignStmt<'ast> {
 
     fn validate_stmt(
         &mut self,
-        symbol_table_ref: &mut SymbolTableRef,
+        program_symbol_table: &mut ProgramSymbolTablePhase1,
         error_handler: &mut ErrorHandler
     ) {
-        match symbol_table_ref.get_mut().assing_var(self) {
-            Ok(ssa_key) => {
-                self.set_ssa_subscript(ssa_key.get_subscript());
+        match program_symbol_table.assign_var(self) {
+            Ok(v) => {
+                self.result_type = Some(v.clone());
+                self.target_expr.set_result_type(v);
             }
             Err(err) => error_handler.report_compile_error(err),
         }
@@ -93,12 +87,22 @@ impl<'ast> LinearControlFlow for VarAssignStmt<'ast> {
     fn compile_into_dag(
         &self,
         dag: &mut DAG,
-        ident_node_id_map: &mut AHashMap<SSAKey, usize>
+        ident_node_id_map: &mut AHashMap<SSAIdent, usize>,
+        icfg_builder: &mut ICFGBuilder
     ) -> usize {
-        let ident_node_id = self.target_expr.compile_into_dag(dag, ident_node_id_map);
-        let value_node_id = self.value.compile_into_dag(dag, ident_node_id_map);
+        let ident_node_id = self.target_expr.compile_into_dag(dag, ident_node_id_map, icfg_builder);
+        let value_node_id = self.value.compile_into_dag(dag, ident_node_id_map, icfg_builder);
 
-        let assign_node_id = dag.push_node(DAGNode::AssignNode(DAGAssignNode));
+        let assign_node_id = dag.push_node(
+            DAGNode::AssignNode(
+                DAGAssignNode::new(
+                    self.result_type
+                        .as_ref()
+                        .expect("Expected result type in VarAssignStmt")
+                        .clone()
+                )
+            )
+        );
 
         dag.add_edge(assign_node_id, ident_node_id);
         dag.add_edge(assign_node_id, value_node_id);
@@ -106,5 +110,27 @@ impl<'ast> LinearControlFlow for VarAssignStmt<'ast> {
         dag.set_entry_node_id(assign_node_id);
 
         assign_node_id
+    }
+}
+
+impl<'ast> Dissasemble for VarAssignStmt<'ast> {
+    fn dissasemble(&self) -> String {
+        format!("{} = {}\n", self.target_expr.dissasemble(), self.value.dissasemble())
+    }
+}
+
+impl<'ast> AstDissasemble for VarAssignStmt<'ast> {
+    fn ast_dissasemble(
+        &self,
+        program_symbol_table: &mut ProgramSymbolTablePhase1,
+        scope_depth: usize
+    ) -> String {
+        format!(
+            "[{}]: {}{} = {}\n",
+            program_symbol_table.get_current_symbol_table_id(),
+            " ".repeat(AST_DISSASEMBLE_INDENTATION * scope_depth),
+            self.target_expr.dissasemble(),
+            self.value.dissasemble()
+        )
     }
 }

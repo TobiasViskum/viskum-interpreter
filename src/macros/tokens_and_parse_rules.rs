@@ -44,7 +44,7 @@ macro_rules! create_tokens_and_parse_rules {
     };
 
     (@construct_rule $method_name:ident) => {
-        Some(|c, arg, arena| c.$method_name(arg, arena))
+        Some(|c, args| c.$method_name(args))
     };
 
     (@count $($token:ident),*) => {

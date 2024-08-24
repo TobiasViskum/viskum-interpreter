@@ -11,14 +11,15 @@ impl<'a> Lexer<'a> {
         if let Some(c) = c { c.is_alphabetic() || c == &'_' } else { false }
     }
 
-    pub(super) fn advance(&mut self) {
+    pub(super) fn advance(&mut self) -> char {
         self.current += 1;
+        **self.peek(-1).as_ref().unwrap()
     }
 
-    pub(super) fn peek(&self, offset: i8) -> Option<&char> {
+    pub(super) fn peek(&self, offset: isize) -> Option<&char> {
         let index = ((self.current as isize) + (offset as isize)) as usize;
 
-        if index > self.source.len() {
+        if index > self.source.len() - 1 {
             None
         } else {
             let result = self.source.get(index);
@@ -26,7 +27,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub(super) fn is(&self, offset: i8, expected: char) -> bool {
+    pub(super) fn is(&self, offset: isize, expected: char) -> bool {
         if self.is_at_end() {
             return false;
         }

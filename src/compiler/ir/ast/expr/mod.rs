@@ -17,14 +17,12 @@ pub use identifier_expr::IdentifierExpr;
 pub use fn_call_expr::FnCallExpr;
 
 use crate::compiler::{
-    ds::{
-        symbol_table::{ SSAKey, SymbolTableRef },
-        value::{ ops::{ BinaryOp, UnaryOp }, ValueType },
-    },
+    ds::{ ssa_ident::SSAIdent, value::{ ops::{ BinaryOp, UnaryOp }, ValueType } },
     error_handler::{ CompileError, ReportedError, SrcCharsRange },
-    ir::icfg::dag::DAG,
+    ir::icfg::{ dag::DAG, icfg_builder::ICFGBuilder },
     parser::token::TokenMetadata,
-    traits::{ Dissasemble, ExprTrait },
+    traits::{ AstDissasemble, Dissasemble, ExprTrait },
+    ProgramSymbolTablePhase1,
 };
 
 use super::AstArena;
@@ -73,7 +71,7 @@ impl<'ast> ExprBuilder<'ast> {
         Ok(())
     }
 
-    pub fn emit_fn_call(&mut self, fn_call_expr: FnCallExpr<'ast>, arena: &'ast AstArena<'ast>) {
+    pub fn emit_fn_call(&mut self, fn_call_expr: FnCallExpr<'ast>) {
         self.exprs.push(Expr::FnCallExpr(fn_call_expr))
     }
 
@@ -111,8 +109,7 @@ impl<'ast> ExprBuilder<'ast> {
     pub fn emit_binary_op(
         &mut self,
         op: BinaryOp,
-        metadata: TokenMetadata,
-        arena: &'ast AstArena<'ast>
+        metadata: TokenMetadata
     ) -> Result<(), CompileError> {
         let popped_right = self.exprs.pop();
         let popped_left = self.exprs.pop();
@@ -120,7 +117,7 @@ impl<'ast> ExprBuilder<'ast> {
         let (lhs, rhs) = match (popped_left, popped_right) {
             (Some(lhs), Some(rhs)) => (lhs, rhs),
             (Some(lhs), None) => {
-                let src_chars_range = unsafe {
+                let src_chars_range = {
                     let mut src_chars_range = lhs.collect_metadata();
                     src_chars_range.merge(&metadata.into());
                     src_chars_range
@@ -135,7 +132,7 @@ impl<'ast> ExprBuilder<'ast> {
                 )?
             }
             (None, Some(rhs)) => {
-                let src_chars_range = unsafe {
+                let src_chars_range = {
                     let mut src_chars_range = rhs.collect_metadata();
                     src_chars_range.merge(&metadata.into());
                     src_chars_range
@@ -192,16 +189,52 @@ impl<'ast> Expr<'ast> {
         }
     }
 
-    pub fn unwrap_ident_expr(&self) -> (Rc<str>, TokenMetadata) {
+    pub fn compile_to_dag(&self) -> DAG {
+        todo!()
+    }
+}
+
+impl<'ast> ExprTrait for Expr<'ast> {
+    fn type_check(
+        &mut self,
+        program_symbol_table: &ProgramSymbolTablePhase1
+    ) -> Result<ValueType, CompileError> {
         match self {
-            Self::IdentifierExpr(ident_expr) =>
-                (ident_expr.get_lexeme(), ident_expr.get_raw_metadata()),
-            _ => panic!("Expected identifier expr in unwrap_ident_expr"),
+            Self::GroupingExpr(expr) => expr.type_check(program_symbol_table),
+            Self::BinaryExpr(expr) => expr.type_check(program_symbol_table),
+            Self::UnaryExpr(expr) => expr.type_check(program_symbol_table),
+            Self::LiteralExpr(expr) => expr.type_check(program_symbol_table),
+            Self::IdentifierExpr(expr) => expr.type_check(program_symbol_table),
+            Self::FnCallExpr(expr) => expr.type_check(program_symbol_table),
         }
     }
 
-    pub fn compile_to_dag(&self) -> DAG {
-        todo!()
+    fn compile_into_dag(
+        &self,
+        dag: &mut DAG,
+        ident_node_id_map: &mut AHashMap<SSAIdent, usize>,
+        icfg_builder: &mut ICFGBuilder
+    ) -> usize {
+        match self {
+            Self::GroupingExpr(expr) => expr.compile_into_dag(dag, ident_node_id_map, icfg_builder),
+            Self::BinaryExpr(expr) => expr.compile_into_dag(dag, ident_node_id_map, icfg_builder),
+            Self::UnaryExpr(expr) => expr.compile_into_dag(dag, ident_node_id_map, icfg_builder),
+            Self::LiteralExpr(expr) => expr.compile_into_dag(dag, ident_node_id_map, icfg_builder),
+            Self::IdentifierExpr(expr) =>
+                expr.compile_into_dag(dag, ident_node_id_map, icfg_builder),
+            Self::FnCallExpr(expr) => expr.compile_into_dag(dag, ident_node_id_map, icfg_builder),
+        }
+    }
+
+    fn collect_metadata(&self) -> SrcCharsRange {
+        match self {
+            Self::GroupingExpr(expr) => expr.collect_metadata(),
+            Self::BinaryExpr(expr) => expr.collect_metadata(),
+            Self::UnaryExpr(expr) => expr.collect_metadata(),
+            Self::LiteralExpr(expr) => expr.collect_metadata(),
+            Self::IdentifierExpr(expr) => expr.collect_metadata(),
+            Self::FnCallExpr(expr) => expr.collect_metadata(),
+        }
     }
 }
 
@@ -215,72 +248,6 @@ impl<'ast> Dissasemble for Expr<'ast> {
             Self::IdentifierExpr(expr) => expr.dissasemble(),
             Self::FnCallExpr(expr) => expr.dissasemble(),
             // Self::NativeCallExpr(expr) => expr.dissasemble(),
-        }
-    }
-}
-
-impl<'ast> ExprTrait for Expr<'ast> {
-    // fn evaluate(&mut self, ast_symbol_table: &AstSymbolTable) -> ExprEvaluateResult {
-    //     match self {
-    //         Self::GroupingExpr(expr) => expr.evaluate(ast_symbol_table),
-    //         Self::BinaryExpr(expr) => expr.evaluate(ast_symbol_table),
-    //         Self::UnaryExpr(expr) => expr.evaluate(ast_symbol_table),
-    //         Self::LiteralExpr(expr) => expr.evaluate(ast_symbol_table),
-    //         Self::IdentifierExpr(expr) => expr.evaluate(ast_symbol_table),
-    //         Self::FnCallExpr(expr) => expr.evaluate(ast_symbol_table),
-    //         Self::NativeCallExpr(expr) => expr.evaluate(ast_symbol_table),
-    //     }
-    // }
-
-    // fn type_check_and_constant_fold(&mut self, ast_symbol_table: &AstSymbolTable) -> ExprResult {
-    //     match self {
-    //         Self::GroupingExpr(expr) => expr.type_check_and_constant_fold(ast_symbol_table),
-    //         Self::BinaryExpr(expr) => expr.type_check_and_constant_fold(ast_symbol_table),
-    //         Self::UnaryExpr(expr) => expr.type_check_and_constant_fold(ast_symbol_table),
-    //         Self::LiteralExpr(expr) => expr.type_check_and_constant_fold(ast_symbol_table),
-    //         Self::IdentifierExpr(expr) => expr.type_check_and_constant_fold(ast_symbol_table),
-    //         Self::FnCallExpr(expr) => expr.type_check_and_constant_fold(ast_symbol_table),
-    //         Self::NativeCallExpr(expr) => expr.type_check_and_constant_fold(ast_symbol_table),
-    //     }
-    // }
-
-    fn type_check(&mut self, symbol_table_ref: &SymbolTableRef) -> Result<ValueType, CompileError> {
-        match self {
-            Self::GroupingExpr(expr) => expr.type_check(symbol_table_ref),
-            Self::BinaryExpr(expr) => expr.type_check(symbol_table_ref),
-            Self::UnaryExpr(expr) => expr.type_check(symbol_table_ref),
-            Self::LiteralExpr(expr) => expr.type_check(symbol_table_ref),
-            Self::IdentifierExpr(expr) => expr.type_check(symbol_table_ref),
-            Self::FnCallExpr(expr) => expr.type_check(symbol_table_ref),
-            // Self::NativeCallExpr(expr) => expr.type_check(symbol_table_ref),
-        }
-    }
-
-    fn compile_into_dag(
-        &self,
-        dag: &mut DAG,
-        ident_node_id_map: &mut AHashMap<SSAKey, usize>
-    ) -> usize {
-        match self {
-            Self::GroupingExpr(expr) => expr.compile_into_dag(dag, ident_node_id_map),
-            Self::BinaryExpr(expr) => expr.compile_into_dag(dag, ident_node_id_map),
-            Self::UnaryExpr(expr) => expr.compile_into_dag(dag, ident_node_id_map),
-            Self::LiteralExpr(expr) => expr.compile_into_dag(dag, ident_node_id_map),
-            Self::IdentifierExpr(expr) => expr.compile_into_dag(dag, ident_node_id_map),
-            Self::FnCallExpr(expr) => expr.compile_into_dag(dag, ident_node_id_map),
-            // Self::NativeCallExpr(expr) => expr.compile_to_dag_node(dag),
-        }
-    }
-
-    fn collect_metadata(&self) -> SrcCharsRange {
-        match self {
-            Self::GroupingExpr(expr) => expr.collect_metadata(),
-            Self::BinaryExpr(expr) => expr.collect_metadata(),
-            Self::UnaryExpr(expr) => expr.collect_metadata(),
-            Self::LiteralExpr(expr) => expr.collect_metadata(),
-            Self::IdentifierExpr(expr) => expr.collect_metadata(),
-            Self::FnCallExpr(expr) => expr.collect_metadata(),
-            // Self::NativeCallExpr(expr) => expr.collect_metadata(),
         }
     }
 }

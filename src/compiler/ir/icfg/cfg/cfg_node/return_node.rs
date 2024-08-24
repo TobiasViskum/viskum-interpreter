@@ -1,5 +1,10 @@
-use llvm_builder::{ Function, LLVMBuilder };
+use crate::compiler::ds::value::ValueType;
+use crate::compiler::ir::icfg::cfg::CFG;
+use crate::compiler::ir::icfg::dag::DAG;
+use crate::compiler::llvm_builder::{ BuildLLVM, Function, LLVMBuilder, Module };
 
+use crate::compiler::print_todo;
+use crate::compiler::traits::CFGNodeGenerateLLVM;
 use crate::{
     compiler::{
         ds::register_allocator::RegisterAllocator,
@@ -9,22 +14,44 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct CFGReturnNode;
+pub struct CFGReturnNode {
+    ret_val: Option<DAG>,
+    ret_type: ValueType,
+}
 
-impl AllocLLVM for CFGReturnNode {
-    fn alloc_llvm(
-        &self,
-        llvm_builder: &mut LLVMBuilder,
-        module: &mut llvm_builder::Module,
-        func: &mut Function
-    ) {
-        unimplemented!()
+impl CFGReturnNode {
+    pub fn new(ret_val: Option<DAG>, ret_type: ValueType) -> Self {
+        print_todo("ret_val has to be a cfg node(s) when making expression based");
+        Self { ret_val, ret_type }
+    }
+
+    pub fn get_ret_val(&self) -> Option<&DAG> {
+        self.ret_val.as_ref()
     }
 }
 
-impl GenerateLLVM for CFGReturnNode {
-    fn build_llvm(&self, llvm_builder: &mut LLVMBuilder, func: &mut Function) {
-        unimplemented!()
+impl AllocLLVM for CFGReturnNode {
+    fn alloc_llvm(&self, llvm_builder: &mut LLVMBuilder, module: &mut Module, func: &mut Function) {
+        self.ret_val.as_ref().map(|dag| dag.alloc_llvm(llvm_builder, module, func));
+    }
+}
+
+impl CFGNodeGenerateLLVM for CFGReturnNode {
+    fn build_llvm(
+        &self,
+        node_id: usize,
+        llvm_builder: &mut LLVMBuilder,
+        func: &mut Function,
+        cfg: &CFG
+    ) {
+        let ret_key = self.ret_val.as_ref().map(|dag| dag.build_llvm(llvm_builder, func));
+        if let Some(ret_key) = ret_key {
+            func.add_instr(
+                format!("ret {} {}", self.ret_type.to_llvm_type().build(), ret_key.build())
+            )
+        } else {
+            func.add_instr(format!("ret {}", self.ret_type.to_llvm_type().build()))
+        }
     }
 }
 
@@ -44,6 +71,6 @@ impl ParseConnectedNodes for CFGReturnNode {
 
 impl Dissasemble for CFGReturnNode {
     fn dissasemble(&self) -> String {
-        todo!()
+        "RET".to_string()
     }
 }

@@ -17,7 +17,34 @@ impl<'a> Lexer<'a> {
         let ttype = match self.get_character(self.start) {
             'b' => self.check_keyword(1, 4, "reak", TokenType::TokenBreak),
             'c' => self.check_keyword(1, 7, "ontinue", TokenType::TokenContinue),
-            'e' => self.check_keyword(1, 3, "lse", TokenType::TokenElse),
+            'd' => {
+                if self.current - self.start > 1 {
+                    match self.get_character(self.start + 1) {
+                        'o' => TokenType::TokenDo,
+                        'e' => self.check_keyword(2, 1, "f", TokenType::TokenDef),
+                        _ => TokenType::TokenIdentifier,
+                    }
+                } else {
+                    TokenType::TokenIdentifier
+                }
+            }
+            'e' => {
+                if self.current - self.start > 1 {
+                    match self.get_character(self.start + 1) {
+                        'n' => self.check_keyword(2, 1, "d", TokenType::TokenEnd),
+                        'l' => {
+                            match self.get_character(self.start + 2) {
+                                'i' => self.check_keyword(3, 1, "f", TokenType::TokenElif),
+                                's' => self.check_keyword(3, 1, "e", TokenType::TokenElse),
+                                _ => TokenType::TokenIdentifier,
+                            }
+                        }
+                        _ => TokenType::TokenIdentifier,
+                    }
+                } else {
+                    TokenType::TokenIdentifier
+                }
+            }
             'f' => {
                 if self.current - self.start > 1 {
                     match self.get_character(self.start + 1) {
@@ -32,7 +59,7 @@ impl<'a> Lexer<'a> {
             'i' => self.check_keyword(1, 1, "f", TokenType::TokenIf),
             'l' => self.check_keyword(1, 3, "oop", TokenType::TokenLoop),
             'm' => self.check_keyword(1, 2, "ut", TokenType::TokenMutable),
-            'r' => self.check_keyword(1, 5, "eturn", TokenType::TokenReturn),
+            'r' => self.check_keyword(1, 2, "et", TokenType::TokenReturn),
             't' => {
                 if self.current - self.start > 1 {
                     match self.get_character(self.start + 1) {
@@ -101,7 +128,9 @@ impl<'a> Lexer<'a> {
                 break;
             }
             match c {
-                ' ' | '\r' | '\t' => self.advance(),
+                ' ' | '\r' | '\t' => {
+                    self.advance();
+                }
                 '\n' => {
                     self.line += 1;
                     self.advance();
@@ -113,13 +142,12 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub(super) fn skip_comment(&mut self) -> Option<Token> {
+    pub(super) fn skip_comment(&mut self) {
         if self.is(0, '/') && self.is(1, '/') {
             self.skip_single_line_comment();
         } else if self.is(0, '/') && self.is(1, '*') {
             self.skip_multi_line_comment();
         }
-        None
     }
 
     fn skip_single_line_comment(&mut self) {

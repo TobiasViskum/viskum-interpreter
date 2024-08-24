@@ -1,4 +1,4 @@
-use llvm_builder::{ Function, LLVMBuilder };
+use crate::compiler::llvm_builder::{ Function, LLVMBuilder };
 
 use crate::{
     compiler::{
@@ -27,7 +27,7 @@ impl AllocLLVM for CFGDecisionNode {
     fn alloc_llvm(
         &self,
         llvm_builder: &mut LLVMBuilder,
-        module: &mut llvm_builder::Module,
+        module: &mut crate::compiler::llvm_builder::Module,
         func: &mut Function
     ) {
         self.condition.alloc_llvm(llvm_builder, module, func)

@@ -1,7 +1,7 @@
 use ahash::AHashMap;
 
 use crate::compiler::{
-    ds::{ symbol_table::{ SSAKey, SymbolTableRef }, value::ValueType },
+    ds::{ ssa_ident::SSAIdent, value::ValueType },
     error_handler::{ CompileError, ErrorHandler, SrcCharsRange },
     ir::{
         ast::expr::Expr,
@@ -12,7 +12,8 @@ use crate::compiler::{
             ICFG,
         },
     },
-    traits::{ Dissasemble, ExprTrait, LinearControlFlow, StmtTrait },
+    traits::{ AstDissasemble, Dissasemble, ExprTrait, LinearControlFlow, StmtTrait },
+    ProgramSymbolTablePhase1,
 };
 
 use super::{ GotoNodeIds };
@@ -37,15 +38,15 @@ impl<'ast> ExprStmt<'ast> {
 
     pub fn type_check(
         &mut self,
-        symbol_table_ref: &SymbolTableRef
+        program_symbol_table: &ProgramSymbolTablePhase1
     ) -> Result<ValueType, CompileError> {
-        self.expr.type_check(symbol_table_ref)
+        self.expr.type_check(program_symbol_table)
     }
 
-    pub fn compile_to_dag(&self) -> DAG {
+    pub fn compile_to_dag(&self, icfg_builder: &mut ICFGBuilder) -> DAG {
         let mut dag = DAG::new();
         let mut ident_node_id_map = AHashMap::new();
-        self.compile_into_dag(&mut dag, &mut ident_node_id_map);
+        self.compile_into_dag(&mut dag, &mut ident_node_id_map, icfg_builder);
         dag
     }
 }
@@ -72,14 +73,25 @@ impl<'ast> StmtTrait for ExprStmt<'ast> {
 
     fn validate_stmt(
         &mut self,
-        symbol_table_ref: &mut SymbolTableRef,
+        program_symbol_table: &mut ProgramSymbolTablePhase1,
         error_handler: &mut ErrorHandler
     ) {
-        match self.expr.type_check(symbol_table_ref) {
+        match self.expr.type_check(program_symbol_table) {
             Ok(_) => {}
             Err(err) => error_handler.report_compile_error(err),
         }
     }
+
+    // fn validate_stmt(
+    //     &mut self,
+    //     symbol_table_ref: &mut SymbolTableRef,
+    //     error_handler: &mut ErrorHandler
+    // ) {
+    //     match self.expr.type_check(symbol_table_ref) {
+    //         Ok(_) => {}
+    //         Err(err) => error_handler.report_compile_error(err),
+    //     }
+    // }
 
     fn as_linear_control_flow(&self) -> Option<&dyn LinearControlFlow> {
         Some(self)
@@ -90,9 +102,10 @@ impl<'ast> LinearControlFlow for ExprStmt<'ast> {
     fn compile_into_dag(
         &self,
         dag: &mut DAG,
-        ident_node_id_map: &mut AHashMap<SSAKey, usize>
+        ident_node_id_map: &mut AHashMap<SSAIdent, usize>,
+        icfg_builder: &mut ICFGBuilder
     ) -> usize {
-        let node_id = self.expr.compile_into_dag(dag, ident_node_id_map);
+        let node_id = self.expr.compile_into_dag(dag, ident_node_id_map, icfg_builder);
         dag.set_entry_node_id(node_id);
         node_id
     }
@@ -101,5 +114,15 @@ impl<'ast> LinearControlFlow for ExprStmt<'ast> {
 impl<'ast> Dissasemble for ExprStmt<'ast> {
     fn dissasemble(&self) -> String {
         self.expr.dissasemble()
+    }
+}
+
+impl<'ast> AstDissasemble for ExprStmt<'ast> {
+    fn ast_dissasemble(
+        &self,
+        program_symbol_table: &mut ProgramSymbolTablePhase1,
+        scope_depth: usize
+    ) -> String {
+        format!("{}", self.expr.dissasemble())
     }
 }

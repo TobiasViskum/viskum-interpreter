@@ -1,20 +1,22 @@
-use llvm_builder::{ BuildLLVM, Function, LLVMBuilder, LLVMType, Module, Operand, Var };
+use crate::compiler::ds::value::ValueType;
+use crate::compiler::llvm_builder::{ BuildLLVM, Function, LLVMBuilder, Module, Operand, Var };
 
 use crate::compiler::{
-    ds::value::ops::{ BinaryOp, ComparisonOp },
+    ds::value::ops::BinaryOp,
     ir::icfg::dag::DAG,
-    traits::{ AllocLLVM, DAGNodeGenerateLLVM, DAGNodeTrait, OpTrait, ParseConnectedNodes },
+    traits::{ DAGNodeGenerateLLVM, DAGNodeTrait, OpTrait, ParseConnectedNodes },
     Dissasemble,
 };
 
 #[derive(Debug)]
 pub struct DAGBinaryNode {
     op: BinaryOp,
+    result_type: ValueType,
 }
 
 impl DAGBinaryNode {
-    pub fn new(op: BinaryOp) -> Self {
-        Self { op }
+    pub fn new(op: BinaryOp, result_type: ValueType) -> Self {
+        Self { op, result_type }
     }
 
     pub fn get_op(&self) -> BinaryOp {
@@ -23,30 +25,27 @@ impl DAGBinaryNode {
 }
 
 impl DAGNodeGenerateLLVM for DAGBinaryNode {
-    fn alloc_llvm<T>(
+    fn alloc_llvm(
         &self,
         _llvm_builder: &mut LLVMBuilder,
         _module: &mut Module,
         _func: &mut Function
-    )
-        where T: LLVMType {}
+    ) {}
 
-    fn generate_llvm<T>(
+    fn generate_llvm(
         &self,
         node_id: usize,
         func: &mut Function,
         llvm_builder: &mut LLVMBuilder,
         dag: &DAG
-    ) -> Operand
-        where T: LLVMType
-    {
+    ) -> Operand {
         let (connected_node_id_1, connected_node_id_2) = self.parse_connected_nodes(
             dag.get_connected_node_ids(node_id)
         );
 
         let (op1, op2) = (
-            dag.generate_llvm::<T>(connected_node_id_1, func, llvm_builder),
-            dag.generate_llvm::<T>(connected_node_id_2, func, llvm_builder),
+            dag.generate_llvm(connected_node_id_1, func, llvm_builder),
+            dag.generate_llvm(connected_node_id_2, func, llvm_builder),
         );
 
         let result_key = llvm_builder.req_ssa_key();
@@ -56,7 +55,7 @@ impl DAGNodeGenerateLLVM for DAGBinaryNode {
                 "%{} = icmp {} {} {}, {}",
                 result_key,
                 self.op.build_llvm(),
-                T::build_type(),
+                self.result_type.to_llvm_type().build(),
                 op1.build(),
                 op2.build()
             )
@@ -65,7 +64,7 @@ impl DAGNodeGenerateLLVM for DAGBinaryNode {
                 "%{} = {} nsw {} {}, {}",
                 result_key,
                 self.op.build_llvm(),
-                T::build_type(),
+                self.result_type.to_llvm_type().build(),
                 op1.build(),
                 op2.build()
             )

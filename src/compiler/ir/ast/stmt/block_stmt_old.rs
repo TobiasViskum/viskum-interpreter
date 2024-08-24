@@ -1,7 +1,7 @@
 use ahash::AHashMap;
 
 use crate::compiler::{
-    ds::symbol_table::{ SSAKey, SymbolTableRef },
+    ds::symbol_table::{ SSAIdent, SymbolTableRef },
     error_handler::ErrorHandler,
     ir::icfg::{
         cfg::{ CFGNode, CFGNodeId, CFGNodeType, CFGProcessNode, CFG },
@@ -85,7 +85,7 @@ impl<'ast> LinearControlFlow for BlockStmt<'ast> {
     fn compile_into_dag(
         &self,
         dag: &mut DAG,
-        ident_node_id_map: &mut ahash::AHashMap<SSAKey, usize>
+        ident_node_id_map: &mut ahash::AHashMap<SSAIdent, usize>
     ) -> usize {
         self.stmts.compile_into_dag(dag, ident_node_id_map)
     }

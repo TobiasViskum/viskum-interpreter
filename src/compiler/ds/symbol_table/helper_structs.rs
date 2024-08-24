@@ -9,7 +9,7 @@ use crate::compiler::{
     traits::SymbolTableAlloc,
 };
 
-use super::{ local_symbol_table::LocalSymbolTable, SSAKey };
+use super::{ local_symbol_table::LocalSymbolTable, SSAIdent };
 
 #[derive(Debug)]
 pub enum SymbolState {
@@ -120,7 +120,7 @@ impl Symbol {
 
 #[derive(Debug)]
 pub struct Symbols {
-    symbols: AHashMap<SSAKey, (Symbol, SymbolState)>,
+    symbols: AHashMap<SSAIdent, (Symbol, SymbolState)>,
 }
 
 impl Symbols {
@@ -130,7 +130,7 @@ impl Symbols {
         }
     }
 
-    pub fn iter(&self) -> std::collections::hash_map::Iter<SSAKey, (Symbol, SymbolState)> {
+    pub fn iter(&self) -> std::collections::hash_map::Iter<SSAIdent, (Symbol, SymbolState)> {
         self.symbols.iter()
     }
 
@@ -143,7 +143,7 @@ impl Symbols {
 }
 
 impl Symbols {
-    pub fn lookup_with_key(&self, ssa_key: &SSAKey) -> Option<&Symbol> {
+    pub fn lookup_with_key(&self, ssa_key: &SSAIdent) -> Option<&Symbol> {
         match self.symbols.get(ssa_key) {
             Some((symbol, _)) => Some(symbol),
             None => None,
@@ -180,7 +180,7 @@ impl Symbols {
         }
     }
 
-    pub fn lookup(&self, ident: &Rc<str>) -> Option<(&SSAKey, &Symbol)> {
+    pub fn lookup(&self, ident: &Rc<str>) -> Option<(&SSAIdent, &Symbol)> {
         self.symbols
             .iter()
             .filter(|symbol| symbol.0.ident == *ident)
@@ -188,7 +188,7 @@ impl Symbols {
             .and_then(|(ssa_key, (symbol, _))| Some((ssa_key, symbol)))
     }
 
-    pub fn insert(&mut self, ssa_key: SSAKey, symbol: Symbol) -> SSAKey {
+    pub fn insert(&mut self, ssa_key: SSAIdent, symbol: Symbol) -> SSAIdent {
         self.symbols.insert(ssa_key.clone(), (symbol, SymbolState::Unchanged));
         ssa_key
     }

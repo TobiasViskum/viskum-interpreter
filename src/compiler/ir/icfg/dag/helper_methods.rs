@@ -4,7 +4,6 @@ use crate::{
     compiler::{
         ds::{
             register_allocator::RegisterAllocator,
-            symbol_table::SSAKey,
             value::{ ops::{ BinaryOp, ComparisonOp, UnaryOp }, Value },
             vm_builder::VMBuilder,
         },

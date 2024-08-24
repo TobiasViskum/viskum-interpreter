@@ -1,7 +1,6 @@
 use ahash::AHashMap;
 
 use crate::compiler::{
-    ds::symbol_table::{ SSAKey, SymbolTableRef },
     error_handler::ErrorHandler,
     ir::icfg::{
         dag::{ DAGIdentNode, DAGNode, DAG },
@@ -10,6 +9,7 @@ use crate::compiler::{
     },
     traits::{ LinearControlFlow, StmtTrait },
     Dissasemble,
+    ProgramSymbolTablePhase1,
 };
 
 use super::{ ExprStmt, GotoNodeIds };
@@ -45,9 +45,11 @@ impl<'ast> StmtTrait for ImplicitRetStmt<'ast> {
 
     fn validate_stmt(
         &mut self,
-        symbol_table_ref: &mut SymbolTableRef,
+        program_symbol_table: &mut ProgramSymbolTablePhase1,
         error_handler: &mut ErrorHandler
-    ) {}
+    ) {
+        todo!()
+    }
 
     fn is_linear_control_flow(&self) -> bool {
         true

@@ -1,7 +1,9 @@
+use std::rc::Rc;
+
 use ahash::AHashMap;
 
 use crate::compiler::{
-    ds::{ symbol_table::SSAKey, value::ValueType },
+    ds::{ ssa_ident::SSAIdent, value::ValueType },
     ir::ast::stmt::FunctionStmt,
     traits::LinearControlFlow,
     Dissasemble,
@@ -15,7 +17,7 @@ use super::{
 
 #[derive(Debug)]
 pub struct ICFGBuilder {
-    fn_to_cfg_id: AHashMap<SSAKey, usize>,
+    fn_to_cfg_id: AHashMap<SSAIdent, usize>,
     icfg: ICFG,
 }
 
@@ -35,6 +37,14 @@ impl ICFGBuilder {
         self.icfg.set_entry_cfg(entry_cfg_id)
     }
 
+    pub fn insert_fn_cfg_id(&mut self, ssa_ident: SSAIdent, fn_cfg_id: usize) {
+        self.fn_to_cfg_id.insert(ssa_ident, fn_cfg_id);
+    }
+
+    pub fn get_fn_cfg_id(&mut self, ssa_ident: &SSAIdent) -> usize {
+        *self.fn_to_cfg_id.get(ssa_ident).expect("Expected fn_cfg_id, got none")
+    }
+
     pub fn push_cfg(&mut self, cfg: CFG) -> usize {
         self.icfg.push_cfg(cfg);
         self.icfg.cfgs.len() - 1
@@ -50,8 +60,8 @@ pub struct CFGBuilder {
 }
 
 impl CFGBuilder {
-    pub fn new() -> Self {
-        let mut cfg = CFG::new("main".to_string(), ValueType::Int);
+    pub fn new(ssa_name: SSAIdent, ret_type: ValueType, args_count: usize) -> Self {
+        let mut cfg = CFG::new(ssa_name, ret_type, args_count);
         cfg.push_node(CFGNode::new(CFGNodeType::TerminateNode(CFGTerminateNode::new_start())));
         cfg.add_edge(0, 1);
 
@@ -61,6 +71,33 @@ impl CFGBuilder {
             building_linear_basic_block: None,
             next_label_id: 1,
         }
+    }
+
+    pub fn get_ret_type(&self) -> &ValueType {
+        self.building_cfg.get_ret_type()
+    }
+
+    fn new_with_cfg(cfg: CFG) -> Self {
+        Self {
+            current_cfg_node_id: 0,
+            building_cfg: cfg,
+            building_linear_basic_block: None,
+            next_label_id: 1,
+        }
+    }
+
+    pub fn new_global() -> Self {
+        let mut cfg = CFG::new(SSAIdent::new("global".into(), 0), ValueType::Void, 0);
+        cfg.push_node(CFGNode::new(CFGNodeType::TerminateNode(CFGTerminateNode::new_start())));
+        cfg.add_edge(0, 1);
+        Self::new_with_cfg(cfg)
+    }
+
+    pub fn new_main() -> Self {
+        let mut cfg = CFG::new(SSAIdent::new("main".into(), 0), ValueType::Int, 0);
+        cfg.push_node(CFGNode::new(CFGNodeType::TerminateNode(CFGTerminateNode::new_start())));
+        cfg.add_edge(0, 1);
+        Self::new_with_cfg(cfg)
     }
 
     pub fn debug(&self) {
@@ -111,11 +148,15 @@ impl CFGBuilder {
         self.current_cfg_node_id
     }
 
-    pub fn build_into_linear_basic_block(&mut self, linear_stmt: &dyn LinearControlFlow) {
+    pub fn build_into_linear_basic_block(
+        &mut self,
+        linear_stmt: &dyn LinearControlFlow,
+        icfg_builder: &mut ICFGBuilder
+    ) {
         let linear_basic_block = self.setup_or_get_mut_building_linear_basic_block();
         let (dag, ident_node_id_map) = linear_basic_block.get_linear_block_data();
 
-        let dag_node_id = linear_stmt.compile_into_dag(dag, ident_node_id_map);
+        let dag_node_id = linear_stmt.compile_into_dag(dag, ident_node_id_map, icfg_builder);
 
         if let Some(prev_node_id) = linear_basic_block.get_prev_dag_node_id() {
             linear_basic_block.get_dag().add_edge(dag_node_id, prev_node_id);
@@ -154,7 +195,7 @@ impl CFGBuilder {
 #[derive(Debug)]
 struct LinearBasicBlock {
     dag: DAG,
-    ident_node_id_map: AHashMap<SSAKey, usize>,
+    ident_node_id_map: AHashMap<SSAIdent, usize>,
     prev_dag_node_id: Option<usize>,
 }
 
@@ -171,7 +212,7 @@ impl LinearBasicBlock {
         self.dag
     }
 
-    pub fn get_linear_block_data(&mut self) -> (&mut DAG, &mut AHashMap<SSAKey, usize>) {
+    pub fn get_linear_block_data(&mut self) -> (&mut DAG, &mut AHashMap<SSAIdent, usize>) {
         (&mut self.dag, &mut self.ident_node_id_map)
     }
 

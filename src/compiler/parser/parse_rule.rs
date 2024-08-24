@@ -1,11 +1,14 @@
-use crate::compiler::{ error_handler::CompileError, ir::ast::{ expr::ExprBuilder, AstArena } };
+use crate::compiler::{
+    error_handler::CompileError,
+    ir::ast::{ expr::ExprBuilder, AstArena },
+    ProgramSymbolTablePhase1,
+};
 
 use super::{ precedence::Precedence, Parser };
 
 type ParseRuleMethod = for<'b> fn(
     &mut Parser,
-    &mut ExprBuilder<'b>,
-    &'b AstArena<'b>
+    (&mut ExprBuilder<'b>, &mut ProgramSymbolTablePhase1, &'b AstArena<'b>)
 ) -> Result<(), CompileError>;
 
 #[derive(Debug)]

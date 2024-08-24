@@ -87,7 +87,7 @@ proc iota begin
 end
 
 impl<'ast> LinearControlFlow for Stmts<'ast>
-    fn compileIntoDag(&self, dag &mut DAG, identNodeIdMap &mut HashMap<SSAKey, Uint>) Uint
+    fn compileIntoDag(&self, dag &mut DAG, identNodeIdMap &mut HashMap<SSAIdent, Uint>) Uint
         linearStmts := self.stmts.iter().filterMap(|stmt| stmt.asLinearControlFlow()).collect()
 
         for linearStmt in linearStmts
@@ -103,7 +103,7 @@ impl<'ast> LinearControlFlow for Stmts<'ast> {
     fn compile_into_dag(
         &self,
         dag: &mut DAG,
-        ident_node_id_map: &mut AHashMap<SSAKey, usize>
+        ident_node_id_map: &mut AHashMap<SSAIdent, usize>
     ) -> usize {
         let linear_stmts = self.stmts.iter().filter_map(|stmt| stmt.as_linear_control_flow()).collect::<Vec<_>>();
 

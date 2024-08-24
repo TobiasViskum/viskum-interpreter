@@ -1,4 +1,4 @@
-use llvm_builder::{ Function, LLVMBuilder };
+use crate::compiler::llvm_builder::{ Function, LLVMBuilder };
 
 use crate::{
     compiler::{
@@ -23,7 +23,7 @@ impl AllocLLVM for CFGTerminateNode {
     fn alloc_llvm(
         &self,
         _llvm_builder: &mut LLVMBuilder,
-        _module: &mut llvm_builder::Module,
+        _module: &mut crate::compiler::llvm_builder::Module,
         _func: &mut Function
     ) {}
 }

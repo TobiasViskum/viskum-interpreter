@@ -4,14 +4,14 @@ use crate::{ vm::Heap, U16_MAX, U8_MAX };
 
 use super::{
     register_allocator::RegisterAllocator,
-    symbol_table::SSAKey,
+    ssa_ident::SSAIdent,
     value::{ ComplexConst, SimpleConst },
 };
 
 #[derive(Debug)]
 pub struct VMBuilder {
     allocated_const_registers: AHashMap<SimpleConst, usize>,
-    allocated_var_registers: AHashMap<SSAKey, usize>,
+    allocated_var_registers: AHashMap<SSAIdent, usize>,
     heap: Heap,
 }
 
@@ -49,7 +49,7 @@ impl VMBuilder {
         }
     }
 
-    pub fn alloc_var_reg(&mut self, ssa_key: SSAKey) -> usize {
+    pub fn alloc_var_reg(&mut self, ssa_key: SSAIdent) -> usize {
         todo!()
     }
 

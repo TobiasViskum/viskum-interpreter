@@ -5,6 +5,8 @@ mod ident_node;
 mod assign_node;
 mod group_node;
 mod unary_node;
+mod declare_node;
+mod fn_call_node;
 
 pub use binary_node::DAGBinaryNode;
 pub use const_node::DAGConstNode;
@@ -13,3 +15,4 @@ pub use ident_node::DAGIdentNode;
 pub use assign_node::DAGAssignNode;
 pub use group_node::DAGGroupNode;
 pub use unary_node::DAGUnaryNode;
+pub use fn_call_node::DAGFnCallNode;

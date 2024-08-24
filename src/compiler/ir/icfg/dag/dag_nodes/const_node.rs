@@ -1,10 +1,11 @@
-use llvm_builder::{ Function, LLVMBuilder, LLVMType, Module };
+use std::rc::Rc;
+
+use crate::compiler::llvm_builder::{ Function, LLVMBuilder, Module, Operand };
 
 use crate::compiler::{
     ds::value::Value,
     ir::icfg::dag::DAG,
-    print_todo,
-    traits::{ AllocLLVM, DAGNodeGenerateLLVM, DAGNodeTrait, ParseConnectedNodes },
+    traits::{ DAGNodeGenerateLLVM, DAGNodeTrait, ParseConnectedNodes },
     Dissasemble,
 };
 
@@ -24,27 +25,29 @@ impl DAGConstNode {
 }
 
 impl DAGNodeGenerateLLVM for DAGConstNode {
-    fn alloc_llvm<T>(
+    fn alloc_llvm(
         &self,
-        _llvm_builder: &mut LLVMBuilder,
+        llvm_builder: &mut LLVMBuilder,
         module: &mut Module,
         _func: &mut Function
-    )
-        where T: LLVMType
-    {
-        print_todo("Alloc strings here")
+    ) {
+        match self.get_value() {
+            Value::String(string) => {
+                let const_string_idx = module.add_string_const(string.to_string());
+                llvm_builder.insert_const_string_idx(Rc::clone(string), const_string_idx);
+            }
+            _ => {}
+        }
     }
 
-    fn generate_llvm<T>(
+    fn generate_llvm(
         &self,
-        node_id: usize,
-        func: &mut llvm_builder::Function,
-        llvm_builder: &mut llvm_builder::LLVMBuilder,
-        dag: &DAG
-    ) -> llvm_builder::Operand
-        where T: llvm_builder::LLVMType
-    {
-        self.value.get_llvm_operand()
+        _node_id: usize,
+        _func: &mut Function,
+        llvm_builder: &mut LLVMBuilder,
+        _dag: &DAG
+    ) -> Operand {
+        self.value.get_llvm_operand(llvm_builder)
     }
 }
 
