@@ -1,9 +1,8 @@
-use std::{ collections::{ BTreeSet, BinaryHeap }, rc::Rc };
+use std::{ collections::BTreeSet, rc::Rc };
 
-use ahash::{ AHashMap, AHashSet };
-use indexmap::IndexSet;
+use ahash::AHashMap;
 
-use crate::{ compiler::{ ir::icfg::dag::DAGNode, print_todo }, vm::instructions::Reg };
+use crate::{ compiler::ir::icfg::dag::DAGNode, vm::instructions::Reg };
 
 use super::value::SimpleConst;
 

@@ -17,7 +17,7 @@ use super::{ BlockStmt, FnArg, GotoNodeIds };
 #[derive(Debug)]
 pub struct FunctionStmt<'ast> {
     ssa_ident: SSAIdent,
-    args: Vec<Rc<FnArg>>,
+    args: Rc<[FnArg]>,
     body: BlockStmt<'ast>,
     return_type: ValueType,
     ident_metadata: TokenMetadata,
@@ -26,7 +26,7 @@ pub struct FunctionStmt<'ast> {
 impl<'ast> FunctionStmt<'ast> {
     pub fn new(
         ssa_ident: SSAIdent,
-        args: Vec<Rc<FnArg>>,
+        args: Rc<[FnArg]>,
         mut body: BlockStmt<'ast>,
         return_type: ValueType,
         ident_metadata: TokenMetadata
@@ -49,7 +49,7 @@ impl<'ast> FunctionStmt<'ast> {
         &mut self.ssa_ident
     }
 
-    pub fn get_args(&self) -> &Vec<Rc<FnArg>> {
+    pub fn get_args(&self) -> &Rc<[FnArg]> {
         &self.args
     }
 

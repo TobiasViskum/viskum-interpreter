@@ -1,11 +1,10 @@
 use crate::compiler::{
-    error_handler::{ CompileError, ErrorHandler, ReportedError },
+    error_handler::ErrorHandler,
     ir::{
         ast::AST_DISSASEMBLE_INDENTATION,
         icfg::{
-            cfg::{ CFGGotoNode, CFGNode, CFGNodeId, CFGNodeType, CFG },
+            cfg::{ CFGGotoNode, CFGNode, CFGNodeType },
             icfg_builder::{ CFGBuilder, ICFGBuilder },
-            ICFG,
         },
     },
     parser::token::TokenMetadata,

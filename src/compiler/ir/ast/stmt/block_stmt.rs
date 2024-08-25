@@ -5,37 +5,24 @@ use ahash::AHashMap;
 use crate::compiler::{
     ds::ssa_ident::SSAIdent,
     error_handler::{ CompileError, ErrorHandler },
-    ir::{
-        ast::expr::{ Expr, FnCallExpr },
-        icfg::{
-            cfg::{ CFGLabelNode, CFGNode, CFGNodeId, CFGNodeType, CFGProcessNode, CFG },
-            dag::DAG,
-            icfg_builder::{ CFGBuilder, ICFGBuilder },
-            ICFG,
-        },
+    ir::icfg::{
+        cfg::{ CFGLabelNode, CFGNode, CFGNodeType, CFGProcessNode },
+        dag::DAG,
+        icfg_builder::{ CFGBuilder, ICFGBuilder },
     },
-    parser::token::TokenMetadata,
     print_todo,
     traits::{ AstDissasemble, Dissasemble, LinearControlFlow, StmtTrait },
     ProgramSymbolTablePhase1,
     SymbolFn,
 };
 
-use super::{ ExprStmt, GotoNodeIds, Stmt };
-
-pub enum ScopeEnv {
-    BasicBlock,
-    If,
-    Loop,
-    WhileLoop,
-}
+use super::{ GotoNodeIds, Stmt };
 
 #[derive(Debug)]
 pub struct BlockStmt<'ast> {
     stmts: VecDeque<Stmt<'ast>>,
     symbol_table_id: usize,
     is_basic_block: bool,
-    // forwards_declarations: Stmts, // TypeDefStmt, FnStmt, (ClassStmt)
 }
 
 impl<'ast> BlockStmt<'ast> {

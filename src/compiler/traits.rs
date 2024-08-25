@@ -5,6 +5,7 @@ use crate::compiler::llvm_builder::{ Function, LLVMBuilder, Module, Operand };
 
 use crate::vm::instructions::Instruction;
 
+use super::ds::symbol_table::{ SymbolFn, SymbolVar };
 use super::{
     ds::{
         register_allocator::RegisterAllocator,
@@ -15,7 +16,7 @@ use super::{
     error_handler::{ CompileError, ErrorHandler, SrcCharsRange },
     ir::{
         ast::stmt::GotoNodeIds,
-        icfg::{ cfg::CFG, dag::DAG, icfg_builder::{ CFGBuilder, ICFGBuilder }, ICFG },
+        icfg::{ cfg::CFG, dag::DAG, icfg_builder::{ CFGBuilder, ICFGBuilder } },
     },
     ProgramSymbolTablePhase1,
 };
@@ -129,4 +130,28 @@ pub trait CFGNodeGenerateLLVM: CFGNodeTrait {
         func: &mut Function,
         cfg: &CFG
     );
+}
+
+pub trait SymbolTableActionsPhase1 {
+    fn lookup_var<'a>(
+        &'a self,
+        ssa_ident: &'a SSAIdent,
+        program_symbol_table: &'a ProgramSymbolTablePhase1
+    ) -> Result<&'a SymbolVar, String>;
+
+    fn lookup_var_by_name<'a>(
+        &'a self,
+        name: Rc<str>,
+        program_symbol_table: &'a ProgramSymbolTablePhase1
+    ) -> Result<&'a SymbolVar, String>;
+
+    fn lookup_fn<'a>(
+        &'a self,
+        ssa_ident: &'a SSAIdent,
+        program_symbol_table: &'a ProgramSymbolTablePhase1
+    ) -> Result<&'a SymbolFn, String>;
+
+    fn insert_var(&mut self, ssa_ident: SSAIdent, symbol_var: SymbolVar);
+
+    fn insert_fn(&mut self, ssa_ident: SSAIdent, symbol_fn: SymbolFn) -> Result<(), CompileError>;
 }

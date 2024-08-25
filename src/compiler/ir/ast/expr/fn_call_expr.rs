@@ -92,7 +92,9 @@ impl<'ast> ExprTrait for FnCallExpr<'ast> {
 
                 symbol_fn
             }
-            Err(msg) => { todo!("Report error: {:?}", msg) }
+            Err(msg) => {
+                return Err(CompileError::new(ReportedError::new(msg, self.metadata.into())));
+            }
         };
 
         print_todo("Compare amount of args and each arg value type");

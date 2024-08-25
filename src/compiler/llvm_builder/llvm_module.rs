@@ -31,7 +31,7 @@ impl BuildLLVM for Module {
 
         for (i, string_constant) in self.string_constants.iter().enumerate() {
             string_builder += format!(
-                "@.str.{} = private unnamed_addr constant [{} x i8] c\"{}\\00\", align 1",
+                "@.str.{} = private unnamed_addr constant [{} x i8] c\"{}\\00\", align 1\n",
                 i,
                 string_constant.len() + 1,
                 string_constant

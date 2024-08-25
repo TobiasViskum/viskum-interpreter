@@ -123,7 +123,7 @@ impl<'a> Parser<'a> {
     pub(super) fn resolve_function_args(
         &mut self,
         program_symbol_table: &mut ProgramSymbolTablePhase1
-    ) -> Result<Vec<Rc<FnArg>>, CompileError> {
+    ) -> Result<Vec<FnArg>, CompileError> {
         let mut args = vec![];
 
         self.consume(TokenLeftParen, "Expected '(' after function identifier")?;
@@ -179,9 +179,7 @@ impl<'a> Parser<'a> {
 
             let ssa_ident = program_symbol_table.declare_var_ssa_ident(&ident_lexeme);
 
-            args.push(
-                Rc::new(FnArg::new(ssa_ident, arg_type, mut_keyword_metadata, ident_metadata))
-            );
+            args.push(FnArg::new(ssa_ident, arg_type, mut_keyword_metadata, ident_metadata));
         }
 
         self.consume(TokenRightParen, "Expected a closing ')' after function arguments")?;

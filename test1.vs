@@ -1,6 +1,8 @@
+
 def main() Int
     mut a := 1 + 2 - (2 + 8) * 3
     b := a + 2
+    
 
     mut d := 0
     if a == 45 do
@@ -13,17 +15,22 @@ def main() Int
 
     a = 0
 
-    loop a = a +1
+
+    loop a = a + 1
         if a == 100 do
             break
+        else
+            continue
         end
     end
 
     k := sayHello() + 20 + sayHello()
 
+
     str := "Hello world"
+    str := "My name is Tobias"
 
-
+    print(str)
 
     a = 0
 end

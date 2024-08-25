@@ -240,7 +240,7 @@ impl Dissasemble for Value {
         match self {
             Self::Int(int) => int.to_string(),
             Self::Bool(bool) => bool.to_string(),
-            Self::String(str) => str.to_string(),
+            Self::String(str) => format!("\"{}\"", str),
             Self::Void => "()".to_string(),
             // Self::Deref(contained) => format!("*{}", contained.dissasemble()),
             // Self::Ref(contained) => format!("&{}", contained.dissasemble()),

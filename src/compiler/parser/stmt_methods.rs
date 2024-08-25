@@ -441,7 +441,7 @@ impl<'a> Parser<'a> {
 
         let function_stmt = FunctionStmt::new(
             ssa_ident,
-            function_args,
+            function_args.into(),
             body,
             return_type,
             metadata
@@ -490,7 +490,7 @@ impl<'a> Parser<'a> {
 
         let function_stmt = FunctionStmt::new(
             ssa_ident,
-            function_args,
+            function_args.into(),
             body,
             return_type,
             metadata

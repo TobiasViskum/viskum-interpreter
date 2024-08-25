@@ -1,7 +1,6 @@
 mod block_stmt;
 mod break_stmt;
 mod continue_stmt;
-// mod drop_stmt;
 mod expr_stmt;
 mod fn_stmt;
 mod if_stmt;
@@ -10,39 +9,26 @@ mod loop_stmt;
 mod return_stmt;
 mod var_assign_stmt;
 mod var_def_stmt;
-// mod block_stmt;
+// mod drop_stmt;
 
-use std::{ collections::VecDeque, ops::Index, rc::Rc };
-
-use ahash::AHashMap;
 pub use block_stmt::BlockStmt;
 pub use break_stmt::BreakStmt;
 pub use expr_stmt::ExprStmt;
 pub use var_assign_stmt::VarAssignStmt;
 pub use var_def_stmt::VarDefStmt;
-// pub use block_stmt::BlockStmt;
 pub use continue_stmt::ContinueStmt;
-// pub use drop_stmt::DropStmt;
 pub use fn_stmt::FunctionStmt;
 pub use if_stmt::IfStmt;
 pub use loop_stmt::LoopStmt;
 pub use return_stmt::ReturnStmt;
 
-use crate::{
-    compiler::{
-        ds::{ ssa_ident::SSAIdent, value::ValueType },
-        error_handler::{ CompileError, ErrorHandler, SrcCharsRange },
-        ir::icfg::{
-            cfg::{ CFGNode, CFGNodeId, CFGNodeType, CFGProcessNode, CFG },
-            dag::DAG,
-            icfg_builder::{ CFGBuilder, ICFGBuilder },
-            ICFG,
-        },
-        parser::token::TokenMetadata,
-        traits::{ AstDissasemble, Dissasemble, LinearControlFlow, StmtTrait },
-        ProgramSymbolTablePhase1,
-    },
-    macros::merge_chars_range,
+use crate::compiler::{
+    ds::{ ssa_ident::SSAIdent, value::ValueType },
+    error_handler::{ ErrorHandler, SrcCharsRange },
+    ir::icfg::icfg_builder::{ CFGBuilder, ICFGBuilder },
+    parser::token::TokenMetadata,
+    traits::{ AstDissasemble, Dissasemble, LinearControlFlow, StmtTrait },
+    ProgramSymbolTablePhase1,
 };
 
 use super::AST_DISSASEMBLE_INDENTATION;
@@ -238,7 +224,8 @@ impl<'ast> AstDissasemble for Stmt<'ast> {
         match self {
             Self::ExprStmt(expr_stmt) =>
                 format!(
-                    "{}{}\n",
+                    "[{}]: {}{}\n",
+                    program_symbol_table.get_current_symbol_table_id(),
                     " ".repeat(AST_DISSASEMBLE_INDENTATION * scope_depth),
                     expr_stmt.ast_dissasemble(program_symbol_table, scope_depth)
                 ),
