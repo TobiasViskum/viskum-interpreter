@@ -3,7 +3,7 @@ use std::rc::Rc;
 use ahash::AHashMap;
 
 use crate::compiler::{
-    ds::{ ssa_ident::SSAIdent, value::ValueType },
+    ds::{ ssa_ident::SSAIdent, symbol_table::UserSymbolVar, value::ValueType },
     error_handler::{ CompileError, ErrorHandler, ReportedError, SrcCharsRange },
     ir::{
         ast::{ expr::IdentifierExpr, AST_DISSASEMBLE_INDENTATION },
@@ -173,7 +173,11 @@ impl<'ast> StmtTrait for VarDefStmt<'ast> {
 
         program_symbol_table.insert_var(
             self.ident_expr.get_ssa_ident().clone(),
-            SymbolVar::new(value_type, self.ident_expr.get_metadata(), self.mut_keyword_metadata)
+            UserSymbolVar::new(
+                value_type,
+                self.ident_expr.get_metadata(),
+                self.mut_keyword_metadata
+            )
         )
     }
     fn as_linear_control_flow(&self) -> Option<&dyn LinearControlFlow> {

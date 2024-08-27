@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::compiler::{
-    ds::{ ssa_ident::SSAIdent, value::ValueType },
+    ds::{ ssa_ident::SSAIdent, symbol_table::UserSymbolVar, value::ValueType },
     error_handler::ErrorHandler,
     ir::{ ast::AST_DISSASEMBLE_INDENTATION, icfg::icfg_builder::{ CFGBuilder, ICFGBuilder } },
     parser::token::TokenMetadata,
@@ -113,7 +113,11 @@ impl<'ast> StmtTrait for FunctionStmt<'ast> {
         for arg in self.args.iter() {
             program_symbol_table.insert_var(
                 self.ssa_ident.clone(),
-                SymbolVar::new(arg.value_type.clone(), arg.ident_metadata, arg.mut_keyword_metadata)
+                UserSymbolVar::new(
+                    arg.value_type.clone(),
+                    arg.ident_metadata,
+                    arg.mut_keyword_metadata
+                )
             );
         }
 

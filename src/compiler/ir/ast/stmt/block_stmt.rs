@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use ahash::AHashMap;
 
 use crate::compiler::{
-    ds::ssa_ident::SSAIdent,
+    ds::{ ssa_ident::SSAIdent, symbol_table::UserSymbolFn },
     error_handler::{ CompileError, ErrorHandler },
     ir::icfg::{
         cfg::{ CFGLabelNode, CFGNode, CFGNodeType, CFGProcessNode },
@@ -62,7 +62,7 @@ impl<'ast> BlockStmt<'ast> {
             Stmt::FunctionStmt(ref fn_stmt) => {
                 let result = program_symbol_table.insert_fn(
                     fn_stmt.get_ssa_ident().clone(),
-                    SymbolFn::new(
+                    UserSymbolFn::new(
                         fn_stmt.get_ident_metadata(),
                         fn_stmt.get_args().clone(),
                         fn_stmt.get_return_type().clone()

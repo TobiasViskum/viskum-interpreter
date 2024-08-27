@@ -33,6 +33,10 @@ impl SSAIdent {
         Rc::clone(&self.ident)
     }
 
+    pub fn borrow_ident(&self) -> &Rc<str> {
+        &self.ident
+    }
+
     pub fn get_subscript(&self) -> usize {
         self.subscript
     }

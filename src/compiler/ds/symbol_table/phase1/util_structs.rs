@@ -1,19 +1,15 @@
 use std::rc::Rc;
 
-use crate::compiler::{
-    ds::{ symbol_table::native_symbols::NativeFn, value::ValueType },
-    ir::ast::stmt::FnArg,
-    parser::token::TokenMetadata,
-};
+use crate::compiler::{ ds::value::ValueType, ir::ast::stmt::FnArg, parser::token::TokenMetadata };
 
 #[derive(Clone, Debug)]
-pub struct SymbolVar {
+pub struct UserSymbolVar {
     mut_keyword_metadata: Option<TokenMetadata>,
     value_type: ValueType,
     ident_metadata: TokenMetadata,
 }
 
-impl SymbolVar {
+impl UserSymbolVar {
     pub fn new(
         value_type: ValueType,
         ident_metadata: TokenMetadata,
@@ -39,13 +35,13 @@ impl SymbolVar {
     }
 }
 #[derive(Clone, Debug)]
-pub struct SymbolFn {
+pub struct UserSymbolFn {
     ident_metadata: TokenMetadata,
     fn_args: Rc<[FnArg]>,
     ret_type: ValueType,
 }
 
-impl SymbolFn {
+impl UserSymbolFn {
     pub fn new(ident_metadata: TokenMetadata, fn_args: Rc<[FnArg]>, ret_type: ValueType) -> Self {
         Self { ident_metadata, fn_args, ret_type }
     }
@@ -63,44 +59,32 @@ impl SymbolFn {
     }
 }
 
-#[derive(PartialEq, Clone, Copy, Debug)]
-pub enum SymbolType {
-    Var,
-    Fn,
-}
-
 #[derive(Debug)]
-pub enum FnType {
-    SymbolFn(SymbolFn),
-    NativeFn(NativeFn),
+pub enum UserSymbol {
+    UserSymbolFn(UserSymbolFn),
+    UserSymbolVar(UserSymbolVar),
 }
 
-#[derive(Debug)]
-pub enum SymbolMetadata {
-    Var(SymbolVar),
-    Fn(SymbolFn),
-}
-
-#[derive(Debug)]
-pub struct Symbol {
-    symbol_type: SymbolType,
-    symbol_metadata: SymbolMetadata,
-}
-
-impl Symbol {
-    pub fn new_fn(symbol_fn: SymbolFn) -> Self {
-        Self { symbol_type: SymbolType::Fn, symbol_metadata: SymbolMetadata::Fn(symbol_fn) }
+impl UserSymbol {
+    pub fn new_fn(symbol_fn: UserSymbolFn) -> Self {
+        Self::UserSymbolFn(symbol_fn)
     }
 
-    pub fn new_var(symbol_var: SymbolVar) -> Self {
-        Self { symbol_type: SymbolType::Var, symbol_metadata: SymbolMetadata::Var(symbol_var) }
+    pub fn new_var(symbol_var: UserSymbolVar) -> Self {
+        Self::UserSymbolVar(symbol_var)
     }
 
-    pub fn get_symbol_type(&self) -> SymbolType {
-        self.symbol_type
+    pub fn is_fn(&self) -> bool {
+        match self {
+            Self::UserSymbolFn(_) => true,
+            _ => false,
+        }
     }
 
-    pub fn get_symbol_metadata(&self) -> &SymbolMetadata {
-        &self.symbol_metadata
+    pub fn is_var(&self) -> bool {
+        match self {
+            Self::UserSymbolVar(_) => true,
+            _ => false,
+        }
     }
 }

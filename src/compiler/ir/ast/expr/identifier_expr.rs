@@ -90,7 +90,7 @@ impl ExprTrait for IdentifierExpr {
     ) -> Result<ValueType, CompileError> {
         match program_symbol_table.lookup_var(&self.ssa_ident) {
             Ok(symbol_var) => {
-                let value_type = symbol_var.get_value_type().clone();
+                let value_type = symbol_var.get_value_type();
                 self.result_type = Some(value_type.clone());
                 Ok(value_type)
             }

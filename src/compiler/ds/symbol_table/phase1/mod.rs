@@ -2,28 +2,56 @@ use std::rc::Rc;
 
 use ahash::AHashMap;
 use symbols::Symbols;
-use util_structs::SymbolType;
 
 use crate::compiler::{
     ds::{ ssa_ident::SSAIdent, value::ValueType },
     error_handler::{ CompileError, ReportedError },
     ir::ast::{ stmt::VarAssignStmt, AST_DISSASEMBLE_INDENTATION },
     parser::Lexeme,
-    traits::{ ExprTrait, SymbolTableActionsPhase1 },
+    traits::ExprTrait,
     Dissasemble,
 };
 
-use super::{ FnType, SymbolFn, SymbolTable, SymbolVar };
+use super::{
+    NativeSymbolFn,
+    NativeSymbolVar,
+    NativeSymbolsHandler,
+    SymbolFn,
+    SymbolTable,
+    SymbolVar,
+    UserSymbolFn,
+    UserSymbolVar,
+};
 
 pub mod symbol_table;
 pub mod symbols;
 pub mod util_structs;
 
+enum SymbolType {
+    Fn,
+    Var,
+}
+impl SymbolType {
+    pub fn is_fn(&self) -> bool {
+        match self {
+            Self::Fn => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_var(&self) -> bool {
+        match self {
+            Self::Var => true,
+            _ => false,
+        }
+    }
+}
+
 pub struct ProgramSymbolTablePhase1 {
     symbol_tables: Vec<SymbolTable>,
     ident_occurences: AHashMap<Rc<str>, usize>,
     ssa_declarations: Vec<(SSAIdent, SymbolType)>,
-    global_symbols: Symbols,
+    native_symbols_handler: NativeSymbolsHandler,
     current_symbol_table_id: usize,
 }
 
@@ -74,7 +102,7 @@ impl ProgramSymbolTablePhase1 {
             symbol_tables: vec![],
             ident_occurences: AHashMap::new(),
             ssa_declarations: Vec::new(),
-            global_symbols: Symbols::new(),
+            native_symbols_handler: NativeSymbolsHandler,
             current_symbol_table_id: 0,
         }
     }
@@ -106,19 +134,32 @@ impl ProgramSymbolTablePhase1 {
         self.get_table(self.current_symbol_table_id).get_ret_type()
     }
 
-    fn get_prev_symbol_var(
+    fn get_prev_symbol_var_for_assignment(
         &self,
         var_assign_stmt: &VarAssignStmt
-    ) -> Result<&SymbolVar, CompileError> {
+    ) -> Result<&UserSymbolVar, CompileError> {
+        let ident = var_assign_stmt.get_target_expr().get_ssa_ident().borrow_ident();
+
         let prev_symbol_var = self
             .get_table(self.current_symbol_table_id)
-            .lookup_var_by_name(
-                var_assign_stmt.get_target_expr().get_ssa_ident().get_ident(),
-                self
-            );
+            .lookup_var_by_name(ident, self);
 
         let prev_symbol_var = match prev_symbol_var {
-            Ok(v) => v,
+            Ok(symbol_var) => {
+                match symbol_var {
+                    SymbolVar::UserSymbolVar(user_symbol_var) => user_symbol_var,
+                    SymbolVar::NativeSymbolVar(_) => {
+                        return Err(
+                            CompileError::new(
+                                ReportedError::new(
+                                    format!("Cannot assign a value to global variable: '{}'", ident),
+                                    var_assign_stmt.get_target_expr().collect_metadata()
+                                )
+                            )
+                        );
+                    }
+                }
+            }
             Err(msg) => {
                 return Err(
                     CompileError::new(
@@ -138,13 +179,13 @@ impl ProgramSymbolTablePhase1 {
         &mut self,
         var_assign_stmt: &mut VarAssignStmt
     ) -> Result<ValueType, CompileError> {
-        let prev_symbol_var = self.get_prev_symbol_var(var_assign_stmt)?.clone();
+        let prev_symbol_var = self.get_prev_symbol_var_for_assignment(var_assign_stmt)?.clone();
 
         let ssa_ident = var_assign_stmt.get_target_expr().get_ssa_ident().clone();
 
         self.insert_var(
             ssa_ident.clone(),
-            SymbolVar::new(
+            UserSymbolVar::new(
                 prev_symbol_var.get_value_type().clone(),
                 var_assign_stmt.get_target_expr().get_metadata(),
                 prev_symbol_var.get_mut_keyword_metadata()
@@ -209,52 +250,39 @@ impl ProgramSymbolTablePhase1 {
         }
     }
 
-    pub fn insert_var(&mut self, ssa_ident: SSAIdent, symbol_var: SymbolVar) {
+    pub fn insert_var(&mut self, ssa_ident: SSAIdent, symbol_var: UserSymbolVar) {
         self.get_mut_table(self.current_symbol_table_id).insert_var(ssa_ident, symbol_var);
     }
 
     pub fn insert_fn(
         &mut self,
         ssa_ident: SSAIdent,
-        symbol_fn: SymbolFn
+        symbol_fn: UserSymbolFn
     ) -> Result<(), CompileError> {
         self.get_mut_table(self.current_symbol_table_id).insert_fn(ssa_ident, symbol_fn)
     }
 
-    pub fn lookup_var<'a>(&'a self, ssa_ident: &'a SSAIdent) -> Result<&'a SymbolVar, String> {
+    pub fn lookup_var<'a>(&'a self, ssa_ident: &'a SSAIdent) -> Result<SymbolVar<'a>, String> {
         let table = self.get_table(self.current_symbol_table_id);
         table.lookup_var(ssa_ident, self)
     }
 
-    pub fn lookup_fn<'a>(&'a self, ssa_ident: &'a SSAIdent) -> Result<&'a SymbolFn, String> {
+    pub fn lookup_fn<'a>(&'a self, ssa_ident: &'a SSAIdent) -> Result<SymbolFn<'a>, String> {
         let table = self.get_table(self.current_symbol_table_id);
         table.lookup_fn(ssa_ident, self)
     }
 
-    pub(super) fn lookup_global_var<'a>(
-        &'a self,
-        ssa_ident: &'a SSAIdent
-    ) -> Result<&'a SymbolVar, String> {
-        self.global_symbols.lookup_var(ssa_ident, self)
+    pub(super) fn lookup_global_var(&self, ident: &Rc<str>) -> Result<NativeSymbolVar, String> {
+        self.native_symbols_handler.lookup_var(ident)
     }
 
-    pub(super) fn lookup_global_var_by_name<'a>(
-        &'a self,
-        name: Rc<str>
-    ) -> Result<&'a SymbolVar, String> {
-        self.global_symbols.lookup_var_by_name(name, self)
-    }
-
-    pub(super) fn lookup_global_fn<'a>(
-        &'a self,
-        ssa_ident: &'a SSAIdent
-    ) -> Result<&'a SymbolFn, String> {
-        self.global_symbols.lookup_fn(ssa_ident, self)
+    pub(super) fn lookup_global_fn(&self, ident: &Rc<str>) -> Result<NativeSymbolFn, String> {
+        self.native_symbols_handler.lookup_fn(ident)
     }
 
     pub fn search_fn_ssa_ident(&self, lexeme: &Lexeme) -> SSAIdent {
         for (ssa_ident, symbol_type) in self.ssa_declarations.iter().rev() {
-            if *symbol_type == SymbolType::Fn && ssa_ident.get_ident() == *lexeme.borrow_ident() {
+            if symbol_type.is_fn() && ssa_ident.get_ident() == *lexeme.borrow_ident() {
                 return ssa_ident.clone();
             }
         }
@@ -264,7 +292,7 @@ impl ProgramSymbolTablePhase1 {
 
     pub fn search_var_ssa_ident(&self, lexeme: &Lexeme) -> SSAIdent {
         for (ssa_ident, symbol_type) in self.ssa_declarations.iter().rev() {
-            if *symbol_type == SymbolType::Var && ssa_ident.get_ident() == *lexeme.borrow_ident() {
+            if symbol_type.is_var() && ssa_ident.get_ident() == *lexeme.borrow_ident() {
                 return ssa_ident.clone();
             }
         }

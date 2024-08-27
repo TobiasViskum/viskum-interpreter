@@ -4,26 +4,25 @@ use ahash::AHashMap;
 
 use crate::{
     compiler::{
-        ds::ssa_ident::SSAIdent,
+        ds::{
+            ssa_ident::SSAIdent,
+            symbol_table::{ NativeSymbol, NativeSymbolFn, NativeSymbolVar },
+        },
         error_handler::{ CompileError, ReportedError },
         parser::token::TokenMetadata,
-        traits::SymbolTableActionsPhase1,
         Dissasemble,
     },
     macros::merge_chars_range,
 };
 
-use super::{
-    util_structs::{ FnType, Symbol, SymbolFn, SymbolMetadata, SymbolVar },
-    ProgramSymbolTablePhase1,
-};
+use super::{ util_structs::{ UserSymbol, UserSymbolFn, UserSymbolVar }, ProgramSymbolTablePhase1 };
 
 #[derive(Debug)]
-pub struct Symbols {
-    symbols: AHashMap<SSAIdent, Symbol>,
+pub struct Symbols<T> {
+    symbols: AHashMap<SSAIdent, T>,
 }
 
-impl Dissasemble for Symbols {
+impl<T> Dissasemble for Symbols<T> {
     fn dissasemble(&self) -> String {
         let dissasembled_keys = self.symbols
             .keys()
@@ -41,19 +40,31 @@ impl Dissasemble for Symbols {
     }
 }
 
-impl Symbols {
+impl<T> Symbols<T> {
     pub fn new() -> Self {
         Self {
             symbols: AHashMap::new(),
         }
     }
+}
 
+impl Symbols<NativeSymbol> {
+    pub fn lookup_fn(&self, ident: &Rc<str>) -> Result<NativeSymbolFn, String> {
+        todo!()
+    }
+
+    pub fn lookup_var(&self, ident: &Rc<str>) -> Result<NativeSymbolVar, String> {
+        todo!()
+    }
+}
+
+impl Symbols<UserSymbol> {
     pub fn lookup_main(&mut self) -> Result<(), CompileError> {
         let main_fn_symbol = self.symbols
             .iter()
             .filter_map(|(ssa_ident, symbol)| {
-                match (ssa_ident.get_ident().as_ref(), symbol.get_symbol_metadata()) {
-                    ("main", SymbolMetadata::Fn(fn_symbol)) => Some((ssa_ident, fn_symbol)),
+                match (ssa_ident.get_ident().as_ref(), symbol) {
+                    ("main", UserSymbol::UserSymbolFn(fn_symbol)) => Some((ssa_ident, fn_symbol)),
                     _ => None,
                 }
             })
@@ -64,7 +75,7 @@ impl Symbols {
                 let (mut ssa_ident, main_fn_symbol) = (ssa_ident.clone(), main_fn_symbol.clone());
                 self.symbols.remove(&ssa_ident);
                 ssa_ident.set_subscript_to_zero();
-                self.symbols.insert(ssa_ident, Symbol::new_fn(main_fn_symbol));
+                self.symbols.insert(ssa_ident, UserSymbol::UserSymbolFn(main_fn_symbol));
                 Ok(())
             } else {
                 Err(
@@ -95,23 +106,17 @@ impl Symbols {
                 )
             )
         }
-
-        //  find(|&(ssa_ident, symbol)| {
-        //     &ssa_ident.get_ident() == "main" && symbol
-        // })
     }
-}
 
-impl SymbolTableActionsPhase1 for Symbols {
-    fn lookup_fn(
-        &self,
-        ssa_ident: &SSAIdent,
-        _: &ProgramSymbolTablePhase1
-    ) -> Result<&SymbolFn, String> {
+    pub fn lookup_fn<'a>(
+        &'a self,
+        ssa_ident: &'a SSAIdent,
+        program_symbol_table: &'a ProgramSymbolTablePhase1
+    ) -> Result<&'a UserSymbolFn, String> {
         if let Some(symbol) = self.symbols.get(ssa_ident) {
-            match symbol.get_symbol_metadata() {
-                SymbolMetadata::Fn(fn_symbol) => Ok(fn_symbol),
-                SymbolMetadata::Var(_) => {
+            match symbol {
+                UserSymbol::UserSymbolFn(fn_symbol) => Ok(fn_symbol),
+                UserSymbol::UserSymbolVar(_) => {
                     Err(
                         format!(
                             "Undefined function '{}'. A variable with the same name exists",
@@ -125,15 +130,15 @@ impl SymbolTableActionsPhase1 for Symbols {
         }
     }
 
-    fn lookup_var(
+    pub fn lookup_var(
         &self,
         ssa_ident: &SSAIdent,
         _: &ProgramSymbolTablePhase1
-    ) -> Result<&SymbolVar, String> {
+    ) -> Result<&UserSymbolVar, String> {
         if let Some(symbol) = self.symbols.get(ssa_ident) {
-            match symbol.get_symbol_metadata() {
-                SymbolMetadata::Var(var_symbol) => Ok(var_symbol),
-                SymbolMetadata::Fn(_) => {
+            match symbol {
+                UserSymbol::UserSymbolVar(var_symbol) => Ok(var_symbol),
+                UserSymbol::UserSymbolFn(_) => {
                     Err(
                         format!(
                             "Undefined variable '{}'. A function with the same name exists",
@@ -147,16 +152,16 @@ impl SymbolTableActionsPhase1 for Symbols {
         }
     }
 
-    fn lookup_var_by_name<'a>(
+    pub fn lookup_var_by_name<'a>(
         &'a self,
-        name: Rc<str>,
+        name: &Rc<str>,
         _: &'a ProgramSymbolTablePhase1
-    ) -> Result<&'a SymbolVar, String> {
+    ) -> Result<&'a UserSymbolVar, String> {
         let found_var = self.symbols
             .iter()
             .filter_map(|(ssa_ident, symbol)| {
-                if ssa_ident.get_ident() == name {
-                    if let SymbolMetadata::Var(var_symbol) = symbol.get_symbol_metadata() {
+                if ssa_ident.borrow_ident() == name {
+                    if let UserSymbol::UserSymbolVar(var_symbol) = symbol {
                         return Some((ssa_ident, var_symbol));
                     }
                 }
@@ -172,12 +177,16 @@ impl SymbolTableActionsPhase1 for Symbols {
         }
     }
 
-    fn insert_fn(&mut self, ssa_ident: SSAIdent, symbol_fn: SymbolFn) -> Result<(), CompileError> {
+    pub fn insert_fn(
+        &mut self,
+        ssa_ident: SSAIdent,
+        symbol_fn: UserSymbolFn
+    ) -> Result<(), CompileError> {
         let functions_with_same_name = self.symbols
             .iter()
             .filter_map(|(ident, symbol)| {
-                match symbol.get_symbol_metadata() {
-                    SymbolMetadata::Fn(fn_metadata) => Some((ident, fn_metadata)),
+                match symbol {
+                    UserSymbol::UserSymbolFn(fn_metadata) => Some((ident, fn_metadata)),
                     _ => None,
                 }
             })
@@ -195,12 +204,12 @@ impl SymbolTableActionsPhase1 for Symbols {
         if reported_errors.len() > 0 {
             Err(CompileError::new_multiple(reported_errors))
         } else {
-            self.symbols.insert(ssa_ident, Symbol::new_fn(symbol_fn));
+            self.symbols.insert(ssa_ident, UserSymbol::UserSymbolFn(symbol_fn));
             Ok(())
         }
     }
 
-    fn insert_var(&mut self, ssa_ident: SSAIdent, symbol_var: SymbolVar) {
-        self.symbols.insert(ssa_ident, Symbol::new_var(symbol_var));
+    pub fn insert_var(&mut self, ssa_ident: SSAIdent, symbol_var: UserSymbolVar) {
+        self.symbols.insert(ssa_ident, UserSymbol::UserSymbolVar(symbol_var));
     }
 }

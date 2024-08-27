@@ -99,7 +99,7 @@ impl Compiler {
 
     pub fn log_errors(error_handler: &ErrorHandler) -> ! {
         error_handler.print_errors();
-        println!("{:#?}", std::env::consts::OS);
+
         std::process::exit(1);
     }
 

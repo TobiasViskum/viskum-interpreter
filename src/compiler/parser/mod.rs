@@ -102,7 +102,7 @@ pub struct Parser<'a> {
     error_handler: &'a mut ErrorHandler,
     current: usize,
     tokens: Vec<Token>,
-    parse_rules: &'static [ParseRule; 46],
+    parse_rules: &'static [ParseRule; 48],
 }
 
 impl<'a> Parser<'a> {
@@ -172,6 +172,8 @@ create_tokens_and_parse_rules!(
     [TokenBang]                 = { unary,          None,           PrecNone        },
     [TokenReference]            = { unary,          None,           PrecNone        },
     [TokenMutableReference]     = { unary,          None,           PrecNone        },
+    [TokenIncrement]            = { None,           None,           PrecNone        },
+    [TokenDecrement]            = { None,           None,           PrecNone        },
 
     // Binary operators (and some unary)    
     [TokenMinus]                = { unary,          binary,         PrecTerm        },

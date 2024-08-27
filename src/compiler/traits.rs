@@ -5,7 +5,8 @@ use crate::compiler::llvm_builder::{ Function, LLVMBuilder, Module, Operand };
 
 use crate::vm::instructions::Instruction;
 
-use super::ds::symbol_table::{ SymbolFn, SymbolVar };
+use super::ds::symbol_table::{ SymbolFn, SymbolVar, UserSymbolFn, UserSymbolVar };
+use super::llvm_builder::Type;
 use super::{
     ds::{
         register_allocator::RegisterAllocator,
@@ -132,26 +133,20 @@ pub trait CFGNodeGenerateLLVM: CFGNodeTrait {
     );
 }
 
-pub trait SymbolTableActionsPhase1 {
-    fn lookup_var<'a>(
-        &'a self,
-        ssa_ident: &'a SSAIdent,
-        program_symbol_table: &'a ProgramSymbolTablePhase1
-    ) -> Result<&'a SymbolVar, String>;
+pub trait NativeFnTrait {
+    fn get_ident<'a>(&self) -> &'a str;
 
-    fn lookup_var_by_name<'a>(
-        &'a self,
-        name: Rc<str>,
-        program_symbol_table: &'a ProgramSymbolTablePhase1
-    ) -> Result<&'a SymbolVar, String>;
+    fn declare_llvm(&self) -> String;
 
-    fn lookup_fn<'a>(
-        &'a self,
-        ssa_ident: &'a SSAIdent,
-        program_symbol_table: &'a ProgramSymbolTablePhase1
-    ) -> Result<&'a SymbolFn, String>;
+    fn get_llvm_ret_type(&self) -> Type;
 
-    fn insert_var(&mut self, ssa_ident: SSAIdent, symbol_var: SymbolVar);
+    fn get_lang_ret_type(&self) -> ValueType;
 
-    fn insert_fn(&mut self, ssa_ident: SSAIdent, symbol_fn: SymbolFn) -> Result<(), CompileError>;
+    fn get_args_type(&self) -> Vec<ValueType>;
+}
+
+pub trait NativeVarTrait {
+    fn get_ident<'a>(&self) -> &'a str;
+
+    fn get_value_type(&self) -> ValueType;
 }

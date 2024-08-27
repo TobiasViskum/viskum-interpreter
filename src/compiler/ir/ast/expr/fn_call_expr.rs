@@ -1,10 +1,8 @@
-use std::rc::Rc;
-
 use ahash::AHashMap;
 
 use crate::{
     compiler::{
-        ds::{ ssa_ident::SSAIdent, value::ValueType },
+        ds::{ ssa_ident::SSAIdent, symbol_table::{ NativeSymbolFn, SymbolFn }, value::ValueType },
         error_handler::{ CompileError, ReportedError, SrcCharsRange },
         ir::{
             ast::stmt::ExprStmt,
@@ -12,7 +10,7 @@ use crate::{
         },
         parser::token::TokenMetadata,
         print_todo,
-        traits::{ Dissasemble, ExprTrait, LinearControlFlow },
+        traits::{ Dissasemble, ExprTrait, LinearControlFlow, NativeFnTrait },
         ProgramSymbolTablePhase1,
     },
     macros::merge_chars_range,
@@ -23,7 +21,10 @@ pub struct FnCallExpr<'ast> {
     ssa_ident: SSAIdent,
     metadata: TokenMetadata,
     args: Vec<ExprStmt<'ast>>,
+    // Set during typechecking
+    args_types: Vec<ValueType>,
     result_type: Option<ValueType>,
+    is_native_fn: Option<NativeSymbolFn>,
 }
 
 impl<'ast> FnCallExpr<'ast> {
@@ -32,7 +33,9 @@ impl<'ast> FnCallExpr<'ast> {
             ssa_ident,
             metadata,
             args,
+            args_types: vec![],
             result_type: None,
+            is_native_fn: None,
         }
     }
 }
@@ -58,12 +61,15 @@ impl<'ast> ExprTrait for FnCallExpr<'ast> {
         ident_node_id_map: &mut AHashMap<SSAIdent, usize>,
         icfg_builder: &mut ICFGBuilder
     ) -> usize {
+        if let Some(native_fn) = self.is_native_fn {
+            panic!("Support for native functions not implemented: {}", native_fn.get_ident());
+        }
+
         let fn_call_node_id = dag.push_node(
             DAGNode::FnCallNode(
                 DAGFnCallNode::new(
-                    self.args.len(),
+                    self.args_types.clone(),
                     self.ssa_ident.clone(),
-                    icfg_builder.get_fn_cfg_id(&self.ssa_ident),
                     self.result_type.as_ref().expect("Expected result type in FnCallExpr").clone()
                 )
             )
@@ -87,10 +93,13 @@ impl<'ast> ExprTrait for FnCallExpr<'ast> {
     ) -> Result<ValueType, CompileError> {
         let symbol_fn = match program_symbol_table.lookup_fn(&self.ssa_ident) {
             Ok(symbol_fn) => {
-                let ret_type = symbol_fn.get_ret_type().clone();
-                self.result_type = Some(ret_type);
+                if let SymbolFn::NativeSymbolFn(native_fn) = &symbol_fn {
+                    self.is_native_fn = Some(*native_fn);
+                }
+                let ret_type = symbol_fn.get_ret_type();
+                self.result_type = Some(ret_type.clone());
 
-                symbol_fn
+                ret_type
             }
             Err(msg) => {
                 return Err(CompileError::new(ReportedError::new(msg, self.metadata.into())));
@@ -99,7 +108,7 @@ impl<'ast> ExprTrait for FnCallExpr<'ast> {
 
         print_todo("Compare amount of args and each arg value type");
 
-        Ok(symbol_fn.get_ret_type().clone())
+        Ok(symbol_fn)
     }
 
     fn collect_metadata(&self) -> SrcCharsRange {

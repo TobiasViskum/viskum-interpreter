@@ -12,20 +12,14 @@ use crate::compiler::{
 
 #[derive(Debug)]
 pub struct DAGFnCallNode {
-    args_count: usize,
+    args_types: Vec<ValueType>,
     ssa_ident: SSAIdent,
-    connected_cfg_id: usize,
     result_type: ValueType,
 }
 
 impl DAGFnCallNode {
-    pub fn new(
-        args_count: usize,
-        ssa_ident: SSAIdent,
-        connected_cfg_id: usize,
-        result_type: ValueType
-    ) -> Self {
-        Self { args_count, ssa_ident, connected_cfg_id, result_type }
+    pub fn new(args_types: Vec<ValueType>, ssa_ident: SSAIdent, result_type: ValueType) -> Self {
+        Self { args_types, ssa_ident, result_type }
     }
 
     pub fn get_ident(&self) -> Rc<str> {
@@ -52,14 +46,15 @@ impl DAGNodeGenerateLLVM for DAGFnCallNode {
         llvm_builder: &mut LLVMBuilder,
         dag: &DAG
     ) -> Operand {
-        let cfg = llvm_builder.get_cfg(self.connected_cfg_id);
-
-        let ssa_key = match cfg.get_ret_type().to_llvm_type() {
+        let ssa_key = match self.result_type.to_llvm_type() {
             v if v.is(&Type::Void) => {
                 func.add_instr(format!("call {} @{}()", v.build(), self.ssa_ident.build()));
                 0
             }
             v => {
+                let _ = llvm_builder.req_ssa_key();
+                let _ = llvm_builder.req_ssa_key();
+                let _ = llvm_builder.req_ssa_key();
                 let _ = llvm_builder.req_ssa_key();
                 let ssa_key = llvm_builder.req_ssa_key();
                 func.add_instr(
@@ -83,7 +78,7 @@ impl ParseConnectedNodes for DAGFnCallNode {
 
 impl DAGNodeTrait for DAGFnCallNode {
     fn expected_connected_nodes(&self) -> usize {
-        self.args_count
+        self.args_types.len()
     }
 }
 
