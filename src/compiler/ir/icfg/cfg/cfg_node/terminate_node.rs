@@ -20,12 +20,7 @@ pub struct CFGTerminateNode {
 }
 
 impl AllocLLVM for CFGTerminateNode {
-    fn alloc_llvm(
-        &self,
-        _llvm_builder: &mut LLVMBuilder,
-        _module: &mut crate::compiler::llvm_builder::Module,
-        _func: &mut Function
-    ) {}
+    fn alloc_llvm(&self, _llvm_builder: &mut LLVMBuilder, _func: &mut Function) {}
 }
 
 impl GenerateLLVM for CFGTerminateNode {

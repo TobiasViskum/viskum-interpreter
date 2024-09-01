@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::compiler::llvm_builder::{ Function, LLVMBuilder, Module, Operand };
+use crate::compiler::llvm_builder::{ Function, LLVMBuilder, Module, Operand, Var };
 
 use crate::compiler::{
     ds::value::Value,
@@ -28,13 +28,12 @@ impl DAGNodeGenerateLLVM for DAGConstNode {
     fn alloc_llvm(
         &self,
         llvm_builder: &mut LLVMBuilder,
-        module: &mut Module,
+
         _func: &mut Function
     ) {
         match self.get_value() {
             Value::String(string) => {
-                let const_string_idx = module.add_string_const(string.to_string());
-                llvm_builder.insert_const_string_idx(Rc::clone(string), const_string_idx);
+                llvm_builder.get_mut_mod().add_string_const(string.to_string());
             }
             _ => {}
         }
@@ -43,6 +42,7 @@ impl DAGNodeGenerateLLVM for DAGConstNode {
     fn generate_llvm(
         &self,
         _node_id: usize,
+        _ssa_var: Option<Var>,
         _func: &mut Function,
         llvm_builder: &mut LLVMBuilder,
         _dag: &DAG

@@ -22,6 +22,10 @@ impl SSAIdent {
         Self { ident, subscript }
     }
 
+    pub fn dec_subscript(&mut self) {
+        self.subscript -= 1;
+    }
+
     pub fn is(&self, str: &str, subscript: usize) -> bool {
         match (self.ident.as_ref() == str, self.subscript == subscript) {
             (true, true) => true,

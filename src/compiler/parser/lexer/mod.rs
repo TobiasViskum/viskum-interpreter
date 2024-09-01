@@ -29,8 +29,6 @@ impl<'a> Lexer<'a> {
 
         self.make_eof_token();
 
-        println!("LEXER DONE");
-
         self.tokens
     }
 

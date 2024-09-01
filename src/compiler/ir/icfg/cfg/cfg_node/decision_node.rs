@@ -24,13 +24,8 @@ pub struct CFGDecisionNode {
 }
 
 impl AllocLLVM for CFGDecisionNode {
-    fn alloc_llvm(
-        &self,
-        llvm_builder: &mut LLVMBuilder,
-        module: &mut crate::compiler::llvm_builder::Module,
-        func: &mut Function
-    ) {
-        self.condition.alloc_llvm(llvm_builder, module, func)
+    fn alloc_llvm(&self, llvm_builder: &mut LLVMBuilder, func: &mut Function) {
+        self.condition.alloc_llvm(llvm_builder, func)
     }
 }
 
@@ -50,7 +45,7 @@ impl CFGNodeGenerateLLVM for CFGDecisionNode {
 
         func.add_instr(
             format!(
-                "br i1 %{}, label %lbl{}, label %lbl{}",
+                "br i1 %v{}, label %lbl{}, label %lbl{}",
                 cmp_ssa_key,
                 connected_nodes.0,
                 connected_nodes.1

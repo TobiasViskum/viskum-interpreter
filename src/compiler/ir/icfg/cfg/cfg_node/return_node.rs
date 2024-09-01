@@ -31,8 +31,8 @@ impl CFGReturnNode {
 }
 
 impl AllocLLVM for CFGReturnNode {
-    fn alloc_llvm(&self, llvm_builder: &mut LLVMBuilder, module: &mut Module, func: &mut Function) {
-        self.ret_val.as_ref().map(|dag| dag.alloc_llvm(llvm_builder, module, func));
+    fn alloc_llvm(&self, llvm_builder: &mut LLVMBuilder, func: &mut Function) {
+        self.ret_val.as_ref().map(|dag| dag.alloc_llvm(llvm_builder, func));
     }
 }
 

@@ -11,6 +11,7 @@ mod parser_macros;
 
 use std::rc::Rc;
 
+use ahash::AHashMap;
 use lexer::Lexer;
 use parse_rule::ParseRule;
 use parser_macros::current;
@@ -155,11 +156,11 @@ create_tokens_and_parse_rules!(
     /* TokenType                = { Prefix,         Infix,          Precedence      } */
 
     // Braces
-    [TokenLeftParen]            = { grouping,       None,           PrecNone        },
+    [TokenLeftParen]            = { grouping,       call,           PrecCall        },
     [TokenRightParen]           = { None,           None,           PrecNone        },
     [TokenLeftCurlyBrace]       = { None,           None,           PrecNone        },
     [TokenRightCurlyBrace]      = { None,           None,           PrecNone        },
-    [TokenLeftSquareBrace]      = { None,           None,           PrecNone        },
+    [TokenLeftSquareBrace]      = { array,          array_index,    PrecArray       },
     [TokenRightSquareBrace]     = { None,           None,           PrecNone        },
 
     // Other symbols    
@@ -193,8 +194,8 @@ create_tokens_and_parse_rules!(
     [TokenNumber]               = { number,         None,           PrecNone        },
     [TokenIdentifier]           = { identifier,     None,           PrecNone        },
     [TokenString]               = { None,           None,           PrecNone        },
-    [TokenTrue]                 = { literal,        None,           PrecNone        },
-    [TokenFalse]                = { literal,        None,           PrecNone        },
+    [TokenTrue]                 = { boolean,        None,           PrecNone        },
+    [TokenFalse]                = { boolean,        None,           PrecNone        },
 
     // Assign and define    
     [TokenAssign]               = { None,           None,           PrecNone        },

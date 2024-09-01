@@ -34,14 +34,14 @@ impl<'a> SymbolVar<'a> {
 
 pub enum SymbolFn<'a> {
     UserSymbolFn(&'a UserSymbolFn),
-    NativeSymbolFn(NativeSymbolFn),
+    NativeSymbolFn(UserNativeSymbolFn),
 }
 
 impl<'a> SymbolFn<'a> {
     pub fn get_ret_type(&self) -> ValueType {
         match self {
             Self::UserSymbolFn(f) => f.get_ret_type().clone(),
-            Self::NativeSymbolFn(f) => f.get_lang_ret_type(),
+            Self::NativeSymbolFn(f) => f.get_lang_ret_type().unwrap(),
         }
     }
 

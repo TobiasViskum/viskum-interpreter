@@ -1,0 +1,12 @@
+digraph Program {
+    Node_0 [label=a];
+    Node_1 [label=b];
+    Node_2 [label=c];
+    Node_3 [label=d];
+
+    Node_0 -> Node_1;
+    Node_0 -> Node_2;
+    Node_1 -> Node_3;
+    Node_2 -> Node_3;
+    Node_3 -> Node_0;
+}

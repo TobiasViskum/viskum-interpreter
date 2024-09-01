@@ -9,6 +9,7 @@ use crate::compiler::llvm_builder::{
     Operand,
     RawOperand,
     Type,
+    TypeI1,
     TypeI32,
 };
 use ops::{ BinaryOp, ComparisonOp, UnaryOp };
@@ -52,6 +53,8 @@ pub enum ValueType {
     Int,
     Bool,
     Void,
+    Array((Box<Self>, usize)),
+    Ptr(Box<Self>),
     String,
     // Deref(Box<Self>),
     // Ref(Box<Self>),
@@ -65,6 +68,9 @@ impl Dissasemble for ValueType {
             Self::Bool => "Bool".to_string(),
             Self::Void => "()".to_string(),
             Self::String => "String".to_string(),
+            Self::Array((arr_type, items_count)) =>
+                format!("{}[{}]", arr_type.dissasemble(), items_count),
+            Self::Ptr(value_type) => format!("*{}", value_type.dissasemble()),
             // Self::Deref(boxed) => format!("*{}", boxed.dissasemble()),
             // Self::Ref(boxed) => format!("&{}", boxed.dissasemble()),
             // Self::MutableRef(boxed) => format!("&mut {}", boxed.dissasemble()),
@@ -77,12 +83,25 @@ impl ValueType {
         self == other
     }
 
+    pub fn is_assignable_to(&self, other: &ValueType) -> bool {
+        if self == other {
+            true
+        } else if let ValueType::Ptr(inner_value_type) = self {
+            inner_value_type.is_assignable_to(other)
+        } else {
+            false
+        }
+    }
+
     pub fn to_llvm_type(&self) -> Type {
         match self {
             Self::Int => Type::I32,
             Self::Void => Type::Void,
-            Self::Bool => Type::I32,
+            Self::Bool => Type::I1,
             Self::String => Type::Ptr,
+            Self::Array((items_type, items_count)) =>
+                Type::Array((Box::new(items_type.to_llvm_type()), *items_count)),
+            Self::Ptr(_) => Type::Ptr,
         }
     }
 
@@ -259,14 +278,18 @@ impl Default for Value {
 impl Value {
     pub fn get_llvm_operand(&self, llvm_builder: &LLVMBuilder) -> Operand {
         match self {
-            Self::Int(int) => { Operand::Raw(RawOperand::TypeI32(TypeI32::new(*int as i32))) }
+            Self::Int(int) => Operand::Raw(RawOperand::TypeI32(TypeI32::new(*int as i32))),
             Self::String(string) => {
                 Operand::Raw(
                     RawOperand::ConstStringPointer(
-                        ConstStringPointer::new(llvm_builder.get_const_string_idx(string))
+                        ConstStringPointer::new(
+                            llvm_builder.get_mod().get_const_string_idx(&string.to_string())
+                        )
                     )
                 )
             }
+            Self::Bool(bool) => Operand::Raw(RawOperand::TypeI1(TypeI1::new(*bool))),
+
             _ => { unimplemented!() }
         }
     }

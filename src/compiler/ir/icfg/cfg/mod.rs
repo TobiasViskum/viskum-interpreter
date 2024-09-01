@@ -153,29 +153,29 @@ impl LoadConstants for CFG {
 }
 
 impl AllocLLVM for CFG {
-    fn alloc_llvm(&self, llvm_builder: &mut LLVMBuilder, module: &mut Module, func: &mut Function) {
+    fn alloc_llvm(&self, llvm_builder: &mut LLVMBuilder, func: &mut Function) {
         for cfg_node_type in self.nodes.iter().map(|node| node.get_node_type()) {
             match cfg_node_type {
                 CFGNodeType::ProcessNode(process_node) => {
-                    process_node.alloc_llvm(llvm_builder, module, func);
+                    process_node.alloc_llvm(llvm_builder, func);
                 }
                 CFGNodeType::TerminateNode(terminate_node) => {
-                    terminate_node.alloc_llvm(llvm_builder, module, func);
+                    terminate_node.alloc_llvm(llvm_builder, func);
                 }
                 CFGNodeType::DecisionNode(decision_node) => {
-                    decision_node.alloc_llvm(llvm_builder, module, func);
+                    decision_node.alloc_llvm(llvm_builder, func);
                 }
                 CFGNodeType::DropNode(drop_node) => {
-                    drop_node.alloc_llvm(llvm_builder, module, func);
+                    drop_node.alloc_llvm(llvm_builder, func);
                 }
                 CFGNodeType::GotoNode(goto_node) => {
-                    goto_node.alloc_llvm(llvm_builder, module, func);
+                    goto_node.alloc_llvm(llvm_builder, func);
                 }
                 CFGNodeType::ReturnNode(return_node) => {
-                    return_node.alloc_llvm(llvm_builder, module, func);
+                    return_node.alloc_llvm(llvm_builder, func);
                 }
                 CFGNodeType::LabelNode(label_node) => {
-                    label_node.alloc_llvm(llvm_builder, module, func);
+                    label_node.alloc_llvm(llvm_builder, func);
                 }
             }
         }

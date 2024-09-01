@@ -19,33 +19,39 @@ use super::{ ExprStmt, GotoNodeIds, LinearControlFlow, StmtTrait };
 
 #[derive(Debug)]
 pub struct VarAssignStmt<'ast> {
-    target_expr: IdentifierExpr, // ExprStmt<'ast>,
-    value: ExprStmt<'ast>,
+    target_expr: Expr<'ast>,
+    value: Expr<'ast>,
     result_type: Option<ValueType>,
+    ssa_ident: Option<SSAIdent>,
 }
 
 impl<'ast> VarAssignStmt<'ast> {
-    pub fn new(target_expr: IdentifierExpr, value: ExprStmt<'ast>) -> Self {
+    pub fn new(target_expr: Expr<'ast>, value: Expr<'ast>) -> Self {
         Self {
+            ssa_ident: None,
             target_expr,
             value,
             result_type: None,
         }
     }
 
-    pub fn get_target_expr(&self) -> &IdentifierExpr /*&ExprStmt<'ast>*/ {
+    pub fn set_ssa_ident(&mut self, ssa_ident: SSAIdent) {
+        self.ssa_ident = Some(ssa_ident);
+    }
+
+    pub fn get_target_expr(&self) -> &Expr<'ast> /*&ExprStmt<'ast>*/ {
         &self.target_expr
     }
 
-    pub fn get_mut_target_expr(&mut self) -> &mut IdentifierExpr /*&mut ExprStmt<'ast>*/ {
+    pub fn get_mut_target_expr(&mut self) -> &mut Expr<'ast> /*&mut ExprStmt<'ast>*/ {
         &mut self.target_expr
     }
 
-    pub fn get_mut_value_expr(&mut self) -> &mut ExprStmt<'ast> {
+    pub fn get_mut_value_expr(&mut self) -> &mut Expr<'ast> {
         &mut self.value
     }
 
-    pub fn get_value_expr(&self) -> &ExprStmt<'ast> {
+    pub fn get_value_expr(&self) -> &Expr<'ast> {
         &self.value
     }
 }
@@ -72,7 +78,6 @@ impl<'ast> StmtTrait for VarAssignStmt<'ast> {
         match program_symbol_table.assign_var(self) {
             Ok(v) => {
                 self.result_type = Some(v.clone());
-                self.target_expr.set_result_type(v);
             }
             Err(err) => error_handler.report_compile_error(err),
         }
@@ -90,16 +95,28 @@ impl<'ast> LinearControlFlow for VarAssignStmt<'ast> {
         ident_node_id_map: &mut AHashMap<SSAIdent, usize>,
         icfg_builder: &mut ICFGBuilder
     ) -> usize {
-        let ident_node_id = self.target_expr.compile_into_dag(dag, ident_node_id_map, icfg_builder);
-        let value_node_id = self.value.compile_into_dag(dag, ident_node_id_map, icfg_builder);
+        let ident_node_id = self.target_expr.compile_into_dag(
+            dag,
+            ident_node_id_map,
+            icfg_builder,
+            None
+        );
+        let value_node_id = self.value.compile_into_dag(dag, ident_node_id_map, icfg_builder, None);
+
+        let has_field_expr = match self.target_expr {
+            Expr::IdentifierExpr(_) => false,
+            _ => true,
+        };
 
         let assign_node_id = dag.push_node(
             DAGNode::AssignNode(
                 DAGAssignNode::new(
+                    self.ssa_ident.as_ref().expect("Expected during typechecking").clone(),
                     self.result_type
                         .as_ref()
                         .expect("Expected result type in VarAssignStmt")
-                        .clone()
+                        .clone(),
+                    has_field_expr
                 )
             )
         );

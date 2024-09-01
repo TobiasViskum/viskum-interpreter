@@ -31,16 +31,12 @@ impl DAGIdentNode {
 }
 
 impl DAGNodeGenerateLLVM for DAGIdentNode {
-    fn alloc_llvm(
-        &self,
-        _llvm_builder: &mut LLVMBuilder,
-        _module: &mut Module,
-        _func: &mut Function
-    ) {}
+    fn alloc_llvm(&self, _llvm_builder: &mut LLVMBuilder, _func: &mut Function) {}
 
     fn generate_llvm(
         &self,
         node_id: usize,
+        ssa_var: Option<Var>,
         func: &mut Function,
         llvm_builder: &mut LLVMBuilder,
         dag: &DAG
@@ -49,7 +45,7 @@ impl DAGNodeGenerateLLVM for DAGIdentNode {
         let result_key = llvm_builder.req_ssa_key();
         func.add_instr(
             format!(
-                "%{} = load {}, ptr %{}",
+                "%v{} = load {}, ptr %v{}",
                 result_key,
                 self.result_type.to_llvm_type().build(),
                 var_key

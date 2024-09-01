@@ -12,12 +12,7 @@ use crate::{
 pub struct CFGDropNode {}
 
 impl AllocLLVM for CFGDropNode {
-    fn alloc_llvm(
-        &self,
-        llvm_builder: &mut LLVMBuilder,
-        module: &mut crate::compiler::llvm_builder::Module,
-        func: &mut Function
-    ) {
+    fn alloc_llvm(&self, llvm_builder: &mut LLVMBuilder, func: &mut Function) {
         unimplemented!()
     }
 }

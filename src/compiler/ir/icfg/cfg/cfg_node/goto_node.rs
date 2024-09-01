@@ -20,12 +20,7 @@ use crate::{
 pub struct CFGGotoNode;
 
 impl AllocLLVM for CFGGotoNode {
-    fn alloc_llvm(
-        &self,
-        llvm_builder: &mut LLVMBuilder,
-        module: &mut crate::compiler::llvm_builder::Module,
-        func: &mut Function
-    ) {}
+    fn alloc_llvm(&self, llvm_builder: &mut LLVMBuilder, func: &mut Function) {}
 }
 
 impl CFGNodeGenerateLLVM for CFGGotoNode {

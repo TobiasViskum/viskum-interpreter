@@ -11,7 +11,7 @@ use crate::{
 };
 
 use super::{
-    parser_macros::{ current, previous },
+    parser_macros::{ current, peek, previous },
     precedence::Precedence,
     token::TokenMetadata,
     ExprMethodArgs,
@@ -24,22 +24,23 @@ use super::{
 impl<'a> Parser<'a> {
     // pub(super) fn resolve_type(&mut self) -> Result<Option<ValueType>, >
 
+    pub(super) fn check_if_type(&self, i: isize) -> bool {
+        match peek!(self, i, ttype, lexeme) {
+            Some((ttype, lexeme)) => {
+                let lexeme_str = lexeme.take_lexeme_rc();
+                match (ttype, lexeme_str.as_ref()) {
+                    (TokenIdentifier, "Int") => true,
+                    (TokenIdentifier, "Bool") => true,
+                    (TokenIdentifier, "String") => true,
+                    (TokenIdentifier, "Void") => true,
+                    _ => false,
+                }
+            }
+            None => false,
+        }
+    }
+
     pub(super) fn resolve_type(&mut self) -> Result<Option<ValueType>, Vec<TokenMetadata>> {
-        // loop {
-        //     match current!(self, ttype) {
-        //         TokenReference => {
-        //             if let Some(value_type) = &mut value_type {
-        //                 value_type.append_type();
-        //             } else {
-        //                 value_type = ValueType::Ref(Box::new(x));
-        //             }
-        //         }
-        //         TokenMutableReference => {
-
-        //         }
-        //     }
-        // }
-
         let resolved_type = match current!(self, ttype) {
             TokenIdentifier => {
                 self.advance();
@@ -47,6 +48,8 @@ impl<'a> Parser<'a> {
                 match type_lexeme.get_lexeme_str() {
                     "Int" => Ok(Some(ValueType::Int)),
                     "Bool" => Ok(Some(ValueType::Bool)),
+                    "String" => Ok(Some(ValueType::String)),
+                    "Void" => Ok(Some(ValueType::Void)),
                     _ => Ok(None), // This should make a custom type
                 }
             }

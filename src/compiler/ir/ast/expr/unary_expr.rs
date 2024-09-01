@@ -14,6 +14,7 @@ use super::{ Expr, ExprTrait };
 pub struct UnaryExpr<'ast> {
     op: UnaryOp,
     rhs: &'ast mut Expr<'ast>,
+    op_type: Option<ValueType>,
     result_type: Option<ValueType>,
 }
 
@@ -22,6 +23,7 @@ impl<'ast> UnaryExpr<'ast> {
         Self {
             op,
             rhs,
+            op_type: None,
             result_type: None,
         }
     }
@@ -91,11 +93,16 @@ impl<'ast> Dissasemble for UnaryExpr<'ast> {
 }
 
 impl<'ast> ExprTrait for UnaryExpr<'ast> {
+    fn get_result_type(&self) -> ValueType {
+        self.result_type.as_ref().expect("TC").clone()
+    }
+
     fn type_check(
         &mut self,
         program_symbol_table: &ProgramSymbolTablePhase1
-    ) -> Result<ValueType, CompileError> {
-        let rhs_type = self.rhs.type_check(program_symbol_table)?;
+    ) -> Result<(ValueType, Option<SSAIdent>), CompileError> {
+        let (rhs_type, _) = self.rhs.type_check(program_symbol_table)?;
+        self.op_type = Some(rhs_type.clone());
 
         match rhs_type.try_unary(self.op) {
             Ok(v) => {
@@ -105,7 +112,7 @@ impl<'ast> ExprTrait for UnaryExpr<'ast> {
                     // UnaryOp::MutRef => {
                     //     self.check_if_mutable_ref_to_immutable_var(symbol_table_ref).and(Ok(v))
                     // }
-                    _ => Ok(v),
+                    _ => Ok((v, None)),
                 }
             }
             Err(msg) => {
@@ -119,14 +126,20 @@ impl<'ast> ExprTrait for UnaryExpr<'ast> {
         &self,
         dag: &mut DAG,
         ident_node_id_map: &mut AHashMap<SSAIdent, usize>,
-        icfg_builder: &mut ICFGBuilder
+        icfg_builder: &mut ICFGBuilder,
+        declaring_ssa_ident: Option<&SSAIdent>
     ) -> usize {
-        let rhs_node_id = self.rhs.compile_into_dag(dag, ident_node_id_map, icfg_builder);
+        let rhs_node_id = self.rhs.compile_into_dag(
+            dag,
+            ident_node_id_map,
+            icfg_builder,
+            declaring_ssa_ident
+        );
         let unary_node_id = dag.push_node(
             DAGNode::UnaryNode(
                 DAGUnaryNode::new(
                     self.op,
-                    self.result_type.as_ref().expect("Expected result type in UnaryExpr").clone()
+                    self.op_type.as_ref().expect("Expected result type in UnaryExpr").clone()
                 )
             )
         );

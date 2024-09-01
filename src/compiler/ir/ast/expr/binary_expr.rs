@@ -18,6 +18,7 @@ pub struct BinaryExpr<'ast> {
     lhs: &'ast mut Expr<'ast>,
     op: BinaryOp,
     rhs: &'ast mut Expr<'ast>,
+    op_types: Option<ValueType>,
     result_type: Option<ValueType>,
 }
 
@@ -27,6 +28,7 @@ impl<'ast> BinaryExpr<'ast> {
             lhs,
             op,
             rhs,
+            op_types: None,
             result_type: None,
         }
     }
@@ -51,19 +53,24 @@ impl<'ast> Dissasemble for BinaryExpr<'ast> {
 }
 
 impl<'ast> ExprTrait for BinaryExpr<'ast> {
+    fn get_result_type(&self) -> ValueType {
+        self.result_type.as_ref().expect("Typechecking").clone()
+    }
+
     fn type_check(
         &mut self,
         program_symbol_table: &ProgramSymbolTablePhase1
-    ) -> Result<ValueType, CompileError> {
-        let (lhs_type, rhs_type) = (
+    ) -> Result<(ValueType, Option<SSAIdent>), CompileError> {
+        let ((lhs_type, _), (rhs_type, _)) = (
             self.lhs.type_check(program_symbol_table)?,
             self.rhs.type_check(program_symbol_table)?,
         );
+        self.op_types = Some(lhs_type.clone());
 
         match lhs_type.try_binary(&rhs_type, self.op) {
             Ok(v) => {
                 self.result_type = Some(v.clone());
-                Ok(v)
+                Ok((v, None))
             }
             Err(msg) => {
                 let metadata = self.collect_metadata();
@@ -76,15 +83,26 @@ impl<'ast> ExprTrait for BinaryExpr<'ast> {
         &self,
         dag: &mut DAG,
         ident_node_id_map: &mut AHashMap<SSAIdent, usize>,
-        icfg_builder: &mut ICFGBuilder
+        icfg_builder: &mut ICFGBuilder,
+        declaring_ssa_ident: Option<&SSAIdent>
     ) -> usize {
-        let lhs_node_id = self.lhs.compile_into_dag(dag, ident_node_id_map, icfg_builder);
-        let rhs_node_id = self.rhs.compile_into_dag(dag, ident_node_id_map, icfg_builder);
+        let lhs_node_id = self.lhs.compile_into_dag(
+            dag,
+            ident_node_id_map,
+            icfg_builder,
+            declaring_ssa_ident
+        );
+        let rhs_node_id = self.rhs.compile_into_dag(
+            dag,
+            ident_node_id_map,
+            icfg_builder,
+            declaring_ssa_ident
+        );
         let binary_node_id = dag.push_node(
             DAGNode::BinaryNode(
                 DAGBinaryNode::new(
                     self.op,
-                    self.result_type.as_ref().expect("Expected result type in BinaryExpr").clone()
+                    self.op_types.as_ref().expect("Expected result type in BinaryExpr").clone()
                 )
             )
         );

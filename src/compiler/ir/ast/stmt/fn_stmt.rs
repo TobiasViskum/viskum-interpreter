@@ -97,16 +97,6 @@ impl<'ast> StmtTrait for FunctionStmt<'ast> {
         program_symbol_table: &mut ProgramSymbolTablePhase1,
         error_handler: &mut ErrorHandler
     ) {
-        // if
-        //     let Err(compile_error) = program_symbol_table.insert_fn(
-        //         self.ssa_ident.clone(),
-        //         SymbolFn::new(self.ident_metadata, self.args.clone(), self.return_type.clone())
-        //     )
-        // {
-        //     error_handler.report_compile_error(compile_error);
-        //     // Should not return, because it's only name collisions
-        // }
-
         let prev_symbol_table_id = program_symbol_table.get_current_symbol_table_id();
         program_symbol_table.set_current_symbol_table_id(prev_symbol_table_id + 1);
 
@@ -133,7 +123,7 @@ impl<'ast> StmtTrait for FunctionStmt<'ast> {
 
 impl<'ast> Dissasemble for FunctionStmt<'ast> {
     fn dissasemble(&self) -> String {
-        let mut string_builder = format!("fn {}(", self.ssa_ident.dissasemble());
+        let mut string_builder = format!("def fn {}(", self.ssa_ident.dissasemble());
         for i in 0..self.args.len() {
             string_builder += &self.args[i].ssa_ident.dissasemble();
             string_builder += " ";
@@ -163,11 +153,12 @@ impl<'ast> AstDissasemble for FunctionStmt<'ast> {
         scope_depth: usize
     ) -> String {
         let mut string_builder = format!(
-            "[{}]: {}fn {}(",
+            "[{}]: {}def {}(",
             program_symbol_table.get_current_symbol_table_id(),
             " ".repeat(AST_DISSASEMBLE_INDENTATION * scope_depth),
             self.ssa_ident.dissasemble()
         );
+
         for i in 0..self.args.len() {
             string_builder += &self.args[i].ssa_ident.dissasemble();
             string_builder += " ";

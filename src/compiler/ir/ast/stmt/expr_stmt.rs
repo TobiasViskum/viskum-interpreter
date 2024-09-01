@@ -40,7 +40,7 @@ impl<'ast> ExprStmt<'ast> {
         &mut self,
         program_symbol_table: &ProgramSymbolTablePhase1
     ) -> Result<ValueType, CompileError> {
-        self.expr.type_check(program_symbol_table)
+        self.expr.type_check(program_symbol_table).map(|ok| ok.0)
     }
 
     pub fn compile_to_dag(&self, icfg_builder: &mut ICFGBuilder) -> DAG {
@@ -105,7 +105,7 @@ impl<'ast> LinearControlFlow for ExprStmt<'ast> {
         ident_node_id_map: &mut AHashMap<SSAIdent, usize>,
         icfg_builder: &mut ICFGBuilder
     ) -> usize {
-        let node_id = self.expr.compile_into_dag(dag, ident_node_id_map, icfg_builder);
+        let node_id = self.expr.compile_into_dag(dag, ident_node_id_map, icfg_builder, None);
         dag.set_entry_node_id(node_id);
         node_id
     }

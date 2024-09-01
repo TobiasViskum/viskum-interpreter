@@ -6,9 +6,9 @@ use crate::compiler::{
     ds::{ ssa_ident::SSAIdent, symbol_table::UserSymbolVar, value::ValueType },
     error_handler::{ CompileError, ErrorHandler, ReportedError, SrcCharsRange },
     ir::{
-        ast::{ expr::IdentifierExpr, AST_DISSASEMBLE_INDENTATION },
+        ast::{ expr::{ Expr, IdentifierExpr }, AST_DISSASEMBLE_INDENTATION },
         icfg::{
-            dag::{ DAGDefineNode, DAGNode, DAG },
+            dag::{ DAGDeclareNode, DAGDefineNode, DAGNode, DAG },
             icfg_builder::{ CFGBuilder, ICFGBuilder },
             ICFG,
         },
@@ -26,7 +26,7 @@ pub struct VarDefStmt<'ast> {
     ident_expr: IdentifierExpr,
     value_type: Option<ValueType>,
     mut_keyword_metadata: Option<TokenMetadata>,
-    value: Option<ExprStmt<'ast>>,
+    value: Expr<'ast>,
 }
 
 impl<'ast> VarDefStmt<'ast> {
@@ -34,7 +34,7 @@ impl<'ast> VarDefStmt<'ast> {
         ident_expr: IdentifierExpr,
         value_type: Option<ValueType>,
         mut_keyword_metadata: Option<TokenMetadata>,
-        value: Option<ExprStmt<'ast>>
+        value: Expr<'ast>
     ) -> Self {
         Self {
             ident_expr,
@@ -112,8 +112,8 @@ impl<'ast> VarDefStmt<'ast> {
         self.mut_keyword_metadata.is_some()
     }
 
-    pub fn get_value(&self) -> Option<&ExprStmt<'ast>> {
-        self.value.as_ref()
+    pub fn get_value(&self) -> &Expr<'ast> {
+        &self.value
     }
 
     pub fn get_metadata(&self) -> TokenMetadata {
@@ -139,25 +139,19 @@ impl<'ast> StmtTrait for VarDefStmt<'ast> {
         program_symbol_table: &mut ProgramSymbolTablePhase1,
         error_handler: &mut ErrorHandler
     ) {
-        let type_checked_val = match
-            self.value.as_mut().map(|val| { val.type_check(program_symbol_table) })
-        {
-            Some(res) =>
-                match res {
-                    Ok(v) => { Some(v) }
-                    Err(err) => {
-                        error_handler.report_compile_error(err);
-                        return;
-                    }
-                }
-            None => None,
+        let type_checked_val = match self.value.type_check(program_symbol_table) {
+            Ok(v) => { Some(v) }
+            Err(err) => {
+                error_handler.report_compile_error(err);
+                return;
+            }
         };
 
         let value_type = self.value_type
             .as_ref()
             .cloned()
             .map(|value_type| (
-                if let Some(type_checked_val) = &type_checked_val {
+                if let Some((type_checked_val, _)) = &type_checked_val {
                     if type_checked_val.is(&value_type) {
                         value_type
                     } else {
@@ -167,7 +161,13 @@ impl<'ast> StmtTrait for VarDefStmt<'ast> {
                     value_type
                 }
             ))
-            .unwrap_or_else(|| type_checked_val.as_ref().cloned().unwrap());
+            .unwrap_or_else(||
+                type_checked_val
+                    .as_ref()
+                    .cloned()
+                    .map(|some| some.0)
+                    .unwrap()
+            );
 
         self.value_type = Some(value_type.clone());
 
@@ -192,30 +192,61 @@ impl<'ast> LinearControlFlow for VarDefStmt<'ast> {
         ident_node_id_map: &mut AHashMap<SSAIdent, usize>,
         icfg_builder: &mut ICFGBuilder
     ) -> usize {
-        let value_node_id = self.value
-            .as_ref()
-            .map(|expr| expr.compile_into_dag(dag, ident_node_id_map, icfg_builder));
+        match self.value_type.as_ref().expect("Set during typechecking") {
+            ValueType::Array(_) => {
+                let declaring_ssa_ident = self.ident_expr.get_ssa_ident().clone();
+                let declare_node_id = dag.push_node(
+                    DAGNode::DeclareNode(
+                        DAGDeclareNode::new(
+                            declaring_ssa_ident.clone(),
+                            self.value_type
+                                .as_ref()
+                                .expect("Expected value type in VarDefStmt")
+                                .clone()
+                        )
+                    )
+                );
+                dag.set_entry_node_id(declare_node_id);
 
-        let define_node_id = dag.push_node(
-            DAGNode::DefineNode(
-                DAGDefineNode::new(
-                    self.ident_expr.get_ssa_ident().clone(),
-                    self.get_is_mutable(),
-                    value_node_id.is_some(),
-                    self.value_type.as_ref().expect("Expected value type in VarDefStmt").clone()
-                )
-            )
-        );
+                let value_node_id = self.value.compile_into_dag(
+                    dag,
+                    ident_node_id_map,
+                    icfg_builder,
+                    Some(&declaring_ssa_ident)
+                );
 
-        if let Some(value_node_id) = value_node_id {
-            dag.add_edge(define_node_id, value_node_id);
-        } else {
-            panic!("Define statement has to have a value for now!");
+                dag.add_edge(declare_node_id, value_node_id);
+                declare_node_id
+            }
+            | ValueType::Bool
+            | ValueType::Int
+            | ValueType::String
+            | ValueType::Void
+            | ValueType::Ptr(_) => {
+                let value_node_id = self.value.compile_into_dag(
+                    dag,
+                    ident_node_id_map,
+                    icfg_builder,
+                    None
+                );
+
+                let define_node_id = dag.push_node(
+                    DAGNode::DefineNode(
+                        DAGDefineNode::new(
+                            self.ident_expr.get_ssa_ident().clone(),
+                            self.value_type
+                                .as_ref()
+                                .expect("Expected value type in VarDefStmt")
+                                .clone()
+                        )
+                    )
+                );
+
+                dag.add_edge(define_node_id, value_node_id);
+                dag.set_entry_node_id(define_node_id);
+                define_node_id
+            }
         }
-
-        dag.set_entry_node_id(define_node_id);
-
-        define_node_id
     }
 }
 
@@ -226,10 +257,7 @@ impl<'ast> Dissasemble for VarDefStmt<'ast> {
             false => "".to_string(),
         };
 
-        let value_string = match &self.value {
-            Some(value) => format!(" := {}", value.dissasemble()),
-            None => "".to_string(),
-        };
+        let value_string = format!(" := {}", self.value.dissasemble());
 
         match &self.value_type {
             Some(value_type) => {
@@ -259,41 +287,11 @@ impl<'ast> AstDissasemble for VarDefStmt<'ast> {
         program_symbol_table: &mut ProgramSymbolTablePhase1,
         scope_depth: usize
     ) -> String {
-        let mutable_string = match self.mut_keyword_metadata.is_some() {
-            true => "mut ".to_string(),
-            false => "".to_string(),
-        };
-
-        let value_string = match &self.value {
-            Some(value) => format!(" := {}", value.dissasemble()),
-            None => "".to_string(),
-        };
-
-        let final_str = match &self.value_type {
-            Some(value_type) => {
-                format!(
-                    "{}{} {}{}\n",
-                    mutable_string,
-                    self.get_name(),
-                    value_type.dissasemble(),
-                    value_string
-                )
-            }
-            None => {
-                format!(
-                    "{}{}{}\n",
-                    mutable_string,
-                    self.ident_expr.get_ssa_ident().dissasemble(),
-                    value_string
-                )
-            }
-        };
-
         format!(
             "[{}]: {}{}",
             program_symbol_table.get_current_symbol_table_id(),
             " ".repeat(AST_DISSASEMBLE_INDENTATION * scope_depth),
-            final_str
+            self.dissasemble()
         )
     }
 }

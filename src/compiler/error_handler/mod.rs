@@ -104,6 +104,10 @@ impl CompileError {
             error_parts: reported_errors,
         }
     }
+
+    pub fn take_errs(self) -> Vec<ReportedError> {
+        self.error_parts
+    }
 }
 
 #[derive(Debug)]

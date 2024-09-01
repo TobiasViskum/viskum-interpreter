@@ -10,7 +10,7 @@ edition = "2021"
 # members = [ "llvm_builder" ]
 
 [dependencies]
-indexmap = "2.2.5"
+indexmap = "2.4.0"
 # llvm_builder = { path = "./llvm_builder" }
 colored = "2.1.0"
 ahash = "0.8.11"

@@ -14,12 +14,7 @@ use crate::{
 pub struct CFGLabelNode;
 
 impl AllocLLVM for CFGLabelNode {
-    fn alloc_llvm(
-        &self,
-        _llvm_builder: &mut LLVMBuilder,
-        _module: &mut crate::compiler::llvm_builder::Module,
-        _func: &mut Function
-    ) {}
+    fn alloc_llvm(&self, _llvm_builder: &mut LLVMBuilder, _func: &mut Function) {}
 }
 
 impl CFGNodeGenerateLLVM for CFGLabelNode {

@@ -248,9 +248,9 @@ impl DAG {
         define_node: &DAGDefineNode,
         is_condition: bool
     ) -> Reg {
-        let connected_node_id = define_node
-            .parse_connected_nodes(self.get_connected_node_ids(node_id))
-            .expect("Right now only initialized definitions are supported");
+        let connected_node_id = define_node.parse_connected_nodes(
+            self.get_connected_node_ids(node_id)
+        );
 
         let src_reg = self.generate_instruction(
             connected_node_id,
@@ -261,15 +261,10 @@ impl DAG {
 
         let ssa_key = define_node.get_ssa_key().get_ident();
 
-        match define_node.get_is_mutable() {
-            true => {
-                instructions.push(Instruction::Copy {
-                    dst_reg: register_allocator.alloc_var_reg(ssa_key),
-                    src_reg: src_reg,
-                });
-            }
-            false => register_allocator.mark_reg_as_var(ssa_key, src_reg),
-        }
+        instructions.push(Instruction::Copy {
+            dst_reg: register_allocator.alloc_var_reg(ssa_key),
+            src_reg: src_reg,
+        });
 
         src_reg
     }

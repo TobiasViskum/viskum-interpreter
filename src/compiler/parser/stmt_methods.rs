@@ -1,9 +1,11 @@
+use std::time::Instant;
+
 use crate::{
     compiler::{
-        ds::{ value::ValueType },
+        ds::value::ValueType,
         error_handler::{ CompileError, ReportedError },
         ir::ast::{
-            expr::IdentifierExpr,
+            expr::{ Expr, IdentifierExpr },
             stmt::{
                 BlockStmt,
                 BreakStmt,
@@ -15,6 +17,7 @@ use crate::{
                 ReturnStmt,
                 Stmt,
                 VarAssignStmt,
+                VarDeclarationStmt,
                 VarDefStmt,
             },
             AstArena,
@@ -25,7 +28,7 @@ use crate::{
 };
 
 use super::{
-    parser_macros::{ current, next, previous },
+    parser_macros::{ current, matches_token_order, next, peek, previous },
     precedence::Precedence,
     Parser,
     StmtMethodArgs,
@@ -43,7 +46,6 @@ impl<'a> Parser<'a> {
         match curr {
             TokenLeftCurlyBrace =>
                 Ok(Stmt::BlockStmt(self.block((program_symbol_table, ast_arena), None)?)),
-            TokenMutable => self.mut_var_def((program_symbol_table, ast_arena)),
             TokenFunction => self.function((program_symbol_table, ast_arena)),
             TokenIf => Ok(Stmt::IfStmt(self.if_stmt((program_symbol_table, ast_arena))?)),
             TokenLoop => self.loop_stmt((program_symbol_table, ast_arena)),
@@ -52,11 +54,24 @@ impl<'a> Parser<'a> {
             TokenContinue => self.continue_stmt((program_symbol_table, ast_arena)),
             TokenReturn => self.return_stmt((program_symbol_table, ast_arena)),
             TokenDef => self.function_v2((program_symbol_table, ast_arena)),
-            _ if curr.is(&TokenIdentifier) && self.is_ttype_in_stmt(TokenAssign) => {
-                self.var_assign((program_symbol_table, ast_arena))
+
+            _ if
+                matches_token_order!(self, TokenMutable, TokenIdentifier, TokenDefine) ||
+                matches_token_order!(self, TokenMutable, TokenIdentifier, Type, TokenDefine) ||
+                matches_token_order!(self, TokenMutable, TokenIdentifier, Type)
+            => {
+                self.mut_var_def_and_decl((program_symbol_table, ast_arena))
             }
-            _ if curr.is(&TokenIdentifier) && self.is_ttype_in_stmt(TokenDefine) => {
-                self.var_def((program_symbol_table, ast_arena))
+            _ if
+                matches_token_order!(self, TokenIdentifier, TokenDefine) ||
+                matches_token_order!(self, TokenIdentifier, Type, TokenDefine) ||
+                matches_token_order!(self, TokenIdentifier, Type)
+            => {
+                self.var_def_and_decl((program_symbol_table, ast_arena))
+            }
+
+            _ if matches_token_order!(self, ..., TokenAssign) => {
+                self.var_assign((program_symbol_table, ast_arena))
             }
 
             _ => self.expression_statement((program_symbol_table, ast_arena)),
@@ -150,8 +165,6 @@ impl<'a> Parser<'a> {
 
         self.consume_expr_end()?;
 
-        println!("current: {:?}", current!(self, ttype));
-
         Ok(Stmt::LoopStmt(LoopStmt::new(None, body)))
     }
 
@@ -159,12 +172,7 @@ impl<'a> Parser<'a> {
         &mut self,
         (program_symbol_table, ast_arena): StmtMethodArgs<'b, 'c>
     ) -> StmtMethodRetType<'b> {
-        // Temporary block start (until chained assignments is supported: struct.value = some_value)
-        self.advance();
-        let (lexeme, token_metadata) = previous!(self, lexeme, metadata);
-        // Temporary block end
-
-        // let target_expr = ExprStmt::new(self.expression(Precedence::PrecCall, arena)?);
+        let field_expr = self.expression(Precedence::PrecCall, (program_symbol_table, ast_arena))?;
 
         if !current!(self, ttype).is(&TokenAssign) {
             let mut token_vec = vec![previous!(self, metadata)];
@@ -190,25 +198,37 @@ impl<'a> Parser<'a> {
 
         self.advance();
 
-        let value = ExprStmt::new(
-            self.expression(Precedence::PrecAssignment.get_next(), (
-                program_symbol_table,
-                ast_arena,
-            ))?
-        );
+        let value = self.expression(Precedence::PrecAssignment.get_next(), (
+            program_symbol_table,
+            ast_arena,
+        ))?;
 
         self.consume_expr_end()?;
 
-        let ssa_ident = program_symbol_table.declare_var_ssa_ident(&lexeme);
-
-        Ok(
-            Stmt::VarAssignStmt(
-                VarAssignStmt::new(IdentifierExpr::new(ssa_ident, token_metadata), value)
-            )
-        )
+        Ok(Stmt::VarAssignStmt(VarAssignStmt::new(field_expr, value)))
     }
 
-    pub(super) fn var_def<'b, 'c>(
+    pub(super) fn var_declaration<'b, 'c>(
+        &mut self,
+        (program_symbol_table, ast_arena): StmtMethodArgs<'b, 'c>
+    ) -> StmtMethodRetType<'b> {
+        let mut_keyword_metadata = if let TokenMutable = previous!(self, ttype) {
+            Some(previous!(self, metadata))
+        } else {
+            None
+        };
+
+        let (lexeme, token_metadata) = previous!(self, lexeme, metadata);
+
+        let found_type = match self.resolve_type() {
+            Ok(found_type) => { found_type }
+            Err(_) => None,
+        };
+
+        panic!("Not implemented yet")
+    }
+
+    pub(super) fn var_def_and_decl<'b, 'c>(
         &mut self,
         (program_symbol_table, ast_arena): StmtMethodArgs<'b, 'c>
     ) -> StmtMethodRetType<'b> {
@@ -251,7 +271,7 @@ impl<'a> Parser<'a> {
                 ast_arena,
             ))?;
 
-            Some(ExprStmt::new(value))
+            Some(value)
         } else {
             None
         };
@@ -260,26 +280,38 @@ impl<'a> Parser<'a> {
 
         let ssa_ident = program_symbol_table.declare_var_ssa_ident(&lexeme);
 
-        Ok(
-            Stmt::VarDefStmt(
-                VarDefStmt::new(
-                    IdentifierExpr::new(ssa_ident, token_metadata),
-                    found_type,
-                    mut_keyword_metadata,
-                    value
+        if let Some(value) = value {
+            Ok(
+                Stmt::VarDefStmt(
+                    VarDefStmt::new(
+                        IdentifierExpr::new(ssa_ident, token_metadata),
+                        found_type,
+                        mut_keyword_metadata,
+                        value
+                    )
                 )
             )
-        )
+        } else {
+            Ok(
+                Stmt::VarDeclarationStmt(
+                    VarDeclarationStmt::new(
+                        IdentifierExpr::new(ssa_ident, token_metadata),
+                        found_type.unwrap(),
+                        mut_keyword_metadata
+                    )
+                )
+            )
+        }
     }
 
-    pub fn mut_var_def<'b, 'c>(
+    pub fn mut_var_def_and_decl<'b, 'c>(
         &mut self,
         (program_symbol_table, ast_arena): StmtMethodArgs<'b, 'c>
     ) -> StmtMethodRetType<'b> {
         self.advance();
 
         match current!(self, ttype) {
-            TokenIdentifier => self.var_def((program_symbol_table, ast_arena)),
+            TokenIdentifier => self.var_def_and_decl((program_symbol_table, ast_arena)),
             TokenFunction => {
                 panic!("Functions cannot be mutable");
             }

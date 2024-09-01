@@ -20,11 +20,18 @@ pub enum NativeSymbol {
 pub struct NativeSymbolsHandler;
 
 impl NativeSymbolsHandler {
-    pub fn lookup_fn(&self, ident: &Rc<str>) -> Result<NativeSymbolFn, String> {
-        match ident.as_ref() {
-            str if PrintFn.get_ident() == str => Ok(NativeSymbolFn::PrintFn(PrintFn)),
-            _ => Err(format!("Undefined function '{}'", ident)),
+    pub fn lookup_fn(&self, ident: &Rc<str>) -> Result<UserNativeSymbolFn, String> {
+        let native_fns = [UserNativeSymbolFn::PrintFn(PrintFn)];
+
+        for native_fn in native_fns {
+            match native_fn.get_lang_ident() {
+                Some(lang_ident) if lang_ident == ident.as_ref() => {
+                    return Ok(native_fn);
+                }
+                _ => {}
+            }
         }
+        Err(format!("Undefined function '{}'", ident))
     }
     pub fn lookup_var(&self, ident: &Rc<str>) -> Result<NativeSymbolVar, String> {
         match ident.as_ref() {

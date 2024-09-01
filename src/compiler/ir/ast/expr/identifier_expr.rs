@@ -37,16 +37,6 @@ impl IdentifierExpr {
         self.metadata
     }
 
-    // pub fn is_var_mutable(
-    //     &self,
-    //     program_symbol_table: &ProgramSymbolTablePhase1
-    // ) -> Result<bool, CompileError> {
-    //     match program_symbol_table.lookup_var(&self.ssa_ident) {
-    //         Ok(symbol_var) => Ok(symbol_var.get_is_mutable()),
-    //         Err(msg) => Err(CompileError::new(ReportedError::new(msg, self.collect_metadata()))),
-    //     }
-    // }
-
     pub fn get_ssa_ident(&self) -> &SSAIdent {
         &self.ssa_ident
     }
@@ -59,11 +49,16 @@ impl Dissasemble for IdentifierExpr {
 }
 
 impl ExprTrait for IdentifierExpr {
+    fn get_result_type(&self) -> ValueType {
+        self.result_type.as_ref().expect("TC").clone()
+    }
+
     fn compile_into_dag(
         &self,
         dag: &mut DAG,
         ident_node_id_map: &mut AHashMap<SSAIdent, usize>,
-        _: &mut ICFGBuilder
+        _: &mut ICFGBuilder,
+        declaring_ssa_ident: Option<&SSAIdent>
     ) -> usize {
         if let Some(&node_id) = ident_node_id_map.get(&self.ssa_ident) {
             node_id
@@ -87,14 +82,23 @@ impl ExprTrait for IdentifierExpr {
     fn type_check(
         &mut self,
         program_symbol_table: &ProgramSymbolTablePhase1
-    ) -> Result<ValueType, CompileError> {
-        match program_symbol_table.lookup_var(&self.ssa_ident) {
+    ) -> Result<(ValueType, Option<SSAIdent>), CompileError> {
+        let prev_ssa_ident = match
+            program_symbol_table.lookup_var_ident_by_name(&self.ssa_ident.get_ident())
+        {
+            Ok(v) => v,
+            Err(msg) => {
+                return Err(CompileError::new(ReportedError::new(msg, self.collect_metadata())));
+            }
+        };
+
+        match program_symbol_table.lookup_var(prev_ssa_ident) {
             Ok(symbol_var) => {
                 let value_type = symbol_var.get_value_type();
                 self.result_type = Some(value_type.clone());
-                Ok(value_type)
+                Ok((value_type, Some(self.ssa_ident.clone())))
             }
-            Err(msg) => Err(CompileError::new(ReportedError::new(msg, self.collect_metadata()))),
+            Err(msg) => { Err(CompileError::new(ReportedError::new(msg, self.collect_metadata()))) }
         }
     }
 

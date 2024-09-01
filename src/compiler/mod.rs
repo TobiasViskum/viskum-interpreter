@@ -51,6 +51,7 @@ impl Compiler {
 
         let llvm_builder = icfg.build_llvm();
         llvm_builder.output();
+        "dot -Tsvg cfg.dot -o cfg.svg && open cfg.svg";
 
         panic!("Exiting: VM is behind");
 

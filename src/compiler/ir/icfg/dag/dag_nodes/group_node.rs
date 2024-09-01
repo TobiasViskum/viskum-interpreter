@@ -1,5 +1,5 @@
 use crate::compiler::ds::value::ValueType;
-use crate::compiler::llvm_builder::{ Function, LLVMBuilder, Module, Operand };
+use crate::compiler::llvm_builder::{ Function, LLVMBuilder, Module, Operand, Var };
 
 use crate::compiler::{
     ir::icfg::dag::DAG,
@@ -18,22 +18,18 @@ impl DAGGroupNode {
 }
 
 impl DAGNodeGenerateLLVM for DAGGroupNode {
-    fn alloc_llvm(
-        &self,
-        _llvm_builder: &mut LLVMBuilder,
-        _module: &mut Module,
-        _func: &mut Function
-    ) {}
+    fn alloc_llvm(&self, _llvm_builder: &mut LLVMBuilder, _func: &mut Function) {}
 
     fn generate_llvm(
         &self,
         node_id: usize,
+        ssa_var: Option<Var>,
         func: &mut Function,
         llvm_builder: &mut LLVMBuilder,
         dag: &DAG
     ) -> Operand {
         let connected_node_id = self.parse_connected_nodes(dag.get_connected_node_ids(node_id));
-        dag.generate_llvm(connected_node_id, func, llvm_builder)
+        dag.generate_llvm(connected_node_id, ssa_var, func, llvm_builder)
     }
 }
 

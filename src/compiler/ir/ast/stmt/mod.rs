@@ -9,6 +9,7 @@ mod loop_stmt;
 mod return_stmt;
 mod var_assign_stmt;
 mod var_def_stmt;
+mod var_declaration_stmt;
 // mod drop_stmt;
 
 pub use block_stmt::BlockStmt;
@@ -21,6 +22,7 @@ pub use fn_stmt::FunctionStmt;
 pub use if_stmt::IfStmt;
 pub use loop_stmt::LoopStmt;
 pub use return_stmt::ReturnStmt;
+pub use var_declaration_stmt::VarDeclarationStmt;
 
 use crate::compiler::{
     ds::{ ssa_ident::SSAIdent, value::ValueType },
@@ -78,6 +80,7 @@ impl GotoNodeIds {
 #[derive(Debug)]
 pub enum Stmt<'ast> {
     ExprStmt(ExprStmt<'ast>),
+    VarDeclarationStmt(VarDeclarationStmt),
     VarDefStmt(VarDefStmt<'ast>),
     VarAssignStmt(VarAssignStmt<'ast>),
     BlockStmt(BlockStmt<'ast>),
@@ -98,32 +101,33 @@ impl<'ast> StmtTrait for Stmt<'ast> {
         goto_node_ids: &mut GotoNodeIds
     ) {
         match self {
-            Self::ExprStmt(expr_stmt) =>
-                expr_stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids),
-            Self::VarDefStmt(var_def_stmt) => {
-                var_def_stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids)
+            Self::ExprStmt(stmt) =>
+                stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids),
+            Self::VarDefStmt(stmt) => {
+                stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids)
             }
-            Self::VarAssignStmt(var_assign_stmt) => {
-                var_assign_stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids)
+            Self::VarAssignStmt(stmt) => {
+                stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids)
             }
-            Self::BlockStmt(scope_stmt) => {
-                scope_stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids)
+            Self::BlockStmt(stmt) => {
+                stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids)
             }
-            Self::FunctionStmt(fn_stmt) =>
-                fn_stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids),
-            Self::BreakStmt(break_stmt) => {
-                break_stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids)
+            Self::FunctionStmt(stmt) =>
+                stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids),
+            Self::BreakStmt(stmt) => {
+                stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids)
             }
-            Self::ContinueStmt(continue_stmt) => {
-                continue_stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids)
+            Self::ContinueStmt(stmt) => {
+                stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids)
             }
-            Self::ReturnStmt(return_stmt) => {
-                return_stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids)
+            Self::ReturnStmt(stmt) => {
+                stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids)
             }
-            Self::IfStmt(if_stmt) =>
-                if_stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids),
-            Self::LoopStmt(loop_stmt) =>
-                loop_stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids),
+            Self::IfStmt(stmt) => stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids),
+            Self::LoopStmt(stmt) =>
+                stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids),
+            Self::VarDeclarationStmt(stmt) =>
+                stmt.compile_into_icfg(icfg_builder, cfg_builder, goto_node_ids),
             // Self::DropStmt(drop_stmt) =>
             //     drop_stmt.compile_into_icfg(icfg, cfg_builder, goto_node_ids),
         }
@@ -135,63 +139,52 @@ impl<'ast> StmtTrait for Stmt<'ast> {
         error_handler: &mut ErrorHandler
     ) {
         match self {
-            Self::ExprStmt(expr_stmt) =>
-                expr_stmt.validate_stmt(program_symbol_table, error_handler),
-            Self::VarDefStmt(var_def_stmt) => {
-                var_def_stmt.validate_stmt(program_symbol_table, error_handler)
-            }
-            Self::VarAssignStmt(var_assign_stmt) => {
-                var_assign_stmt.validate_stmt(program_symbol_table, error_handler)
-            }
-            Self::BlockStmt(scope_stmt) => {
-                scope_stmt.validate_stmt(program_symbol_table, error_handler)
-            }
-            Self::FunctionStmt(fn_stmt) =>
-                fn_stmt.validate_stmt(program_symbol_table, error_handler),
-            Self::BreakStmt(break_stmt) => {
-                break_stmt.validate_stmt(program_symbol_table, error_handler)
-            }
-            Self::ContinueStmt(continue_stmt) => {
-                continue_stmt.validate_stmt(program_symbol_table, error_handler)
-            }
-            Self::ReturnStmt(return_stmt) => {
-                return_stmt.validate_stmt(program_symbol_table, error_handler)
-            }
-            Self::IfStmt(if_stmt) => if_stmt.validate_stmt(program_symbol_table, error_handler),
-            Self::LoopStmt(loop_stmt) =>
-                loop_stmt.validate_stmt(program_symbol_table, error_handler),
-            // Self::DropStmt(drop_stmt) => drop_stmt.validate_stmt(symbol_table_ref, error_handler),
+            Self::ExprStmt(stmt) => stmt.validate_stmt(program_symbol_table, error_handler),
+            Self::VarDefStmt(stmt) => { stmt.validate_stmt(program_symbol_table, error_handler) }
+            Self::VarAssignStmt(stmt) => { stmt.validate_stmt(program_symbol_table, error_handler) }
+            Self::BlockStmt(stmt) => { stmt.validate_stmt(program_symbol_table, error_handler) }
+            Self::FunctionStmt(stmt) => stmt.validate_stmt(program_symbol_table, error_handler),
+            Self::BreakStmt(stmt) => { stmt.validate_stmt(program_symbol_table, error_handler) }
+            Self::ContinueStmt(stmt) => { stmt.validate_stmt(program_symbol_table, error_handler) }
+            Self::ReturnStmt(stmt) => { stmt.validate_stmt(program_symbol_table, error_handler) }
+            Self::IfStmt(stmt) => stmt.validate_stmt(program_symbol_table, error_handler),
+            Self::LoopStmt(stmt) => stmt.validate_stmt(program_symbol_table, error_handler),
+            Self::VarDeclarationStmt(stmt) =>
+                stmt.validate_stmt(program_symbol_table, error_handler),
+            // Self::DropStmt(drop_stmt) => stmt.validate_stmt(symbol_table_ref, error_handler),
         }
     }
 
     fn is_linear_control_flow(&self) -> bool {
         match self {
-            Self::ExprStmt(expr_stmt) => expr_stmt.is_linear_control_flow(),
-            Self::VarDefStmt(var_def_stmt) => var_def_stmt.is_linear_control_flow(),
-            Self::VarAssignStmt(var_assign_stmt) => var_assign_stmt.is_linear_control_flow(),
-            Self::BlockStmt(scope_stmt) => scope_stmt.is_linear_control_flow(),
-            Self::FunctionStmt(fn_stmt) => fn_stmt.is_linear_control_flow(),
-            Self::BreakStmt(break_stmt) => break_stmt.is_linear_control_flow(),
-            Self::ContinueStmt(continue_stmt) => continue_stmt.is_linear_control_flow(),
-            Self::ReturnStmt(return_stmt) => return_stmt.is_linear_control_flow(),
-            Self::IfStmt(if_stmt) => if_stmt.is_linear_control_flow(),
-            Self::LoopStmt(loop_stmt) => loop_stmt.is_linear_control_flow(),
+            Self::ExprStmt(stmt) => stmt.is_linear_control_flow(),
+            Self::VarDefStmt(stmt) => stmt.is_linear_control_flow(),
+            Self::VarAssignStmt(stmt) => stmt.is_linear_control_flow(),
+            Self::BlockStmt(stmt) => stmt.is_linear_control_flow(),
+            Self::FunctionStmt(stmt) => stmt.is_linear_control_flow(),
+            Self::BreakStmt(stmt) => stmt.is_linear_control_flow(),
+            Self::ContinueStmt(stmt) => stmt.is_linear_control_flow(),
+            Self::ReturnStmt(stmt) => stmt.is_linear_control_flow(),
+            Self::IfStmt(stmt) => stmt.is_linear_control_flow(),
+            Self::LoopStmt(stmt) => stmt.is_linear_control_flow(),
+            Self::VarDeclarationStmt(stmt) => stmt.is_linear_control_flow(),
             // Self::DropStmt(drop_stmt) => drop_stmt.is_linear_control_flow(),
         }
     }
 
     fn as_linear_control_flow(&self) -> Option<&dyn LinearControlFlow> {
         match self {
-            Self::ExprStmt(expr_stmt) => expr_stmt.as_linear_control_flow(),
-            Self::VarDefStmt(var_def_stmt) => var_def_stmt.as_linear_control_flow(),
-            Self::VarAssignStmt(var_assign_stmt) => var_assign_stmt.as_linear_control_flow(),
-            Self::BlockStmt(scope_stmt) => scope_stmt.as_linear_control_flow(),
-            Self::FunctionStmt(fn_stmt) => fn_stmt.as_linear_control_flow(),
-            Self::BreakStmt(break_stmt) => break_stmt.as_linear_control_flow(),
-            Self::ContinueStmt(continue_stmt) => continue_stmt.as_linear_control_flow(),
-            Self::ReturnStmt(return_stmt) => return_stmt.as_linear_control_flow(),
-            Self::IfStmt(if_stmt) => if_stmt.as_linear_control_flow(),
-            Self::LoopStmt(loop_stmt) => loop_stmt.as_linear_control_flow(),
+            Self::ExprStmt(stmt) => stmt.as_linear_control_flow(),
+            Self::VarDefStmt(stmt) => stmt.as_linear_control_flow(),
+            Self::VarAssignStmt(stmt) => stmt.as_linear_control_flow(),
+            Self::BlockStmt(stmt) => stmt.as_linear_control_flow(),
+            Self::FunctionStmt(stmt) => stmt.as_linear_control_flow(),
+            Self::BreakStmt(stmt) => stmt.as_linear_control_flow(),
+            Self::ContinueStmt(stmt) => stmt.as_linear_control_flow(),
+            Self::ReturnStmt(stmt) => stmt.as_linear_control_flow(),
+            Self::IfStmt(stmt) => stmt.as_linear_control_flow(),
+            Self::LoopStmt(stmt) => stmt.as_linear_control_flow(),
+            Self::VarDeclarationStmt(stmt) => stmt.as_linear_control_flow(),
             // Self::DropStmt(drop_stmt) => drop_stmt.as_linear_control_flow(),
         }
     }
@@ -200,16 +193,17 @@ impl<'ast> StmtTrait for Stmt<'ast> {
 impl<'ast> Dissasemble for Stmt<'ast> {
     fn dissasemble(&self) -> String {
         match self {
-            Self::ExprStmt(expr_stmt) => format!("{}\n", expr_stmt.dissasemble()),
-            Self::VarDefStmt(var_def_stmt) => var_def_stmt.dissasemble(),
-            Self::VarAssignStmt(var_assign_stmt) => var_assign_stmt.dissasemble(),
-            Self::BlockStmt(scope_stmt) => scope_stmt.dissasemble(),
-            Self::FunctionStmt(fn_stmt) => fn_stmt.dissasemble(),
-            Self::BreakStmt(break_stmt) => break_stmt.dissasemble(),
-            Self::ContinueStmt(continue_stmt) => continue_stmt.dissasemble(),
-            Self::ReturnStmt(return_stmt) => return_stmt.dissasemble(),
-            Self::IfStmt(if_stmt) => if_stmt.dissasemble(),
-            Self::LoopStmt(loop_stmt) => loop_stmt.dissasemble(),
+            Self::ExprStmt(stmt) => format!("{}\n", stmt.dissasemble()),
+            Self::VarDefStmt(stmt) => stmt.dissasemble(),
+            Self::VarAssignStmt(stmt) => stmt.dissasemble(),
+            Self::BlockStmt(stmt) => stmt.dissasemble(),
+            Self::FunctionStmt(stmt) => stmt.dissasemble(),
+            Self::BreakStmt(stmt) => stmt.dissasemble(),
+            Self::ContinueStmt(stmt) => stmt.dissasemble(),
+            Self::ReturnStmt(stmt) => stmt.dissasemble(),
+            Self::IfStmt(stmt) => stmt.dissasemble(),
+            Self::LoopStmt(stmt) => stmt.dissasemble(),
+            Self::VarDeclarationStmt(stmt) => stmt.dissasemble(),
             // Self::DropStmt(drop_stmt) => drop_stmt.dissasemble(),
         }
     }
@@ -222,30 +216,24 @@ impl<'ast> AstDissasemble for Stmt<'ast> {
         scope_depth: usize
     ) -> String {
         match self {
-            Self::ExprStmt(expr_stmt) =>
+            Self::ExprStmt(stmt) =>
                 format!(
                     "[{}]: {}{}\n",
                     program_symbol_table.get_current_symbol_table_id(),
                     " ".repeat(AST_DISSASEMBLE_INDENTATION * scope_depth),
-                    expr_stmt.ast_dissasemble(program_symbol_table, scope_depth)
+                    stmt.ast_dissasemble(program_symbol_table, scope_depth)
                 ),
-            Self::VarDefStmt(var_def_stmt) =>
-                var_def_stmt.ast_dissasemble(program_symbol_table, scope_depth),
-            Self::VarAssignStmt(var_assign_stmt) =>
-                var_assign_stmt.ast_dissasemble(program_symbol_table, scope_depth),
-            Self::BlockStmt(scope_stmt) =>
-                scope_stmt.ast_dissasemble(program_symbol_table, scope_depth),
-            Self::FunctionStmt(fn_stmt) =>
-                fn_stmt.ast_dissasemble(program_symbol_table, scope_depth),
-            Self::BreakStmt(break_stmt) =>
-                break_stmt.ast_dissasemble(program_symbol_table, scope_depth),
-            Self::ContinueStmt(continue_stmt) =>
-                continue_stmt.ast_dissasemble(program_symbol_table, scope_depth),
-            Self::ReturnStmt(return_stmt) =>
-                return_stmt.ast_dissasemble(program_symbol_table, scope_depth),
-            Self::IfStmt(if_stmt) => if_stmt.ast_dissasemble(program_symbol_table, scope_depth),
-            Self::LoopStmt(loop_stmt) =>
-                loop_stmt.ast_dissasemble(program_symbol_table, scope_depth),
+            Self::VarDefStmt(stmt) => stmt.ast_dissasemble(program_symbol_table, scope_depth),
+            Self::VarAssignStmt(stmt) => stmt.ast_dissasemble(program_symbol_table, scope_depth),
+            Self::BlockStmt(stmt) => stmt.ast_dissasemble(program_symbol_table, scope_depth),
+            Self::FunctionStmt(stmt) => stmt.ast_dissasemble(program_symbol_table, scope_depth),
+            Self::BreakStmt(stmt) => stmt.ast_dissasemble(program_symbol_table, scope_depth),
+            Self::ContinueStmt(stmt) => stmt.ast_dissasemble(program_symbol_table, scope_depth),
+            Self::ReturnStmt(stmt) => stmt.ast_dissasemble(program_symbol_table, scope_depth),
+            Self::IfStmt(stmt) => stmt.ast_dissasemble(program_symbol_table, scope_depth),
+            Self::LoopStmt(stmt) => stmt.ast_dissasemble(program_symbol_table, scope_depth),
+            Self::VarDeclarationStmt(stmt) =>
+                stmt.ast_dissasemble(program_symbol_table, scope_depth),
             // Self::DropStmt(drop_stmt) => drop_stmt.dissasemble(),
         }
     }

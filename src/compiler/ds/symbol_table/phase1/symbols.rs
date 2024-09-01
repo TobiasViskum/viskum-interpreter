@@ -59,6 +59,27 @@ impl Symbols<NativeSymbol> {
 }
 
 impl Symbols<UserSymbol> {
+    pub fn lookup_var_ident_by_name<'a>(&'a self, name: &Rc<str>) -> Result<&SSAIdent, String> {
+        let found_var = self.symbols
+            .iter()
+            .filter_map(|(ssa_ident, symbol)| {
+                if ssa_ident.borrow_ident() == name {
+                    if let UserSymbol::UserSymbolVar(var_symbol) = symbol {
+                        return Some((ssa_ident, var_symbol));
+                    }
+                }
+                None
+            })
+            .max_by(|(ssa_ident1, _), (ssa_ident2, _)| {
+                ssa_ident1.get_subscript().cmp(&ssa_ident2.get_subscript())
+            });
+
+        match found_var {
+            Some((ssa_ident, _)) => Ok(ssa_ident),
+            None => Err(format!("Could not find variable '{}' in scope", name)),
+        }
+    }
+
     pub fn lookup_main(&mut self) -> Result<(), CompileError> {
         let main_fn_symbol = self.symbols
             .iter()

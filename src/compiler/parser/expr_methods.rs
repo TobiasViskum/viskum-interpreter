@@ -6,6 +6,7 @@ use crate::compiler::{
         stmt::ExprStmt,
         AstArena,
     },
+    Compiler,
     ProgramSymbolTablePhase1,
 };
 
@@ -30,7 +31,7 @@ impl<'a> Parser<'a> {
 
         match value {
             Some(val) => {
-                expr_builder.emit_constant_literal(LiteralExpr::new(val, token.get_metadata()));
+                expr_builder.emit_const_lit(LiteralExpr::new(val, token.get_metadata()));
                 Ok(())
             }
             None => {
@@ -50,13 +51,9 @@ impl<'a> Parser<'a> {
         &mut self,
         (expr_builder, program_symbol_table, ast_arena): ExprMethodArgs<'b, 'c>
     ) -> ExprMethodRetType {
-        let is_at_expr_end = self.is_at_expr_end();
+        let ssa_ident = program_symbol_table.search_var_ssa_ident(&previous!(self, lexeme));
 
-        match current!(self, ttype) {
-            TokenLeftParen if { !is_at_expr_end } =>
-                self.fn_call((expr_builder, program_symbol_table, ast_arena))?,
-            _ => self.ident_lookup((expr_builder, program_symbol_table, ast_arena))?,
-        }
+        expr_builder.emit_ident(IdentifierExpr::new(ssa_ident, previous!(self, metadata)));
 
         Ok(())
     }
@@ -88,7 +85,7 @@ impl<'a> Parser<'a> {
         }
 
         let token = self.get_previous();
-        expr_builder.emit_constant_literal(
+        expr_builder.emit_const_lit(
             LiteralExpr::new(
                 Value::String(token.get_lexeme(&self.source).take_lexeme_rc()),
                 token.get_metadata()
@@ -100,7 +97,7 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    pub fn literal<'b, 'c>(
+    pub fn boolean<'b, 'c>(
         &mut self,
         (expr_builder, program_symbol_table, ast_arena): ExprMethodArgs<'b, 'c>
     ) -> ExprMethodRetType {
@@ -108,11 +105,11 @@ impl<'a> Parser<'a> {
 
         match token.get_ttype() {
             TokenFalse =>
-                expr_builder.emit_constant_literal(
+                expr_builder.emit_const_lit(
                     LiteralExpr::new(Value::Bool(false), token.get_metadata())
                 ),
             TokenTrue =>
-                expr_builder.emit_constant_literal(
+                expr_builder.emit_const_lit(
                     LiteralExpr::new(Value::Bool(true), token.get_metadata())
                 ),
             _ => {
@@ -162,21 +159,23 @@ impl<'a> Parser<'a> {
             }
         };
 
-        expr_builder.emit_unary_op(unary_op, unary_token.get_metadata())
+        expr_builder.emit_prefix_unary_op(unary_op, unary_token.get_metadata())
     }
 
     pub fn binary<'b, 'c>(
         &mut self,
         (expr_builder, program_symbol_table, ast_arena): ExprMethodArgs<'b, 'c>
     ) -> ExprMethodRetType {
-        let binary_token = self.get_previous().clone();
+        let (ttype, lexeme, metadata) = previous!(self, ttype, lexeme, metadata);
+        let ttype = *ttype;
 
-        self.parse_precedence(
-            self.get_parse_rule(&binary_token.get_ttype()).get_precedence().get_next(),
-            (expr_builder, program_symbol_table, ast_arena)
-        )?;
+        self.parse_precedence(self.get_parse_rule(&ttype).get_precedence().get_next(), (
+            expr_builder,
+            program_symbol_table,
+            ast_arena,
+        ))?;
 
-        let binary_op = match binary_token.get_ttype().parse_binary() {
+        let binary_op = match ttype.parse_binary() {
             Ok(op) => op,
             Err(_) => {
                 return Err(
@@ -184,23 +183,23 @@ impl<'a> Parser<'a> {
                         ReportedError::new(
                             format!(
                                 "Token '{}' is not a valid binary operator",
-                                binary_token.get_lexeme(&self.source).get_lexeme_str()
+                                lexeme.get_lexeme_str()
                             ),
-                            binary_token.get_metadata().into()
+                            metadata.into()
                         )
                     )
                 );
             }
         };
 
-        expr_builder.emit_binary_op(binary_op, binary_token.get_metadata())
+        expr_builder.emit_binary_op(binary_op, metadata)
     }
 
     pub fn grouping<'b, 'c>(
         &mut self,
         (expr_builder, program_symbol_table, ast_arena): ExprMethodArgs<'b, 'c>
     ) -> ExprMethodRetType {
-        let left_paren_metadata = self.get_previous().get_metadata();
+        let left_paren_metadata = previous!(self, metadata);
 
         self.parse_precedence(Precedence::PrecAssignment.get_next(), (
             expr_builder,
@@ -210,12 +209,141 @@ impl<'a> Parser<'a> {
 
         expr_builder.emit_grouping(left_paren_metadata)?;
 
-        self.consume(TokenRightParen, "Expect ')' after expression")?;
+        self.consume(TokenRightParen, "Expected ')' after expression")?;
 
         Ok(())
     }
 
-    pub(super) fn fn_call<'b, 'c>(
+    pub(super) fn array_index<'b, 'c>(
+        &mut self,
+        (expr_builder, program_symbol_table, ast_arena): ExprMethodArgs<'b, 'c>
+    ) -> ExprMethodRetType {
+        let left_square_bracket_metadata = previous!(self, metadata);
+
+        self.parse_precedence(Precedence::PrecAssignment.get_next(), (
+            expr_builder,
+            program_symbol_table,
+            ast_arena,
+        ))?;
+
+        expr_builder.emit_indexing(left_square_bracket_metadata)?;
+
+        self.consume(TokenRightSquareBrace, "Expected '] after index expression")?;
+
+        Ok(())
+    }
+
+    pub(super) fn array<'b, 'c>(
+        &mut self,
+        (expr_builder, program_symbol_table, ast_arena): ExprMethodArgs<'b, 'c>
+    ) -> ExprMethodRetType {
+        macro_rules! condition {
+            ($self:ident) => {
+                !self.is_at_expr_end() && !current!(self, ttype).is(&TokenRightSquareBrace)
+            };
+        }
+
+        let mut arg_count = 0;
+        while condition!(self) {
+            arg_count += 1;
+            self.parse_precedence(Precedence::PrecAssignment.get_next(), (
+                expr_builder,
+                program_symbol_table,
+                ast_arena,
+            ))?;
+
+            if condition!(self) {
+                self.consume(
+                    TokenComma,
+                    format!(
+                        "Expected ',' between array items, but received: '{}'",
+                        current!(self, lexeme).get_lexeme_str()
+                    ).as_str()
+                )?;
+            }
+        }
+
+        self.consume(
+            TokenRightSquareBrace,
+            format!(
+                "Expected ')' in function call but got: '{}'",
+                current!(self, lexeme).get_lexeme_str()
+            ).as_str()
+        )?;
+
+        expr_builder.emit_array(arg_count);
+
+        Ok(())
+    }
+
+    pub(super) fn call<'b, 'c>(
+        &mut self,
+        (expr_builder, program_symbol_table, ast_arena): ExprMethodArgs<'b, 'c>
+    ) -> ExprMethodRetType {
+        macro_rules! condition {
+            ($self:ident) => {
+                !self.is_at_expr_end() && !current!(self, ttype).is(&TokenRightParen)
+            };
+        }
+
+        let left_paren_metadata = previous!(self, metadata);
+
+        let mut arg_count = 0;
+        while condition!(self) {
+            arg_count += 1;
+            self.parse_precedence(Precedence::PrecAssignment.get_next(), (
+                expr_builder,
+                program_symbol_table,
+                ast_arena,
+            ))?;
+
+            if condition!(self) {
+                self.consume(
+                    TokenComma,
+                    format!(
+                        "Expected ',' between call arguments, but received: '{}'",
+                        current!(self, lexeme).get_lexeme_str()
+                    ).as_str()
+                )?;
+            }
+        }
+
+        self.consume(
+            TokenRightParen,
+            format!(
+                "Expected ')' in function call but got: '{}'",
+                current!(self, lexeme).get_lexeme_str()
+            ).as_str()
+        )?;
+
+        expr_builder.emit_call(arg_count, left_paren_metadata)?;
+
+        Ok(())
+    }
+
+    pub(super) fn error(&mut self, _: &mut ExprBuilder) -> Result<(), CompileError> {
+        if let Some(msg) = previous!(self, msg) {
+            Err(
+                CompileError::new(
+                    ReportedError::new(msg.to_string(), previous!(self, metadata).into())
+                )
+            )
+        } else {
+            Err(
+                CompileError::new(
+                    ReportedError::new(
+                        format!("Unexpected token: {}", previous!(self, lexeme).get_lexeme_str()),
+                        previous!(self, metadata).into()
+                    )
+                )
+            )
+        }
+    }
+}
+
+/*
+
+pub(super) fn fn_call<'b, 'c>(
         &mut self,
         (expr_builder, program_symbol_table, ast_arena): ExprMethodArgs<'b, 'c>
     ) -> ExprMethodRetType {
@@ -261,33 +389,4 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    pub(super) fn ident_lookup<'b, 'c>(
-        &mut self,
-        (expr_builder, program_symbol_table, _): ExprMethodArgs<'b, 'c>
-    ) -> ExprMethodRetType {
-        let ssa_ident = program_symbol_table.search_var_ssa_ident(&previous!(self, lexeme));
-
-        expr_builder.emit_ident_lookup(IdentifierExpr::new(ssa_ident, previous!(self, metadata)));
-
-        Ok(())
-    }
-
-    pub(super) fn error(&mut self, _: &mut ExprBuilder) -> Result<(), CompileError> {
-        if let Some(msg) = previous!(self, msg) {
-            Err(
-                CompileError::new(
-                    ReportedError::new(msg.to_string(), previous!(self, metadata).into())
-                )
-            )
-        } else {
-            Err(
-                CompileError::new(
-                    ReportedError::new(
-                        format!("Unexpected token: {}", previous!(self, lexeme).get_lexeme_str()),
-                        previous!(self, metadata).into()
-                    )
-                )
-            )
-        }
-    }
-}
+*/

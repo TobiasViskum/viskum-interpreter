@@ -2,6 +2,55 @@
 
 ## Another rewrite (hopefully last)
 - Make it expression based. Right now if-stmt, loop-stmt, (match-stmt) and other stmts can't be used inside expressions.
+- Make the rewrite while making the compiler self hosted
+
+Stmt(
+  ItemStmt(
+    FnDeclarationStmt(),
+    StructDeclarationStmt(),
+    EnumDeclarationStmt(),
+    ...
+  ),
+  DefStmt(
+    IdentExpr, ExprStmt
+  )
+  BlockExpr(
+    Vec<Stmt>
+  )
+  ExprStmt(
+    ExprWithBlock(
+      BlockExpr(),
+      LoopExpr(),
+      IfExpr(),
+      IfDefExpr(),
+      MatchExpr(),
+    ),
+    ExprWithoutBlock(
+      Expr(
+        PlaceExpr(
+          PathExpr(),
+          IdentExpr(),
+          ArrayIndexExpr(),
+          FieldExpr(),
+          GroupExpr(),
+          CallExpr()
+        ),
+        ValueExpr(
+          ConstExpr(),
+          CallExpr(),
+          ...
+        ),
+        AsigneeExpr(
+          PlaceExpr(),
+          TupleExpr(),
+        ),
+        AsignExpr(
+          AsigneeExpr, ExprStmt,
+        )
+      )
+    )
+  )
+)
 
 ## Useful links
 
@@ -31,6 +80,8 @@ https://en.wikipedia.org/wiki/Static_single-assignment_form#Benefits
 - MLIR: https://github.com/raviqqe/melior
 
 - I should probalby use LLVM. Write my own backend for LLVM which means I have to learn LLVM syntax (it would be cool if the language could both be interpreted and compiled :))
+
+
 
 ## Project structure conventions (still deciding)
 

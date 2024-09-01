@@ -36,6 +36,10 @@ impl<'ast> Dissasemble for GroupingExpr<'ast> {
 }
 
 impl<'ast> ExprTrait for GroupingExpr<'ast> {
+    fn get_result_type(&self) -> ValueType {
+        self.result_type.as_ref().expect("TC").clone()
+    }
+
     fn collect_metadata(&self) -> SrcCharsRange {
         let mut metadata = (*self.expr).collect_metadata();
         metadata.dec_char_by(1);
@@ -47,9 +51,15 @@ impl<'ast> ExprTrait for GroupingExpr<'ast> {
         &self,
         dag: &mut DAG,
         ident_node_id_map: &mut AHashMap<SSAIdent, usize>,
-        icfg_builder: &mut ICFGBuilder
+        icfg_builder: &mut ICFGBuilder,
+        declaring_ssa_ident: Option<&SSAIdent>
     ) -> usize {
-        let group_content_id = self.expr.compile_into_dag(dag, ident_node_id_map, icfg_builder);
+        let group_content_id = self.expr.compile_into_dag(
+            dag,
+            ident_node_id_map,
+            icfg_builder,
+            declaring_ssa_ident
+        );
         let group_node_id = dag.push_node(
             DAGNode::GroupNode(
                 DAGGroupNode::new(
@@ -64,11 +74,11 @@ impl<'ast> ExprTrait for GroupingExpr<'ast> {
     fn type_check(
         &mut self,
         program_symbol_table: &ProgramSymbolTablePhase1
-    ) -> Result<ValueType, CompileError> {
+    ) -> Result<(ValueType, Option<SSAIdent>), CompileError> {
         match self.expr.type_check(program_symbol_table) {
-            Ok(v) => {
+            Ok((v, ssa_ident)) => {
                 self.result_type = Some(v.clone());
-                Ok(v)
+                Ok((v, ssa_ident))
             }
             Err(err) => Err(err),
         }

@@ -10,7 +10,8 @@ pub enum Precedence {
     PrecFactor = 7,
     PrecUnary = 8,
     PrecCall = 9,
-    PrecPrimary = 10,
+    PrecArray = 10,
+    PrecPrimary = 11,
 }
 impl From<usize> for Precedence {
     fn from(value: usize) -> Self {
@@ -25,7 +26,8 @@ impl From<usize> for Precedence {
             7 => Precedence::PrecFactor,
             8 => Precedence::PrecUnary,
             9 => Precedence::PrecCall,
-            10 => Precedence::PrecPrimary,
+            10 => Precedence::PrecArray,
+            11 => Precedence::PrecPrimary,
             _ => panic!("Invalid precedence value: {}", value),
         }
     }
@@ -43,7 +45,8 @@ impl From<Precedence> for usize {
             Precedence::PrecFactor => 7,
             Precedence::PrecUnary => 8,
             Precedence::PrecCall => 9,
-            Precedence::PrecPrimary => 10,
+            Precedence::PrecArray => 10,
+            Precedence::PrecPrimary => 11,
         }
     }
 }

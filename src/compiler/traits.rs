@@ -6,7 +6,7 @@ use crate::compiler::llvm_builder::{ Function, LLVMBuilder, Module, Operand };
 use crate::vm::instructions::Instruction;
 
 use super::ds::symbol_table::{ SymbolFn, SymbolVar, UserSymbolFn, UserSymbolVar };
-use super::llvm_builder::Type;
+use super::llvm_builder::{ Type, Var };
 use super::{
     ds::{
         register_allocator::RegisterAllocator,
@@ -46,16 +46,19 @@ pub trait ExprTrait where Self: Dissasemble + Debug {
     fn type_check(
         &mut self,
         program_symbol_table: &ProgramSymbolTablePhase1
-    ) -> Result<ValueType, CompileError>;
+    ) -> Result<(ValueType, Option<SSAIdent>), CompileError>;
 
     fn compile_into_dag(
         &self,
         dag: &mut DAG,
         ident_node_id_map: &mut AHashMap<SSAIdent, usize>,
-        icfg_builder: &mut ICFGBuilder
+        icfg_builder: &mut ICFGBuilder,
+        declaring_ssa_ident: Option<&SSAIdent>
     ) -> usize;
 
     fn collect_metadata(&self) -> SrcCharsRange;
+
+    fn get_result_type(&self) -> ValueType;
 }
 
 pub trait LinearControlFlow {
@@ -101,19 +104,20 @@ pub trait DAGNodeTrait: ParseConnectedNodes {
 }
 
 pub trait AllocLLVM {
-    fn alloc_llvm(&self, llvm_builder: &mut LLVMBuilder, module: &mut Module, func: &mut Function);
+    fn alloc_llvm(&self, llvm_builder: &mut LLVMBuilder, func: &mut Function);
 }
 
 pub trait DAGNodeGenerateLLVM: DAGNodeTrait {
     fn generate_llvm(
         &self,
         node_id: usize,
+        ssa_var: Option<Var>,
         func: &mut Function,
         llvm_builder: &mut LLVMBuilder,
         dag: &DAG
     ) -> Operand;
 
-    fn alloc_llvm(&self, llvm_builder: &mut LLVMBuilder, module: &mut Module, func: &mut Function);
+    fn alloc_llvm(&self, llvm_builder: &mut LLVMBuilder, func: &mut Function);
 }
 pub trait CFGNodeTrait: ParseConnectedNodes {
     fn generate_instructions(&self, register_allocator: &mut RegisterAllocator) -> Vec<Instruction>;
@@ -134,15 +138,19 @@ pub trait CFGNodeGenerateLLVM: CFGNodeTrait {
 }
 
 pub trait NativeFnTrait {
-    fn get_ident<'a>(&self) -> &'a str;
+    fn get_lang_ident<'a>(&self) -> Option<&'a str>;
+
+    fn get_llvm_ident<'a>(&self) -> &'a str;
 
     fn declare_llvm(&self) -> String;
 
     fn get_llvm_ret_type(&self) -> Type;
 
-    fn get_lang_ret_type(&self) -> ValueType;
+    fn get_lang_ret_type(&self) -> Option<ValueType>;
 
     fn get_args_type(&self) -> Vec<ValueType>;
+
+    fn build_call_type(&self) -> String;
 }
 
 pub trait NativeVarTrait {

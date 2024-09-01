@@ -27,6 +27,25 @@ impl SymbolTable {
         }
     }
 
+    pub fn lookup_var_ident_by_name<'a>(
+        &'a self,
+        ssa_ident: &Rc<str>,
+        program_symbol_table: &'a ProgramSymbolTablePhase1
+    ) -> Result<&SSAIdent, String> {
+        match self.scoped_symbols.lookup_var_ident_by_name(ssa_ident) {
+            Ok(symbol_var) => Ok(symbol_var),
+            Err(_) => {
+                if let Some(parent_id) = self.parent_symbol_table_id {
+                    let parent_table = program_symbol_table.get_table(parent_id);
+
+                    parent_table.lookup_var_ident_by_name(ssa_ident, program_symbol_table)
+                } else {
+                    Err(format!("Undefined variable: {}", ssa_ident))
+                }
+            }
+        }
+    }
+
     pub fn get_parent_symbol_table_id(&self) -> Option<usize> {
         self.parent_symbol_table_id
     }

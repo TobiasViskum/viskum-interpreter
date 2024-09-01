@@ -4,51 +4,76 @@ def sayHello() Int
 
     c := b + 1
 
-    ret c + hi()
+    ret c
 end
 
-def hi() Int
-    ret 2 + 9 * 8
+def hi(x Int) Int
+    ret 2 + 9 * 8 + x
 end
-
 
 def main() Int
-    mut a := 1 + 2 - (2 + 8) * 3
+    mut a := 1 + 2 - (2 + 8) * 3 + 72
     b := a + 2
     
     mut d := 0
-    if a == 45 do
+    cond := 2 == 2
+    if cond do
         d = 2
+        print("Case 1")
     elif a == 2 do
         d = 4
+        print("Case 2")
     else
         d = 0
+        print("Case 3")
     end
 
     a = 0
+
+    mut array := [0, 1, 2, 3, 3]
+  
+    print("array at 4 is:", array[4])
+
+    array[4] = 4;
+
+    print("array at 4 is:", array[4])
 
 
     loop a = a + 1
         if a == 100 do
+            print("A is now 100")
             break
         else
+            print("A is:", a)
             continue
         end
     end
 
+
     k := sayHello() + 20 + sayHello()
+    print(k)
 
 
     str := "Hello world"
-    str := "My name is Tobias"
-    str := "Hello again :)"
+    str := "Hello world"
+    str := "My name is Tobias. This is my name!"
 
+    isEqual := 100 == a
+    print("My name is Tobias. I am", 18, "years old.", str, "Result is:", a, "isEqual is:", isEqual)
 
+    myName := "Tobias"
+    brotherName := "Tobias"
+    hasSameName := myName == brotherName
 
+    print("Does", myName, "has the same name as", brotherName, ":", hasSameName)
+
+    mut op String
+    print("Uninitialized variable:", op, 2)
+    op = "Hello"
+    print(op)
 
     a = 0
 end
-
 
 
 /*  
@@ -155,5 +180,50 @@ end
 
         x
     end
+
+
+
+enum UnaryExpr
+    op UnaryOp,
+    rhs Expr
+end
+
+derive @auto() // GetWith, Debug
+enum Expr
+    BinaryExpr(BinaryExpr)
+    UnaryExpr(UnaryExpr)
+with resultType ValueType end
+
+struct Hello
+    expr Expr,
+    resultType ValueType
+end
+
+impl GetWith for Expr
+    typedef With ( 
+        resultType ValueType
+    )
+
+    def getWith(self) With
+        ret (
+            resultType: self.with.resultType
+        )
+    end
+end
+
+impl DefaultWith for Expr
+    typedef With ( 
+        resultType ValueType
+    )
+
+    def defaultWith() With
+        ret (
+            resultType: Option.None
+        )
+    end
+end
+
+expr := Expr.BinaryExpr(BinaryExpr.new(2, "add", 3)) with ( resultType: ValueType.Int )
+( resultType ) := expr.getWith()
     
     */

@@ -15,13 +15,8 @@ pub struct CFGProcessNode {
 }
 
 impl AllocLLVM for CFGProcessNode {
-    fn alloc_llvm(
-        &self,
-        llvm_builder: &mut LLVMBuilder,
-        module: &mut crate::compiler::llvm_builder::Module,
-        func: &mut Function
-    ) {
-        self.dag.alloc_llvm(llvm_builder, module, func)
+    fn alloc_llvm(&self, llvm_builder: &mut LLVMBuilder, func: &mut Function) {
+        self.dag.alloc_llvm(llvm_builder, func)
     }
 }
 
